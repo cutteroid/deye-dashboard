@@ -121,6 +121,7 @@ class TestGetOutageSchedule:
             "end_time": now + timedelta(minutes=30),
             "remaining_minutes": 30,
         }
+        mock_poller.provider.display_name = "ДТЕК"
         app_module.outage_poller = mock_poller
         resp = c.get("/api/outage_schedule")
         data = resp.get_json()
@@ -128,42 +129,45 @@ class TestGetOutageSchedule:
         assert "start_time" in data
         assert "end_time" in data
         assert data["remaining_minutes"] == 30
+        assert data["provider"] == "ДТЕК"
 
-
-class TestAddOutage:
-    def test_start_event_appended(self, client):
+    def test_days_are_serialized(self, client):
         c, _, app_module = client
-        with patch.object(app_module, "load_outage_history", return_value=[]), \
-             patch.object(app_module, "save_outage_history") as mock_save:
-            resp = c.post("/api/outages", json={
-                "type": "start",
-                "timestamp": "2025-01-15T10:00:00",
-                "voltage": 0,
-            })
-        assert resp.status_code == 200
-        saved = mock_save.call_args[0][0]
-        assert len(saved) == 1
-        assert saved[0]["type"] == "start"
+        today = datetime(2026, 10, 17)
+        tomorrow = datetime(2026, 10, 18)
+        mock_poller = MagicMock()
+        mock_poller.get_outage_status.return_value = {
+            "status": "clear",
+            "days": [
+                {"date": today.date(), "windows": []},
+                {"date": tomorrow.date(), "windows": [
+                    (tomorrow.replace(hour=8), tomorrow.replace(hour=12)),
+                ]},
+            ],
+        }
+        mock_poller.provider.display_name = "ДТЕК"
+        app_module.outage_poller = mock_poller
+        data = c.get("/api/outage_schedule").get_json()
+        assert data["days"] == [
+            {"date": "2026-10-17", "windows": []},
+            {"date": "2026-10-18", "windows": [
+                {"start": "2026-10-18T08:00:00", "end": "2026-10-18T12:00:00"},
+            ]},
+        ]
 
-    def test_end_event_calculates_duration(self, client):
+    def test_error_returns_message(self, client):
         c, _, app_module = client
-        existing = [{
-            "id": 1,
-            "type": "start",
-            "timestamp": "2025-01-15T10:00:00",
-            "voltage": 0,
-        }]
-        with patch.object(app_module, "load_outage_history", return_value=existing), \
-             patch.object(app_module, "save_outage_history") as mock_save:
-            resp = c.post("/api/outages", json={
-                "type": "end",
-                "timestamp": "2025-01-15T11:00:00",
-                "voltage": 230,
-            })
-        assert resp.status_code == 200
-        saved = mock_save.call_args[0][0]
-        # The start event should have been updated with duration
-        assert saved[0]["duration"] == 3600  # 1 hour in seconds
+        mock_poller = MagicMock()
+        mock_poller.get_outage_status.return_value = {
+            "status": "error",
+            "error": "YASNO API returned HTTP 500",
+        }
+        mock_poller.provider.display_name = "YASNO"
+        app_module.outage_poller = mock_poller
+        resp = c.get("/api/outage_schedule")
+        assert resp.get_json() == {
+            "status": "error", "error": "YASNO API returned HTTP 500", "provider": "YASNO",
+        }
 
 
 class TestGetGenerator:
@@ -209,15 +213,11 @@ class TestGetWeather:
 
 
 class TestClearEndpoints:
-    def test_clear_outages_and_phase_stats(self, client):
+    def test_clear_phase_stats(self, client):
         c, _, app_module = client
-        with patch.object(app_module, "save_outage_history") as mock_outage, \
-             patch.object(app_module, "save_phase_stats") as mock_phase, \
+        with patch.object(app_module, "save_phase_stats") as mock_phase, \
              patch.object(app_module, "save_phase_history") as mock_hist:
-            resp1 = c.post("/api/outages/clear")
-            resp2 = c.post("/api/phase-stats/clear")
-        assert resp1.status_code == 200
-        assert resp2.status_code == 200
-        mock_outage.assert_called_once_with([])
+            resp = c.post("/api/phase-stats/clear")
+        assert resp.status_code == 200
         mock_phase.assert_called_once_with({})
         mock_hist.assert_called_once_with({})

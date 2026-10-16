@@ -386,7 +386,7 @@
             opacity: 0.3;
             background: rgba(255, 255, 255, 0.1);
         }
-        
+
         .sortable-chosen {
             background: rgba(255, 255, 255, 0.15) !important;
             box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
@@ -556,63 +556,149 @@
             color: #64748b;
         }
 
-        /* Outage History */
-        .outage-list {
-            max-height: 300px;
-            overflow-y: auto;
+        /* Planned Outages */
+        .planned-outages-source {
+            margin-top: 14px;
+            font-size: 0.7rem;
+            color: #64748b;
         }
 
-        .outage-item {
+        .planned-outages-source:empty {
+            display: none;
+        }
+
+        .planned-day + .planned-day {
+            margin-top: 18px;
+            padding-top: 16px;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .planned-day-header {
             display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 12px;
-            background: rgba(0, 0, 0, 0.2);
-            border-radius: 8px;
-            margin-bottom: 8px;
+            align-items: baseline;
+            gap: 8px;
+            margin-bottom: 10px;
         }
 
-        .outage-item:last-child {
-            margin-bottom: 0;
-        }
-
-        .outage-item.outage-start {
-            border-left: 3px solid #ef4444;
-        }
-
-        .outage-item.outage-end {
-            border-left: 3px solid #6ec89b;
-        }
-
-        .outage-icon {
-            font-size: 1.2rem;
-        }
-
-        .outage-details {
-            flex: 1;
-        }
-
-        .outage-time {
+        .planned-day-name {
             font-weight: 600;
             font-size: 0.95rem;
         }
 
-        .outage-info {
+        .planned-day-date {
             font-size: 0.8rem;
             color: #64748b;
-            margin-top: 2px;
         }
 
-        .outage-duration {
-            font-size: 0.85rem;
+        .planned-day-total {
+            margin-left: auto;
+            font-size: 0.8rem;
             color: #fbbf24;
-            font-weight: 500;
         }
 
-        .no-outages {
-            text-align: center;
+        .planned-timeline {
+            position: relative;
+            height: 14px;
+            border-radius: 7px;
+            background: rgba(110, 200, 155, 0.25);
+            overflow: hidden;
+        }
+
+        .planned-timeline-segment {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            background: #ef4444;
+        }
+
+        .planned-timeline-segment.past {
+            background: rgba(239, 68, 68, 0.4);
+        }
+
+        .planned-timeline-now {
+            position: absolute;
+            top: -2px;
+            bottom: -2px;
+            width: 2px;
+            margin-left: -1px;
+            background: #fff;
+            box-shadow: 0 0 4px rgba(255, 255, 255, 0.8);
+        }
+
+        .planned-timeline-scale {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.65rem;
             color: #64748b;
-            padding: 20px;
+            margin-top: 4px;
+        }
+
+        .planned-windows {
+            list-style: none;
+            margin-top: 10px;
+        }
+
+        .planned-window {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 10px;
+            background: rgba(0, 0, 0, 0.2);
+            border-left: 3px solid #ef4444;
+            border-radius: 6px;
+            margin-bottom: 6px;
+            font-size: 0.9rem;
+        }
+
+        .planned-window:last-child {
+            margin-bottom: 0;
+        }
+
+        .planned-window.past {
+            opacity: 0.45;
+            border-left-color: #64748b;
+        }
+
+        .planned-window.active {
+            background: rgba(239, 68, 68, 0.15);
+        }
+
+        .planned-window-time {
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .planned-window-duration {
+            color: #94a3b8;
+            font-size: 0.8rem;
+        }
+
+        .planned-window-tag {
+            margin-left: auto;
+            font-size: 0.75rem;
+            color: #94a3b8;
+        }
+
+        .planned-window.active .planned-window-tag {
+            color: #fca5a5;
+            font-weight: 600;
+        }
+
+        .planned-none {
+            color: #64748b;
+            font-size: 0.85rem;
+            padding: 6px 0;
+        }
+
+        .planned-none.clear {
+            color: #6ec89b;
+        }
+
+        .planned-error-detail {
+            font-size: 0.75rem;
+            color: #64748b;
+            margin-top: 4px;
+            word-break: break-word;
         }
 
         /* Notification permission button */
@@ -1682,6 +1768,9 @@
         .onboarding-input:focus,
         .onboarding-select:focus {
             border-color: rgba(99, 102, 241, 0.6);
+        }
+        .onboarding-select option {
+            background: #1e293b;
         }
         .onboarding-input.error {
             border-color: rgba(248, 113, 113, 0.6);
@@ -3000,16 +3089,16 @@
             </div>
         </div>
 
-        <!-- Outage History -->
-        <div class="card" id="outage-history-card" data-id="outage-history-card">
+        <!-- Planned Outages -->
+        <div class="card" id="planned-outages-card" data-id="planned-outages-card">
             <div class="card-header">
-                <span class="icon">📋</span>
-                <h2>Outage History</h2>
-                <button class="btn" onclick="clearOutageHistory()">Clear</button>
+                <span class="icon">🗓️</span>
+                <h2>Planned outages</h2>
             </div>
-            <div class="outage-list" id="outage-list">
-                <div class="no-outages">No outages recorded</div>
+            <div id="planned-outages-body">
+                <div class="planned-none">Loading schedule...</div>
             </div>
+            <div class="planned-outages-source" id="planned-outages-source"></div>
         </div>
 
     </div>
@@ -3079,6 +3168,7 @@
                 <div class="onboarding-radio-group" id="onb-outage-radios">
                     <div class="onboarding-radio selected" data-value="lvivoblenergo" onclick="selectOutageProvider(this)">Lvivoblenergo</div>
                     <div class="onboarding-radio" data-value="yasno" onclick="selectOutageProvider(this)">YASNO (DTEK)</div>
+                    <div class="onboarding-radio" data-value="dtek" onclick="selectOutageProvider(this)">DTEK regions</div>
                     <div class="onboarding-radio" data-value="none" onclick="selectOutageProvider(this)">None (disable)</div>
                 </div>
 
@@ -3101,6 +3191,22 @@
                     <div class="onboarding-field">
                         <label>Group (e.g. 2.1)</label>
                         <input type="text" class="onboarding-input" id="onb-yasno-group" placeholder="2.1" value="2.1">
+                    </div>
+                </div>
+
+                <div class="onboarding-conditional" id="onb-outage-dtek-fields">
+                    <div class="onboarding-field">
+                        <label>Region</label>
+                        <select class="onboarding-select" id="onb-dtek-region">
+                            <option value="kyiv-region">Kyiv oblast (ДТЕК КРЕМ)</option>
+                            <option value="kyiv">Kyiv city</option>
+                            <option value="dnipro">Dnipro</option>
+                            <option value="odesa">Odesa</option>
+                        </select>
+                    </div>
+                    <div class="onboarding-field">
+                        <label>Group (e.g. 4.2)</label>
+                        <input type="text" class="onboarding-input" id="onb-dtek-group" placeholder="1.1" value="1.1">
                     </div>
                 </div>
             </div>
@@ -3252,8 +3358,8 @@
             if (config.has_outage_schedule === false) {
                 var outageInfo = document.getElementById('grid-outage-info');
                 if (outageInfo) outageInfo.style.display = 'none';
-                var outageHistory = document.getElementById('outage-history-card');
-                if (outageHistory) outageHistory.style.display = 'none';
+                var plannedOutages = document.getElementById('planned-outages-card');
+                if (plannedOutages) plannedOutages.style.display = 'none';
                 // Stop outage polling intervals
                 if (outageScheduleIntervalId) {
                     clearInterval(outageScheduleIntervalId);
@@ -3381,23 +3487,6 @@
             }
         }
 
-        function formatDuration(seconds) {
-            if (seconds < 60) {
-                return Math.round(seconds) + ' seconds';
-            } else if (seconds < 3600) {
-                return Math.round(seconds / 60) + ' minutes';
-            } else {
-                const hours = Math.floor(seconds / 3600);
-                const mins = Math.round((seconds % 3600) / 60);
-                return hours + 'h ' + mins + 'm';
-            }
-        }
-
-        function formatTime(isoString) {
-            const date = new Date(isoString);
-            return date.toLocaleString();
-        }
-
         function formatGeneratorDuration(decimalHours) {
             if (decimalHours === null || decimalHours === undefined || isNaN(decimalHours)) return '--';
             var totalMinutes = Math.round(decimalHours * 60);
@@ -3409,62 +3498,6 @@
                 return m + 'mins';
             }
         }
-        async function recordOutageEvent(type, voltage) {
-            const timestamp = new Date().toISOString();
-            await fetch('/api/outages', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ type, timestamp, voltage })
-            });
-            loadOutageHistory();
-        }
-
-        async function loadOutageHistory() {
-            try {
-                const response = await fetch('/api/outages');
-                const history = await response.json();
-                renderOutageHistory(history);
-            } catch (e) {
-                console.error('Failed to load outage history:', e);
-            }
-        }
-
-        function renderOutageHistory(history) {
-            const container = document.getElementById('outage-list');
-
-            // Filter to show only "start" events (which contain duration info)
-            const outages = history.filter(e => e.type === 'start').reverse();
-
-            if (outages.length === 0) {
-                container.innerHTML = '<div class="no-outages">No outages recorded</div>';
-                return;
-            }
-
-            container.innerHTML = outages.map(outage => {
-                const hasEnded = outage.duration !== undefined;
-                const durationText = hasEnded ? formatDuration(outage.duration) : 'Ongoing...';
-                const endTime = hasEnded ? formatTime(outage.end_timestamp) : '';
-
-                return `
-                    <div class="outage-item ${hasEnded ? 'outage-end' : 'outage-start'}">
-                        <div class="outage-icon">${hasEnded ? '✅' : '🔴'}</div>
-                        <div class="outage-details">
-                            <div class="outage-time">${formatTime(outage.timestamp)}</div>
-                            <div class="outage-info">${hasEnded ? 'Restored: ' + endTime : 'Power outage in progress'}</div>
-                        </div>
-                        <div class="outage-duration">${durationText}</div>
-                    </div>
-                `;
-            }).join('');
-        }
-
-        async function clearOutageHistory() {
-            if (confirm('Clear all outage history?')) {
-                await fetch('/api/outages/clear', { method: 'POST' });
-                loadOutageHistory();
-            }
-        }
-
         // Phase statistics
         async function loadPhaseStats() {
             try {
@@ -3725,11 +3758,9 @@
             if (lastGridOnline && !isOnline) {
                 // Grid just went offline
                 showNotification('Power Outage', 'Grid electricity is now offline.');
-                recordOutageEvent('start', voltage);
             } else if (!lastGridOnline && isOnline) {
                 // Grid just came back online
                 showNotification('Power Restored', 'Grid electricity is back online.');
-                recordOutageEvent('end', voltage);
             }
 
             lastGridOnline = isOnline;
@@ -3908,7 +3939,6 @@
         }
 
         // Initial load
-        loadOutageHistory();
         loadPhaseStats();
         updateDashboard();
 
@@ -3932,18 +3962,153 @@
         function fetchOutageSchedule() {
             fetch('/api/outage_schedule')
                 .then(function(r) { return r.json(); })
-                .then(function(data) { outageScheduleData = data; updateOutageInfo(); })
-                .catch(function() { outageScheduleData = null; });
+                .then(function(data) {
+                    outageScheduleData = data;
+                    updateOutageInfo();
+                    renderPlannedOutages();
+                })
+                .catch(function() { outageScheduleData = null; renderPlannedOutages(); });
+        }
+
+        // ===== PLANNED OUTAGES CARD =====
+
+        function escapeHtml(text) {
+            var div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Window times are local ISO strings ("2026-10-17T08:00:00"); an end at
+        // next-day midnight is shown as 24:00 on the window's own day.
+        function plannedMinutes(iso, dayIso) {
+            var mins = parseInt(iso.slice(11, 13), 10) * 60 + parseInt(iso.slice(14, 16), 10);
+            return iso.slice(0, 10) === dayIso ? mins : 24 * 60;
+        }
+
+        function formatPlannedMinutes(mins) {
+            var h = Math.floor(mins / 60), m = mins % 60;
+            return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
+        }
+
+        function formatPlannedDuration(mins) {
+            var h = Math.floor(mins / 60), m = mins % 60;
+            if (h && m) return h + 'h ' + m + 'm';
+            return h ? h + 'h' : m + 'm';
+        }
+
+        function renderPlannedDay(label, day, now) {
+            var dateObj = new Date(day.date + 'T00:00:00');
+            var dateText = dateObj.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+            var isToday = dateObj.toDateString() === now.toDateString();
+            var nowMins = now.getHours() * 60 + now.getMinutes();
+
+            var windows = (day.windows || []).map(function(w) {
+                var start = plannedMinutes(w.start, day.date);
+                var end = plannedMinutes(w.end, day.date);
+                var state = 'upcoming';
+                if (isToday && end <= nowMins) state = 'past';
+                else if (isToday && start <= nowMins) state = 'active';
+                return { start: start, end: end, state: state, endDate: new Date(w.end), startDate: new Date(w.start) };
+            });
+            var totalMins = windows.reduce(function(sum, w) { return sum + (w.end - w.start); }, 0);
+
+            var html = '<div class="planned-day">';
+            html += '<div class="planned-day-header"><span class="planned-day-name">' + label + '</span>';
+            html += '<span class="planned-day-date">' + escapeHtml(dateText) + '</span>';
+            if (totalMins > 0) html += '<span class="planned-day-total">' + formatPlannedDuration(totalMins) + ' without power</span>';
+            html += '</div>';
+
+            html += '<div class="planned-timeline">';
+            windows.forEach(function(w) {
+                html += '<div class="planned-timeline-segment' + (w.state === 'past' ? ' past' : '') + '" style="left:' +
+                    (w.start / 14.4) + '%;width:' + ((w.end - w.start) / 14.4) + '%"></div>';
+            });
+            if (isToday) html += '<div class="planned-timeline-now" style="left:' + (nowMins / 14.4) + '%"></div>';
+            html += '</div>';
+            html += '<div class="planned-timeline-scale"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>';
+
+            if (windows.length === 0) {
+                html += '<div class="planned-none clear">No planned outages</div>';
+            } else {
+                html += '<ul class="planned-windows">';
+                windows.forEach(function(w) {
+                    var tag = '';
+                    if (w.state === 'active') tag = 'now · ends in ' + formatCountdown(Math.max(0, w.endDate - now));
+                    else if (w.state === 'past') tag = 'done';
+                    else if (isToday) tag = 'in ' + formatCountdown(Math.max(0, w.startDate - now));
+                    html += '<li class="planned-window ' + w.state + '">' +
+                        '<span class="planned-window-time">' + formatPlannedMinutes(w.start) + '–' + formatPlannedMinutes(w.end) + '</span>' +
+                        '<span class="planned-window-duration">' + formatPlannedDuration(w.end - w.start) + '</span>' +
+                        '<span class="planned-window-tag">' + tag + '</span></li>';
+                });
+                html += '</ul>';
+            }
+            return html + '</div>';
+        }
+
+        function renderPlannedOutages() {
+            var card = document.getElementById('planned-outages-card');
+            var body = document.getElementById('planned-outages-body');
+            var source = document.getElementById('planned-outages-source');
+            if (!card || !body) return;
+            var d = outageScheduleData;
+
+            if (d && d.status === 'disabled') {
+                card.style.display = 'none';
+                return;
+            }
+            source.textContent = (d && d.provider) ? 'Source: ' + d.provider : '';
+
+            if (!d || d.status === 'unknown') {
+                body.innerHTML = '<div class="planned-none">Loading schedule...</div>';
+                return;
+            }
+            if (d.status === 'error') {
+                body.innerHTML = '<div class="planned-none">Outage schedule unavailable</div>' +
+                    '<div class="planned-error-detail">' + escapeHtml(d.error || '') + '</div>';
+                return;
+            }
+
+            var now = new Date();
+            var days = d.days || [];
+            var html = '';
+            if (days[0]) html += renderPlannedDay('Today', days[0], now);
+            if (days[1]) {
+                html += renderPlannedDay('Tomorrow', days[1], now);
+            } else {
+                html += '<div class="planned-day"><div class="planned-day-header"><span class="planned-day-name">Tomorrow</span></div>' +
+                    '<div class="planned-none">Schedule not published yet</div></div>';
+            }
+            body.innerHTML = html;
         }
 
         function updateOutageInfo() {
             var el = document.getElementById('grid-outage-info');
             var d = outageScheduleData;
             if (!el || !d) { if (el) el.textContent = ''; return; }
+            el.title = d.status === 'error' ? (d.error || '') : '';
             var now = new Date();
-            var gridOnline = document.getElementById('grid-banner').classList.contains('online');
+            var gridBanner = document.getElementById('grid-banner');
+            var gridOnline = gridBanner.classList.contains('online');
+            var gridOffline = gridBanner.classList.contains('offline');
 
-            if (!gridOnline) {
+            if (!gridOnline && !gridOffline) {
+                // Grid state unknown (no inverter data yet): report the schedule
+                // itself rather than assuming an outage.
+                if (d.status === 'active' && d.end_time) {
+                    var activeLeft = new Date(d.end_time) - now;
+                    el.textContent = activeLeft > 0 ? 'Scheduled outage · ends in ' + formatCountdown(activeLeft) : '';
+                } else if (d.status === 'upcoming' && d.upcoming_windows && d.upcoming_windows.length > 0) {
+                    var untilStart = new Date(d.upcoming_windows[0].start) - now;
+                    el.textContent = untilStart > 0 ? 'Outage in ' + formatCountdown(untilStart) : '';
+                } else if (d.status === 'clear') {
+                    el.textContent = 'No outages today';
+                } else if (d.status === 'error') {
+                    el.textContent = 'Outage schedule unavailable';
+                } else {
+                    el.textContent = '';
+                }
+            } else if (gridOffline) {
                 // Grid is off — show when it comes back
                 if (d.status === 'active' && d.end_time) {
                     var end = new Date(d.end_time);
@@ -3957,7 +4122,7 @@
                     // Unscheduled outage — show estimated battery remaining time
                     var remaining = '';
                     if (inverterConfig && inverterConfig.has_battery === false) {
-                        remaining = 'Unscheduled outage';
+                        remaining = d.status === 'error' ? 'Outage (schedule unavailable)' : 'Unscheduled outage';
                     } else if (latestInverterData) {
                         var soc = latestInverterData.battery_soc || 0;
                         var capacityWh = latestInverterData.battery_max_available_capacity_wh || 0;
@@ -3970,7 +4135,7 @@
                             remaining = 'Battery: ' + soc + '%';
                         }
                     }
-                    el.textContent = remaining || 'Unscheduled outage';
+                    el.textContent = remaining || (d.status === 'error' ? 'Outage (schedule unavailable)' : 'Unscheduled outage');
                 }
             } else {
                 // Grid is on — show next outage countdown
@@ -3984,6 +4149,8 @@
                     }
                 } else if (d.status === 'clear') {
                     el.textContent = 'No outages today';
+                } else if (d.status === 'error') {
+                    el.textContent = 'Outage schedule unavailable';
                 } else {
                     el.textContent = '';
                 }
@@ -4003,6 +4170,8 @@
         fetchOutageSchedule();
         outageScheduleIntervalId = setInterval(fetchOutageSchedule, 60000);
         outageInfoIntervalId = setInterval(updateOutageInfo, 1000);
+        // Keep the card's "now" marker and countdowns current between fetches
+        setInterval(renderPlannedOutages, 30000);
 
         // ===== GRID SCHEDULE PROGRESS BAR =====
 
@@ -4012,6 +4181,7 @@
             var d = outageScheduleData;
             var gridBanner = document.getElementById('grid-banner');
             var gridOffline = gridBanner && gridBanner.classList.contains('offline');
+            var gridUnknown = gridBanner && !gridOffline && !gridBanner.classList.contains('online');
 
             if (!d || (d.status !== 'active' && d.status !== 'upcoming')) {
                 bar.style.display = 'none';
@@ -4022,8 +4192,8 @@
             var progress = 0;
             var showBar = false;
 
-            if (gridOffline) {
-                // Red bar: outage progress (only when grid is actually offline)
+            if (gridOffline || (gridUnknown && d.status === 'active')) {
+                // Red bar: outage progress (grid offline, or grid state unknown during a scheduled outage)
                 showBar = true;
                 fill.className = 'grid-banner-bar-fill red';
                 if (d.status === 'active' && d.start_time && d.end_time) {
@@ -4527,6 +4697,8 @@
                         if (cfg.OUTAGE_REGION_ID) document.getElementById('onb-yasno-region').value = cfg.OUTAGE_REGION_ID;
                         if (cfg.OUTAGE_DSO_ID) document.getElementById('onb-yasno-dso').value = cfg.OUTAGE_DSO_ID;
                         if (cfg.OUTAGE_GROUP && prov === 'yasno') document.getElementById('onb-yasno-group').value = cfg.OUTAGE_GROUP;
+                        if (cfg.OUTAGE_DTEK_REGION) document.getElementById('onb-dtek-region').value = cfg.OUTAGE_DTEK_REGION;
+                        if (cfg.OUTAGE_GROUP && prov === 'dtek') document.getElementById('onb-dtek-group').value = cfg.OUTAGE_GROUP;
 
                         // Generator
                         if (cfg.INVERTER_HAS_GENERATOR && cfg.INVERTER_HAS_GENERATOR.toLowerCase() === 'true') {
@@ -4696,6 +4868,7 @@
 
             document.getElementById('onb-outage-lviv-fields').classList.toggle('visible', selectedOutageProvider === 'lvivoblenergo');
             document.getElementById('onb-outage-yasno-fields').classList.toggle('visible', selectedOutageProvider === 'yasno');
+            document.getElementById('onb-outage-dtek-fields').classList.toggle('visible', selectedOutageProvider === 'dtek');
         }
 
         function selectOutageProviderByValue(value) {
@@ -4709,6 +4882,7 @@
             selectedOutageProvider = value;
             document.getElementById('onb-outage-lviv-fields').classList.toggle('visible', value === 'lvivoblenergo');
             document.getElementById('onb-outage-yasno-fields').classList.toggle('visible', value === 'yasno');
+            document.getElementById('onb-outage-dtek-fields').classList.toggle('visible', value === 'dtek');
         }
 
         function toggleOnb(el, fieldsId) {
@@ -4737,6 +4911,9 @@
                 config.OUTAGE_REGION_ID = document.getElementById('onb-yasno-region').value.trim() || '25';
                 config.OUTAGE_DSO_ID = document.getElementById('onb-yasno-dso').value.trim() || '902';
                 config.OUTAGE_GROUP = document.getElementById('onb-yasno-group').value.trim() || '2.1';
+            } else if (selectedOutageProvider === 'dtek') {
+                config.OUTAGE_DTEK_REGION = document.getElementById('onb-dtek-region').value;
+                config.OUTAGE_GROUP = document.getElementById('onb-dtek-group').value.trim() || '1.1';
             }
 
             // Step 4 — Generator
@@ -4855,7 +5032,10 @@
                     store: {
                         get: function (sortable) {
                             var order = localStorage.getItem('dashboard-cards-order');
-                            return order ? JSON.parse(order) : [];
+                            // "Planned outages" replaced "Outage history"; keep its saved position
+                            return order ? JSON.parse(order).map(function(id) {
+                                return id === 'outage-history-card' ? 'planned-outages-card' : id;
+                            }) : [];
                         },
                         set: function (sortable) {
                             var order = JSON.stringify(sortable.toArray());

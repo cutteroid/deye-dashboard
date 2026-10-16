@@ -39,13 +39,13 @@ python scan_phases.py       # phase registers
 
 ### Core Components
 
-- **`app.py`** — Flask web server. Contains the main application, API routes, and background poller classes (`InverterPoller`, `WeatherPoller`). Serves the single-page dashboard at `/` and JSON API at `/api/*`. Manages phase stats, outage history, and grid daily logs as JSON files.
+- **`app.py`** — Flask web server. Contains the main application, API routes, and background poller classes (`InverterPoller`, `WeatherPoller`). Serves the single-page dashboard at `/` and JSON API at `/api/*`. Manages phase stats and grid daily logs as JSON files.
 
 - **`inverter.py`** — `DeyeInverter` class for Modbus communication via `pysolarmanv5`. Reads holding registers with 50ms delays between reads to avoid overwhelming the logger. `BatterySampler` runs in a separate thread to smooth voltage/SOC readings using a rolling buffer with outlier rejection. `InverterConfig` dataclass describes inverter capabilities (phases, battery, PV strings).
 
 - **`telegram_bot.py`** — Telegram bot with commands (`/battery`, `/outage`, `/grid`, `/test`). Sends notifications for low battery and grid restore events. Messages are written in 1800s literary Ukrainian style. Uses `poems.py` for weather-themed poetry excerpts.
 
-- **`templates/index.html`** — Single-page dashboard UI with auto-refresh every 5 seconds. Contains energy flow diagrams, phase analytics, outage history, and fullscreen kiosk mode. All frontend logic is inline (no build step).
+- **`templates/index.html`** — Single-page dashboard UI with auto-refresh every 5 seconds. Contains energy flow diagrams, phase analytics, planned outages (today/tomorrow), and fullscreen kiosk mode. All frontend logic is inline (no build step).
 
 ### Outage Providers
 
@@ -53,6 +53,9 @@ python scan_phases.py       # phase registers
 - `base.py` — `OutageProvider` base class, `OutageSchedulePoller` (background thread), and `create_outage_provider()` factory
 - `lvivoblenergo.py` — Lvivoblenergo schedule provider
 - `yasno.py` — Yasno (DTEK) schedule provider
+- `dtek.py` — DTEK regions (Kyiv oblast, Kyiv, Dnipro, Odesa) via the outage-data-ua community feed
+
+Providers implement `fetch_days()` (today, plus tomorrow once published) and raise `OutageFetchError` on failure — an empty window list means "no outages", so never return `[]` for an error.
 
 ### Threading Model
 
@@ -113,12 +116,10 @@ All pollers use thread locks for safe cache access. The inverter connection (`De
 |----------|--------|-------------|
 | `/api/data` | GET | Current inverter readings |
 | `/api/weather` | GET | Current weather and forecast |
-| `/api/outage_schedule` | GET | Upcoming outage windows |
+| `/api/outage_schedule` | GET | Outage status and today's/tomorrow's planned windows |
 | `/api/phase-stats` | GET | Daily phase statistics |
 | `/api/phase-history` | GET | Phase power history |
 | `/api/generator` | GET | Generator status and runtime |
-| `/api/outages` | GET/POST | Outage history (read/record) |
-| `/api/outages/clear` | POST | Clear outage history |
 | `/api/phase-stats/clear` | POST | Clear phase statistics |
 
 ## Configuration
@@ -127,4 +128,4 @@ All via environment variables (`.env` file). See `.env.example` for full templat
 
 Required: `INVERTER_IP`, `LOGGER_SERIAL`
 
-Optional: `WEATHER_LATITUDE/LONGITUDE`, `OUTAGE_PROVIDER` (lvivoblenergo/yasno/none), `TELEGRAM_ENABLED`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_USERS`
+Optional: `WEATHER_LATITUDE/LONGITUDE`, `OUTAGE_PROVIDER` (lvivoblenergo/yasno/dtek/none), `TELEGRAM_ENABLED`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_USERS`

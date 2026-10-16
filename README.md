@@ -83,9 +83,8 @@ Raspberry Pi зчитує дані з вашого інвертора кожні
 - **Real-time monitoring** — solar production, battery SOC, grid power, and load consumption
 - **Load analytics** — per-phase power distribution with daily statistics (3-phase systems)
 - **Weather** — current conditions and forecast via Open-Meteo API
-- **Outage schedule** — upcoming power outage windows (Lvivoblenergo or Yasno providers)
+- **Planned outages** — today's and tomorrow's outage windows on a timeline, plus a countdown in the grid banner (Lvivoblenergo, Yasno, or DTEK providers)
 - **Grid outage detection** — browser notifications when power goes out
-- **Outage history** — track and review past power outages
 - **Telegram bot** — battery reports, inverter status, and Ukrainian weather poems
 - **Fullscreen mode** — kiosk-friendly display with weather, grid, and battery banners
 - **Responsive design** — works on desktop and mobile
@@ -161,7 +160,6 @@ docker run -d \
 ### Data Persistence
 
 The container mounts a `data` volume at `/app/data` for persistent storage of:
-- Outage history (`outage_history.json`)
 - Phase statistics (`phase_stats.json`)
 - Phase history (`phase_history.json`)
 
@@ -210,7 +208,7 @@ Coordinates are used to fetch weather data from the [Open-Meteo API](https://ope
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `OUTAGE_PROVIDER` | Provider name: `lvivoblenergo`, `yasno`, or `none` | `none` |
+| `OUTAGE_PROVIDER` | Provider name: `lvivoblenergo`, `yasno`, `dtek`, or `none` | `none` |
 | `OUTAGE_GROUP` | Your outage queue/group number (e.g. `1.1`, `2.2`) | — |
 
 **Yasno-specific settings** (only when `OUTAGE_PROVIDER=yasno`):
@@ -219,6 +217,14 @@ Coordinates are used to fetch weather data from the [Open-Meteo API](https://ope
 |----------|-------------|---------|
 | `OUTAGE_REGION_ID` | Yasno region ID (e.g. `25` for Kyiv) | — |
 | `OUTAGE_DSO_ID` | Yasno DSO ID (e.g. `902` for DTEK Kyiv) | — |
+
+**DTEK-specific settings** (only when `OUTAGE_PROVIDER=dtek`):
+
+DTEK has no public API, so this provider reads the community feed [outage-data-ua](https://github.com/Baskerville42/outage-data-ua), which mirrors DTEK's published schedules every few minutes. Only definite outages are shown; "possible outage" hours are ignored.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `OUTAGE_DTEK_REGION` | `kyiv-region` (Kyiv oblast), `kyiv`, `dnipro`, or `odesa` | `kyiv-region` |
 
 ### Telegram Bot (optional)
 
@@ -260,7 +266,6 @@ The bot also provides a keyboard with Ukrainian-labeled buttons for quick access
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `OUTAGE_HISTORY_FILE` | Path to outage history JSON file | `outage_history.json` |
 | `PHASE_STATS_FILE` | Path to phase statistics JSON file | `phase_stats.json` |
 | `PHASE_HISTORY_FILE` | Path to phase history JSON file | `phase_history.json` |
 
@@ -389,12 +394,9 @@ python scan_registers.py
 |----------|--------|-------------|
 | `/api/data` | GET | Current inverter readings |
 | `/api/weather` | GET | Current weather and forecast |
-| `/api/outage_schedule` | GET | Upcoming outage windows |
+| `/api/outage_schedule` | GET | Current outage status, plus today's and (if published) tomorrow's planned windows |
 | `/api/phase-stats` | GET | Daily phase statistics |
 | `/api/phase-history` | GET | Phase power history |
-| `/api/outages` | GET | Outage history |
-| `/api/outages` | POST | Record outage event |
-| `/api/outages/clear` | POST | Clear outage history |
 | `/api/phase-stats/clear` | POST | Clear phase statistics |
 
 ## License

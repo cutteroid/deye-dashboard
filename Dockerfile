@@ -6,9 +6,11 @@ WORKDIR /app
 
 # Set environment variables
 # Prevent Python from writing pyc files and buffering stdout/stderr
+# TZ: outage schedules are in Kyiv local time; the container would otherwise run on UTC
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1
+    PIP_NO_CACHE_DIR=1 \
+    TZ=Europe/Kyiv
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \

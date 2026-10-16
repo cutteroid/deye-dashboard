@@ -2,11 +2,12 @@
 import os
 import re
 import logging
+from datetime import date, timedelta
 from html.parser import HTMLParser
 
 import requests
 
-from outage_providers.base import OutageProvider
+from outage_providers.base import OutageProvider, OutageFetchError
 
 logger = logging.getLogger(__name__)
 
@@ -67,25 +68,35 @@ class LvivoblenergoProvider(OutageProvider):
 
     def fetch_windows(self):
         """Fetch today's outage windows from the Lvivoblenergo API."""
+        return self.fetch_days()[date.today()]
+
+    def fetch_days(self):
+        """Fetch outage windows for today and, when published, tomorrow."""
         logger.info("Lvivoblenergo: fetching %s (group=%s)", self.api_url, self.group)
         resp = requests.get(self.api_url, timeout=15)
         if not resp.ok:
             body_snippet = resp.text[:200] if resp.text else "(empty)"
-            logger.warning("Lvivoblenergo API returned %s: %s", resp.status_code, body_snippet)
-            return []
+            raise OutageFetchError(
+                f"Lvivoblenergo API returned HTTP {resp.status_code}: {body_snippet}"
+            )
 
         data = resp.json()
         members = data.get("hydra:member", [])
         if not members:
-            logger.warning("Lvivoblenergo: no hydra:member entries in response")
-            return []
+            raise OutageFetchError("Lvivoblenergo: no hydra:member entries in response")
 
-        for item in members[0].get("menuItems", []):
-            if item.get("name") == "Today":
-                html = item.get("rawHtml", "")
-                windows = parse_group_windows(html, self.group)
-                logger.info("Lvivoblenergo: found %d windows for group %s", len(windows), self.group)
-                return windows
+        items = {item.get("name"): item.get("rawHtml") or ""
+                 for item in members[0].get("menuItems", [])}
+        if "Today" not in items:
+            raise OutageFetchError("Lvivoblenergo: no 'Today' menu item found in response")
 
-        logger.warning("Lvivoblenergo: no 'Today' menu item found in response")
-        return []
+        today = date.today()
+        result = {today: parse_group_windows(items["Today"], self.group)}
+        # "Tomorrow" is empty until LOE publishes it; parse_group_windows can't
+        # tell "not published" from "no outages", so only keep it when non-empty.
+        tomorrow_windows = parse_group_windows(items.get("Tomorrow", ""), self.group)
+        if tomorrow_windows:
+            result[today + timedelta(days=1)] = tomorrow_windows
+        logger.info("Lvivoblenergo: group %s today %s, tomorrow %s", self.group,
+                    result[today], result.get(today + timedelta(days=1), "not published"))
+        return result

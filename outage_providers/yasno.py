@@ -1,10 +1,11 @@
 """Outage schedule provider for YASNO (DTEK regions)."""
 import os
 import logging
+from datetime import date, timedelta
 
 import requests
 
-from outage_providers.base import OutageProvider
+from outage_providers.base import OutageProvider, OutageFetchError
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,10 @@ class YasnoProvider(OutageProvider):
 
     def fetch_windows(self):
         """Fetch today's outage windows from the YASNO API."""
+        return self.fetch_days()[date.today()]
+
+    def fetch_days(self):
+        """Fetch outage windows for today and, when scheduled, tomorrow."""
         url = self.API_URL_TEMPLATE.format(
             region_id=self.region_id, dso_id=self.dso_id
         )
@@ -33,24 +38,40 @@ class YasnoProvider(OutageProvider):
         resp = requests.get(url, timeout=15)
         if not resp.ok:
             body_snippet = resp.text[:200] if resp.text else "(empty)"
-            logger.warning("YASNO API returned %s: %s", resp.status_code, body_snippet)
-            return []
+            raise OutageFetchError(
+                f"YASNO API returned HTTP {resp.status_code} for region "
+                f"{self.region_id} / DSO {self.dso_id}: {body_snippet}"
+            )
 
         data = resp.json()
         group_data = data.get(self.group, {})
         if not group_data:
-            logger.warning("YASNO: group '%s' not found in response (available: %s)",
-                           self.group, list(data.keys())[:10])
+            raise OutageFetchError(
+                f"YASNO: group '{self.group}' not found in response "
+                f"(available: {', '.join(list(data.keys())[:10])})"
+            )
 
-        today = group_data.get("today", {})
-        slots = today.get("slots", [])
+        today = date.today()
+        result = {today: self._definite_windows(group_data.get("today", {}))}
+        # YASNO always returns a "tomorrow" entry, empty until it is scheduled,
+        # so only treat it as published when it has outage slots.
+        tomorrow_data = group_data.get("tomorrow") or {}
+        tomorrow = today + timedelta(days=1)
+        if str(tomorrow_data.get("date", "")).startswith(tomorrow.isoformat()):
+            tomorrow_windows = self._definite_windows(tomorrow_data)
+            if tomorrow_windows:
+                result[tomorrow] = tomorrow_windows
+        logger.info("YASNO: group %s today %s, tomorrow %s",
+                    self.group, result[today], result.get(tomorrow, "not published"))
+        return result
 
+    @staticmethod
+    def _definite_windows(day_data):
         windows = []
-        for slot in slots:
+        for slot in day_data.get("slots", []):
             if slot.get("type") != "Definite":
                 continue
             sh, sm = divmod(slot["start"], 60)
             eh, em = divmod(slot["end"], 60)
             windows.append((sh, sm, eh, em))
-        logger.info("YASNO: found %d windows for group %s", len(windows), self.group)
         return windows

@@ -196,7 +196,6 @@ app = Flask(__name__)
 # Configuration - can be overridden with environment variables
 INVERTER_IP = os.environ.get("INVERTER_IP", "0.0.0.0")
 LOGGER_SERIAL = int(os.environ.get("LOGGER_SERIAL", "0"))
-OUTAGE_HISTORY_FILE = os.environ.get("OUTAGE_HISTORY_FILE", "outage_history.json")
 PHASE_STATS_FILE = os.environ.get("PHASE_STATS_FILE", "phase_stats.json")
 PHASE_HISTORY_FILE = os.environ.get("PHASE_HISTORY_FILE", "phase_history.json")
 GRID_DAILY_LOG_FILE = os.environ.get("GRID_DAILY_LOG_FILE", "grid_daily_log.json")
@@ -271,6 +270,7 @@ def init_services():
         group=outage_group,
         region_id=os.environ.get("OUTAGE_REGION_ID", "25"),
         dso_id=os.environ.get("OUTAGE_DSO_ID", "902"),
+        dtek_region=os.environ.get("OUTAGE_DTEK_REGION"),
     )
     if outage_prov is not None:
         outage_poller = OutageSchedulePoller(provider=outage_prov)
@@ -386,20 +386,6 @@ def track_generator_runtime(generator_power):
             del log[old_date]
 
     save_generator_log(log)
-
-
-def load_outage_history():
-    """Load outage history from file."""
-    if os.path.exists(OUTAGE_HISTORY_FILE):
-        with open(OUTAGE_HISTORY_FILE, "r") as f:
-            return json.load(f)
-    return []
-
-
-def save_outage_history(history):
-    """Save outage history to file."""
-    with open(OUTAGE_HISTORY_FILE, "w") as f:
-        json.dump(history, f, indent=2)
 
 
 def load_phase_stats():
@@ -599,8 +585,10 @@ def get_outage_schedule():
     if outage_poller is None:
         return jsonify({"status": "disabled"})
     status = outage_poller.get_outage_status()
-    result = {"status": status["status"]}
-    if status["status"] == "active":
+    result = {"status": status["status"], "provider": outage_poller.provider.display_name}
+    if status["status"] == "error":
+        result["error"] = status["error"]
+    elif status["status"] == "active":
         result["start_time"] = status["start_time"].isoformat()
         result["end_time"] = status["end_time"].isoformat()
         result["remaining_minutes"] = status["remaining_minutes"]
@@ -611,56 +599,16 @@ def get_outage_schedule():
         ]
         if "electricity_start" in status:
             result["electricity_start"] = status["electricity_start"].isoformat()
+    if "days" in status:
+        result["days"] = [
+            {
+                "date": day["date"].isoformat(),
+                "windows": [{"start": s.isoformat(), "end": e.isoformat()}
+                            for s, e in day["windows"]],
+            }
+            for day in status["days"]
+        ]
     return jsonify(result)
-
-
-@app.route("/api/outages", methods=["GET"])
-def get_outages():
-    """Get outage history."""
-    history = load_outage_history()
-    return jsonify(history)
-
-
-@app.route("/api/outages", methods=["POST"])
-def add_outage():
-    """Add a new outage event."""
-    data = request.json
-    history = load_outage_history()
-
-    event = {
-        "id": len(history) + 1,
-        "type": data.get("type"),  # "start" or "end"
-        "timestamp": data.get("timestamp"),
-        "voltage": data.get("voltage", 0)
-    }
-
-    # If this is an "end" event, calculate duration
-    if event["type"] == "end" and history:
-        # Find the last "start" event
-        for i in range(len(history) - 1, -1, -1):
-            if history[i]["type"] == "start" and "duration" not in history[i]:
-                start_time = datetime.fromisoformat(history[i]["timestamp"])
-                end_time = datetime.fromisoformat(event["timestamp"])
-                duration = (end_time - start_time).total_seconds()
-                history[i]["duration"] = duration
-                history[i]["end_timestamp"] = event["timestamp"]
-                break
-
-    history.append(event)
-
-    # Keep only last 100 events
-    if len(history) > 100:
-        history = history[-100:]
-
-    save_outage_history(history)
-    return jsonify({"status": "ok"})
-
-
-@app.route("/api/outages/clear", methods=["POST"])
-def clear_outages():
-    """Clear outage history."""
-    save_outage_history([])
-    return jsonify({"status": "ok"})
 
 
 @app.route("/api/weather")

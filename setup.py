@@ -25,6 +25,7 @@ MANAGED_KEYS = [
     "INVERTER_IP", "LOGGER_SERIAL",
     "WEATHER_LATITUDE", "WEATHER_LONGITUDE",
     "OUTAGE_PROVIDER", "OUTAGE_GROUP", "OUTAGE_REGION_ID", "OUTAGE_DSO_ID",
+    "OUTAGE_DTEK_REGION",
     "INVERTER_HAS_GENERATOR", "GENERATOR_FUEL_RATE", "GENERATOR_OIL_CHANGE_DATE",
     "TELEGRAM_ENABLED", "TELEGRAM_BOT_TOKEN", "TELEGRAM_ALLOWED_USERS",
     "TELEGRAM_PUBLIC",
@@ -159,11 +160,12 @@ def section_outage(defaults):
     print(f"{YELLOW}Outage Schedule Provider{NC}")
 
     prev = defaults.get("OUTAGE_PROVIDER", "lvivoblenergo")
-    default_choice = {"lvivoblenergo": 1, "yasno": 2, "none": 3}.get(prev, 1)
+    default_choice = {"lvivoblenergo": 1, "yasno": 2, "dtek": 3, "none": 4}.get(prev, 1)
 
     provider = ask_choice(
         "Choose",
-        [("lvivoblenergo", "lvivoblenergo"), ("yasno", "yasno"), ("none (disable)", "none")],
+        [("lvivoblenergo", "lvivoblenergo"), ("yasno", "yasno"),
+         ("dtek (Kyiv oblast, Kyiv, Dnipro, Odesa)", "dtek"), ("none (disable)", "none")],
         default=default_choice,
     )
 
@@ -175,6 +177,12 @@ def section_outage(defaults):
         result["OUTAGE_REGION_ID"] = ask("YASNO region ID (e.g. 25 = Kyiv)", defaults.get("OUTAGE_REGION_ID", "25"))
         result["OUTAGE_DSO_ID"] = ask("YASNO DSO ID (e.g. 902 = DTEK Kyiv)", defaults.get("OUTAGE_DSO_ID", "902"))
         result["OUTAGE_GROUP"] = ask("Queue/group number (e.g. 2.1)", defaults.get("OUTAGE_GROUP", "2.1"))
+    elif provider == "dtek":
+        result["OUTAGE_DTEK_REGION"] = ask(
+            "DTEK region (kyiv-region, kyiv, dnipro, odesa)",
+            defaults.get("OUTAGE_DTEK_REGION", "kyiv-region"),
+        )
+        result["OUTAGE_GROUP"] = ask("Queue/group number (e.g. 4.2)", defaults.get("OUTAGE_GROUP", "1.1"))
 
     print()
     return result
@@ -271,6 +279,11 @@ def write_env(values, extra_lines, path=".env"):
             lines.append(f"OUTAGE_REGION_ID={values['OUTAGE_REGION_ID']}")
         if "OUTAGE_DSO_ID" in values:
             lines.append(f"OUTAGE_DSO_ID={values['OUTAGE_DSO_ID']}")
+        if "OUTAGE_GROUP" in values:
+            lines.append(f"OUTAGE_GROUP={values['OUTAGE_GROUP']}")
+    elif provider == "dtek":
+        if "OUTAGE_DTEK_REGION" in values:
+            lines.append(f"OUTAGE_DTEK_REGION={values['OUTAGE_DTEK_REGION']}")
         if "OUTAGE_GROUP" in values:
             lines.append(f"OUTAGE_GROUP={values['OUTAGE_GROUP']}")
     lines.append("")
