@@ -535,27 +535,6 @@
             margin-top: 4px;
         }
 
-        /* Temperature */
-        .temp-row {
-            display: flex;
-            gap: 20px;
-        }
-
-        .temp-item {
-            flex: 1;
-            text-align: center;
-        }
-
-        .temp-value {
-            font-size: 1.8rem;
-            font-weight: 600;
-        }
-
-        .temp-label {
-            font-size: 0.8rem;
-            color: #64748b;
-        }
-
         /* Planned Outages */
         .planned-outages-source {
             margin-top: 14px;
@@ -874,17 +853,6 @@
         @keyframes home-glow {
             0%, 100% { filter: drop-shadow(0 0 2px rgba(248, 113, 113, 0.3)); }
             50% { filter: drop-shadow(0 0 8px rgba(248, 113, 113, 0.6)); }
-        }
-
-        /* Temperature warning animation */
-        .card.temp-warning .temp-value {
-            color: #f87171;
-            animation: temp-flash 1s ease-in-out infinite;
-        }
-
-        @keyframes temp-flash {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.6; }
         }
 
         /* Phase Analytics */
@@ -1223,14 +1191,6 @@
             .phase-value {
                 width: 55px;
                 font-size: 0.85rem;
-            }
-
-            .temp-row {
-                gap: 12px;
-            }
-
-            .temp-value {
-                font-size: 1.4rem;
             }
         }
 
@@ -2998,24 +2958,6 @@
             </div>
         </div>
 
-        <!-- Temperature -->
-        <div class="card" id="temp-card" data-id="temp-card">
-            <div class="card-header">
-                <span class="icon">🌡️</span>
-                <h2>Temperature</h2>
-            </div>
-            <div class="temp-row">
-                <div class="temp-item">
-                    <div class="temp-value" id="dc-temp">--°C</div>
-                    <div class="temp-label">DC Transformer</div>
-                </div>
-                <div class="temp-item">
-                    <div class="temp-value" id="heatsink-temp">--°C</div>
-                    <div class="temp-label">Heat Sink</div>
-                </div>
-            </div>
-        </div>
-
         <!-- Phase Load (Real-time) -->
         <div class="card" id="phase-card" data-id="phase-card">
             <div class="card-header">
@@ -3825,10 +3767,6 @@
                     document.getElementById('load-power').innerHTML = data.load_power + '<span class="unit">W</span>';
                     document.getElementById('daily-load').textContent = data.daily_load.toFixed(1);
 
-                    // Temperature
-                    document.getElementById('dc-temp').textContent = data.dc_temp.toFixed(1) + '°C';
-                    document.getElementById('heatsink-temp').textContent = data.heatsink_temp.toFixed(1) + '°C';
-
                     // ===== ANIMATIONS =====
 
                     // Solar animation - glow when producing
@@ -3870,14 +3808,6 @@
                         loadCard.classList.add('load-high');
                     } else if (data.load_power > 100) {
                         loadCard.classList.add('load-active');
-                    }
-
-                    // Temperature warning
-                    const tempCard = document.getElementById('temp-card');
-                    if (data.heatsink_temp > 60 || data.dc_temp > 50) {
-                        tempCard.classList.add('temp-warning');
-                    } else {
-                        tempCard.classList.remove('temp-warning');
                     }
 
                     // Grid Status Banner

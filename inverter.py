@@ -173,12 +173,6 @@ class DeyeInverter:
             data["load_l1"] = self.read_register(176)
             time.sleep(0.05)
 
-            # Temperatures
-            data["dc_temp"] = (self.read_register(90) - 1000) / 10
-            time.sleep(0.05)
-            data["heatsink_temp"] = (self.read_register(91) - 1000) / 10
-            time.sleep(0.05)
-
             # Daily stats
             data["daily_pv"] = self.read_register(108) / 10
             time.sleep(0.05)
@@ -280,12 +274,6 @@ class DeyeInverter:
 
             # Load
             data["load_power"] = self.read_register(653)
-            time.sleep(0.05)
-
-            # Temperatures
-            data["dc_temp"] = (self.read_register(540) - 1000) / 10
-            time.sleep(0.05)
-            data["heatsink_temp"] = (self.read_register(541) - 1000) / 10
             time.sleep(0.05)
 
             # Daily stats
