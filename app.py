@@ -869,7 +869,8 @@ def reset_config():
     """Delete .env and restart the service to enter onboarding mode."""
     env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
     if os.path.exists(env_path):
-        os.remove(env_path)
+        # realpath: in Docker .env is a symlink into the data volume
+        os.remove(os.path.realpath(env_path))
         logger.info("Deleted .env — entering first-run mode on restart")
     else:
         logger.info(".env not found — already in first-run mode")

@@ -84,7 +84,7 @@ Raspberry Pi зчитує дані з вашого інвертора кожні
 - **Load analytics** — per-phase power distribution with daily statistics (3-phase systems)
 - **Weather** — current conditions and forecast via Open-Meteo API
 - **Outage schedule** — upcoming power outage windows (Lvivoblenergo or Yasno providers)
-- **Grid outage detection** — voice alerts and browser notifications when power goes out
+- **Grid outage detection** — browser notifications when power goes out
 - **Outage history** — track and review past power outages
 - **Telegram bot** — battery reports, inverter status, and Ukrainian weather poems
 - **Fullscreen mode** — kiosk-friendly display with weather, grid, and battery banners

@@ -1378,36 +1378,11 @@
             background: linear-gradient(90deg, #dc2626, #ef4444);
         }
 
-        /* Sound toggle button */
-        .sound-btn {
-            position: fixed;
-            top: 20px;
-            right: 74px;
-            width: 44px;
-            height: 44px;
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 10px;
-            color: #94a3b8;
-            cursor: pointer;
-            font-size: 1.2rem;
-            z-index: 100;
-            transition: all 0.3s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .sound-btn:hover {
-            background: rgba(255, 255, 255, 0.2);
-            color: #fff;
-        }
-
         /* Settings Panel */
         .settings-toggle-btn {
             position: fixed;
             top: 20px;
-            right: 128px;
+            right: 74px;
             width: 44px;
             height: 44px;
             background: rgba(255, 255, 255, 0.1);
@@ -2695,19 +2670,6 @@
         <div class="status" id="status">Connecting...</div>
     </div>
 
-    <!-- Sound Toggle Button -->
-    <button class="sound-btn" id="sound-btn" onclick="toggleSound()" title="Toggle Sound">
-        <svg id="sound-icon-on" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
-        </svg>
-        <svg id="sound-icon-off" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;">
-            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-            <line x1="23" y1="9" x2="17" y2="15"></line>
-            <line x1="17" y1="9" x2="23" y2="15"></line>
-        </svg>
-    </button>
-
     <!-- Fullscreen Button -->
     <button class="fullscreen-btn" id="fullscreen-btn" onclick="toggleFullscreen()" title="Toggle Fullscreen">
         <svg id="fullscreen-icon-enter" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -3254,30 +3216,6 @@
     </div>
 
     <script>
-        // Sound toggle state
-        let soundEnabled = localStorage.getItem('soundEnabled') !== 'false';
-
-        function toggleSound() {
-            soundEnabled = !soundEnabled;
-            localStorage.setItem('soundEnabled', soundEnabled);
-            updateSoundIcon();
-        }
-
-        function updateSoundIcon() {
-            const onIcon = document.getElementById('sound-icon-on');
-            const offIcon = document.getElementById('sound-icon-off');
-            if (soundEnabled) {
-                onIcon.style.display = 'block';
-                offIcon.style.display = 'none';
-            } else {
-                onIcon.style.display = 'none';
-                offIcon.style.display = 'block';
-            }
-        }
-
-        // Set initial icon state
-        updateSoundIcon();
-
         // Inverter config (populated from /api/data response)
         var inverterConfig = null;
         var outageScheduleIntervalId = null;
@@ -3440,44 +3378,6 @@
                     icon: '⚡',
                     requireInteraction: true
                 });
-            }
-        }
-
-        // Cache female voice
-        let femaleVoice = null;
-
-        function loadVoices() {
-            const voices = window.speechSynthesis.getVoices();
-            femaleVoice = voices.find(voice =>
-                voice.name.includes('Samantha') ||
-                voice.name.includes('Victoria') ||
-                voice.name.includes('Karen') ||
-                voice.name.includes('Fiona') ||
-                voice.name.includes('Female')
-            ) || voices.find(voice => voice.lang.startsWith('en'));
-        }
-
-        if ('speechSynthesis' in window) {
-            loadVoices();
-            window.speechSynthesis.onvoiceschanged = loadVoices;
-        }
-
-        function speak(message) {
-            if (!soundEnabled) return;
-            if ('speechSynthesis' in window) {
-                // Cancel any ongoing speech
-                window.speechSynthesis.cancel();
-
-                const utterance = new SpeechSynthesisUtterance(message);
-                utterance.rate = 0.85;
-                utterance.pitch = 1.0;
-                utterance.volume = 0.9;
-
-                if (femaleVoice) {
-                    utterance.voice = femaleVoice;
-                }
-
-                window.speechSynthesis.speak(utterance);
             }
         }
 
@@ -3824,12 +3724,10 @@
 
             if (lastGridOnline && !isOnline) {
                 // Grid just went offline
-                speak('Attention. Grid power is currently unavailable.');
                 showNotification('Power Outage', 'Grid electricity is now offline.');
                 recordOutageEvent('start', voltage);
             } else if (!lastGridOnline && isOnline) {
                 // Grid just came back online
-                speak('Grid power has been restored.');
                 showNotification('Power Restored', 'Grid electricity is back online.');
                 recordOutageEvent('end', voltage);
             }
@@ -3969,7 +3867,7 @@
                         gridStatusLabel.textContent = 'No grid power';
                     }
 
-                    // Handle grid state changes (voice + notification)
+                    // Handle grid state changes (notification)
                     handleGridStateChange(isOnline, data.grid_voltage);
 
                     // Update phase display (3-phase only)
