@@ -10,7 +10,6 @@ body {
     min-height: 100vh;
     color: #fff;
     padding: 20px;
-    transition: background 3s ease;
 }
 
 /* Lift all content above battery-overlay (z-index:0) for iOS fullscreen compatibility */
@@ -1649,10 +1648,10 @@ body.fullscreen-mode .alerts-banner .alerts-map svg {
 
 /* Required by NEPTUN's terms: visible data link + "not an official alert system" */
 .alerts-credit {
-    margin-top: 6px;
-    font-size: 0.65rem;
-    line-height: 1.4;
-    color: #64748b;
+    margin-top: 4px;
+    font-size: 0.6rem;
+    line-height: 1.3;
+    color: #475569;
 }
 
 .alerts-credit[hidden] {
@@ -1660,8 +1659,7 @@ body.fullscreen-mode .alerts-banner .alerts-map svg {
 }
 
 .alerts-credit a {
-    color: #94a3b8;
-    margin-right: 6px;
+    color: #64748b;
 }
 
 .scroll-hint {

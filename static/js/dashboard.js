@@ -935,8 +935,8 @@ function updateDashboard() {
             // Update energy flow diagram
             updateEnergyFlow(data);
 
-            // Update weather background
-            updateBackground(data);
+            // Red tint when the grid is down and the battery is low
+            updateBatteryOverlay(data);
 
         })
         .catch(error => {
@@ -954,8 +954,9 @@ function updateDashboard() {
 loadPhaseStats();
 updateDashboard();
 
-// Fetch weather background immediately (independent of inverter data)
-fetchWeatherAndApply();
+// Weather forecast banner (independent of inverter data)
+fetchWeather();
+setInterval(fetchWeather, WEATHER_POLL_MS);
 
 // Update every 5 seconds
 setInterval(updateDashboard, 5000);
@@ -1250,21 +1251,8 @@ function updateGridProgressBar() {
 
 gridProgressBarIntervalId = setInterval(updateGridProgressBar, 1000);
 
-// ===== WEATHER BACKGROUND =====
+// ===== WEATHER FORECAST BANNER =====
 
-var WEATHER_GRADIENTS = {
-    clear_day:    'linear-gradient(135deg, #1a4a7a 0%, #2a6a9f 100%)',
-    clear_night:  'linear-gradient(135deg, #0a0a1a 0%, #12122e 100%)',
-    cloudy:       'linear-gradient(135deg, #1a2030 0%, #2a3040 100%)',
-    fog:          'linear-gradient(135deg, #181e28 0%, #252c38 100%)',
-    snow:         'linear-gradient(135deg, #1a2535 0%, #2a3a4f 100%)',
-    rain:         'linear-gradient(135deg, #151d28 0%, #1e2a38 100%)',
-    thunderstorm: 'linear-gradient(135deg, #10151e 0%, #1a2230 100%)',
-    dawn_dusk:    'linear-gradient(135deg, #2d1a1a 0%, #1a2a3a 100%)'
-};
-
-var currentWeatherMode = '';
-var lastWeatherFetch = 0;
 var cachedWeatherData = null;
 
 // WMO weather code -> icon; descriptions are in locales (weather.codes.<code>)
@@ -1326,60 +1314,6 @@ function updateWeatherForecastBanner(data) {
         formatTimeFromISO(data.sunset);
 }
 
-function getWeatherMode(code, sunrise, sunset) {
-    var now = new Date();
-    var hours = now.getHours();
-    var minutes = now.getMinutes();
-    var currentMinutes = hours * 60 + minutes;
-
-    // Parse sunrise/sunset (format: "YYYY-MM-DDTHH:MM" or "HH:MM")
-    var sunriseMinutes = 360; // default 6:00
-    var sunsetMinutes = 1080; // default 18:00
-    if (sunrise) {
-        var st = sunrise.indexOf('T') >= 0 ? sunrise.split('T')[1] : sunrise;
-        var sp = st.split(':');
-        sunriseMinutes = parseInt(sp[0], 10) * 60 + parseInt(sp[1], 10);
-    }
-    if (sunset) {
-        var st2 = sunset.indexOf('T') >= 0 ? sunset.split('T')[1] : sunset;
-        var sp2 = st2.split(':');
-        sunsetMinutes = parseInt(sp2[0], 10) * 60 + parseInt(sp2[1], 10);
-    }
-
-    var isNight = currentMinutes < sunriseMinutes || currentMinutes > sunsetMinutes;
-
-    // Dawn/dusk: within 45 min of sunrise or sunset
-    var nearSunrise = Math.abs(currentMinutes - sunriseMinutes) <= 45;
-    var nearSunset = Math.abs(currentMinutes - sunsetMinutes) <= 45;
-    if (nearSunrise || nearSunset) {
-        // dawn_dusk takes priority over clear/cloudy but not over precipitation
-        if (code < 45) {
-            return 'dawn_dusk';
-        }
-    }
-
-    // WMO weather code mapping
-    if (code >= 95) return 'thunderstorm';
-    if ((code >= 71 && code <= 77) || (code >= 85 && code <= 86)) return 'snow';
-    if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) return 'rain';
-    if (code === 45 || code === 48) return 'fog';
-    if (code >= 1 && code <= 3) return 'cloudy';
-
-    // Code 0: clear
-    return isNight ? 'clear_night' : 'clear_day';
-}
-
-function applyWeatherMode(mode) {
-    if (mode === currentWeatherMode) return;
-    currentWeatherMode = mode;
-
-    // Set body gradient
-    var gradient = WEATHER_GRADIENTS[mode];
-    if (gradient) {
-        document.body.style.background = gradient;
-    }
-}
-
 function updateBatteryOverlay(data) {
     var overlay = document.getElementById('battery-overlay');
 
@@ -1401,42 +1335,20 @@ function updateBatteryOverlay(data) {
     }
 }
 
-function fetchWeatherAndApply() {
-    var now = Date.now();
-    // Throttle to once per 60 seconds
-    if (cachedWeatherData && (now - lastWeatherFetch) < 60000) {
-        var mode = getWeatherMode(
-            cachedWeatherData.weather_code,
-            cachedWeatherData.sunrise,
-            cachedWeatherData.sunset
-        );
-        applyWeatherMode(mode);
-        updateWeatherForecastBanner(cachedWeatherData);
-        return;
-    }
+// Weather for the forecast banner (fullscreen); the server refreshes it every 15 min
+var WEATHER_POLL_MS = 60000;
 
+function fetchWeather() {
     fetch('/api/weather')
         .then(function(response) { return response.json(); })
         .then(function(weatherData) {
             if (weatherData.error) return;
             cachedWeatherData = weatherData;
-            lastWeatherFetch = Date.now();
-            var mode = getWeatherMode(
-                weatherData.weather_code,
-                weatherData.sunrise,
-                weatherData.sunset
-            );
-            applyWeatherMode(mode);
             updateWeatherForecastBanner(weatherData);
         })
         .catch(function(err) {
             console.error('Weather fetch error:', err);
         });
-}
-
-function updateBackground(data) {
-    fetchWeatherAndApply();
-    updateBatteryOverlay(data);
 }
 
 // ===== AIR RAID ALERTS =====
@@ -1543,30 +1455,10 @@ function renderAlerts() {
         path.firstChild.textContent = title;
     });
 
-    var active = 0, threats = 0, total = 0;
-    if (ok) {
-        Object.keys(d.regions).forEach(function(id) {
-            var status = d.regions[id].status;
-            total++;
-            if (status === 'alert' || status === 'partial') active++;
-            else if (status === 'threat') threats++;
-        });
-    }
-
     var summary;
     if (!d || d.status === 'unknown') summary = t('alerts.loading');
     else if (!ok) summary = t('alerts.unavailable');
-    else {
-        if (active || threats) {
-            var parts = [];
-            if (active) parts.push(t('alerts.active_count', { count: active, total: total }));
-            if (threats) parts.push(t('alerts.threat_count', { count: threats }));
-            summary = parts.join(', ');
-        } else {
-            summary = t('alerts.none_active');
-        }
-        summary += ' · ' + t('alerts.updated', { time: new Date(d.updated).toLocaleTimeString(i18nLocale(), { hour: '2-digit', minute: '2-digit' }) });
-    }
+    else summary = t('alerts.updated', { time: new Date(d.updated).toLocaleTimeString(i18nLocale(), { hour: '2-digit', minute: '2-digit' }) });
     document.querySelectorAll('[data-alerts-summary]').forEach(function(el) { el.textContent = summary; });
     document.querySelectorAll('.alerts-demo-badge').forEach(function(el) { el.hidden = !(d && d.demo); });
     // NEPTUN data link + disclaimer (their terms of use), whenever real data is shown
