@@ -1483,6 +1483,17 @@ body.fullscreen-mode .scroll-hint:hover {
     color: #fff;
 }
 
+/* Only on the first screen: fade out once the page is scrolled */
+body.fullscreen-mode .scroll-hint {
+    transition: opacity 0.3s ease, visibility 0.3s;
+}
+
+body.fullscreen-mode.page-scrolled .scroll-hint {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+
 @keyframes bounce-down {
     0%, 100% { transform: translateX(-50%) translateY(0); }
     50% { transform: translateX(-50%) translateY(8px); }

@@ -280,7 +280,19 @@ function updateFullscreenIcon() {
     if (typeof updateGridProgressBar === 'function') {
         updateGridProgressBar();
     }
+    updatePageScrolled();
 }
+
+// The fullscreen scroll hint is only for the first screen: hide it once the
+// page is scrolled, show it again back at the top.
+var SCROLL_HINT_THRESHOLD = 40;  // px; ignores tiny touch/rubber-band movement
+
+function updatePageScrolled() {
+    document.body.classList.toggle('page-scrolled', window.scrollY > SCROLL_HINT_THRESHOLD);
+}
+
+window.addEventListener('scroll', updatePageScrolled, { passive: true });
+updatePageScrolled();
 
 // Settings panel (opening it requires the settings PIN)
 var settingsPin = null;  // last verified PIN, sent with settings API calls
