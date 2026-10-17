@@ -221,6 +221,23 @@
     "l2_voltage": "Напруга L2",
     "l3_voltage": "Напруга L3"
   },
+  "meter": {
+    "title": "Bakler",
+    "power": "Поточна потужність",
+    "voltage": "Напруга (В)",
+    "current": "Струм (А)",
+    "phase": "Фаза",
+    "frequency": "{value} Гц",
+    "relay": "Реле: {state}",
+    "relay_on": "увімкнено",
+    "relay_off": "вимкнено",
+    "status_waiting": "Очікування даних",
+    "status_offline": "Лічильник не в мережі",
+    "status_stale": "Немає свіжих даних",
+    "status_error": "MQTT-брокер недоступний",
+    "demo": "Демо-дані",
+    "no_voltage": "Немає напруги"
+  },
   "phase_stats": {
     "title": "Щоденна аналітика фаз",
     "date": "Дата",

@@ -108,6 +108,7 @@ FILES=(
     "update_manager.py"
     "storage.py"
     "air_alerts.py"
+    "smart_meter.py"
     "requirements.txt"
     "templates"
     "static"

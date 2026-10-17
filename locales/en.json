@@ -221,6 +221,23 @@
     "l2_voltage": "L2 Voltage",
     "l3_voltage": "L3 Voltage"
   },
+  "meter": {
+    "title": "Bakler",
+    "power": "Current power",
+    "voltage": "Voltage (V)",
+    "current": "Current (A)",
+    "phase": "Phase",
+    "frequency": "{value} Hz",
+    "relay": "Relay: {state}",
+    "relay_on": "on",
+    "relay_off": "off",
+    "status_waiting": "Waiting for data",
+    "status_offline": "Meter offline",
+    "status_stale": "No recent data",
+    "status_error": "MQTT broker unavailable",
+    "demo": "Demo data",
+    "no_voltage": "No voltage"
+  },
   "phase_stats": {
     "title": "Daily Phase Analytics",
     "date": "Date",

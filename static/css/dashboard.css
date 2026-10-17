@@ -1506,6 +1506,79 @@ body.fullscreen-mode.alerts-enabled:not(.has-generator):not(.outages-disabled) .
     }
 }
 
+/* ===== Smart meter ===== */
+.meter-status {
+    margin-left: auto;
+    padding: 2px 8px;
+    font-size: 0.7rem;
+    color: #fbbf24;
+    border: 1px solid rgba(251, 191, 36, 0.5);
+    border-radius: 999px;
+    white-space: nowrap;
+}
+
+.meter-status.meter-status-bad {
+    color: #f87171;
+    border-color: rgba(248, 113, 113, 0.5);
+}
+
+.meter-status[hidden],
+.meter-phases[hidden] {
+    display: none;
+}
+
+/* Offline / stale / broker down: the values shown are the last known ones */
+#smart-meter-card.meter-not-live .metric,
+#smart-meter-card.meter-not-live .stats-row,
+#smart-meter-card.meter-not-live .meter-phases {
+    opacity: 0.45;
+}
+
+.meter-phases {
+    width: 100%;
+    margin-top: 12px;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.meter-phases th {
+    padding: 4px;
+    text-align: right;
+    font-weight: 500;
+    color: #64748b;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.meter-phases th:first-child,
+.meter-phases td:first-child {
+    text-align: left;
+}
+
+.meter-phases td {
+    padding: 6px 4px;
+    text-align: right;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.meter-phases .meter-phase-off .phase-label {
+    opacity: 0.5;
+}
+
+.meter-phases .meter-no-voltage {
+    color: #f87171;
+    font-weight: 600;
+}
+
+.meter-footer {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 14px;
+    font-size: 0.75rem;
+    color: #64748b;
+}
+
 /* ===== Air raid alerts ===== */
 .alerts-banner {
     display: none;
@@ -1554,7 +1627,8 @@ body.fullscreen-mode #alerts-card {
     color: #94a3b8;
 }
 
-.alerts-demo-badge {
+.alerts-demo-badge,
+.meter-demo-badge {
     margin-left: auto;
     padding: 2px 8px;
     font-size: 0.7rem;
@@ -1564,8 +1638,13 @@ body.fullscreen-mode #alerts-card {
     white-space: nowrap;
 }
 
-.alerts-demo-badge[hidden] {
+.alerts-demo-badge[hidden],
+.meter-demo-badge[hidden] {
     display: none;
+}
+
+.meter-status:not([hidden]) + .meter-demo-badge {
+    margin-left: 6px;
 }
 
 .alerts-map {

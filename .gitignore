@@ -32,3 +32,6 @@ generator_log.json
 # OS
 .DS_Store
 Thumbs.db
+
+# Runtime data (settings, stats, MQTT broker files)
+data/

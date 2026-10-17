@@ -406,6 +406,45 @@
             </div>
         </div>
 
+        <!-- Smart Meter (MQTT, read-only) -->
+        <div class="card" id="smart-meter-card" data-id="smart-meter-card" style="display: none;">
+            <div class="card-header">
+                <span class="icon">📟</span>
+                <h2 data-i18n="meter.title">Bakler</h2>
+                <span class="meter-status" id="meter-status" hidden></span>
+                <span class="meter-demo-badge" id="meter-demo" data-i18n="meter.demo" hidden>Demo data</span>
+            </div>
+            <div class="metric">
+                <div class="metric-label" data-i18n="meter.power">Current power</div>
+                <div class="metric-value neutral" id="meter-power">--<span class="unit" data-i18n="units.w">W</span></div>
+            </div>
+            <div class="stats-row" id="meter-single-phase">
+                <div class="stat">
+                    <div class="value" id="meter-voltage">--</div>
+                    <div class="label" data-i18n="meter.voltage">Voltage (V)</div>
+                </div>
+                <div class="stat">
+                    <div class="value" id="meter-current">--</div>
+                    <div class="label" data-i18n="meter.current">Current (A)</div>
+                </div>
+            </div>
+            <table class="meter-phases" id="meter-phases" hidden>
+                <thead>
+                    <tr>
+                        <th data-i18n="meter.phase">Phase</th>
+                        <th data-i18n="units.v">V</th>
+                        <th data-i18n="units.a">A</th>
+                        <th data-i18n="units.w">W</th>
+                    </tr>
+                </thead>
+                <tbody id="meter-phases-body"></tbody>
+            </table>
+            <div class="meter-footer">
+                <span id="meter-frequency"></span>
+                <span id="meter-relay"></span>
+            </div>
+        </div>
+
     </div>
 
     <!-- Settings Panel -->

@@ -28,6 +28,30 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # MQTT broker for the smart electricity meter: point the meter at this machine's
+  # IP, port 1883, with SMART_METER_MQTT_USER / SMART_METER_MQTT_PASSWORD from
+  # data/.env (without them the broker isn't reachable from the network)
+  mosquitto:
+    image: eclipse-mosquitto:2.0.20
+    container_name: deye-mosquitto
+    entrypoint: ["/bin/sh", "/mosquitto-entrypoint.sh"]
+    ports:
+      - "1883:1883"
+    env_file:
+      - path: ./data/.env
+        required: false
+    volumes:
+      - ./mosquitto/entrypoint.sh:/mosquitto-entrypoint.sh:ro
+      - ./data/mosquitto:/mosquitto/data
+    restart: unless-stopped
+    networks:
+      - deye-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 networks:
   deye-network:
     driver: bridge

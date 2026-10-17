@@ -160,6 +160,7 @@ function refreshTranslatedContent() {
         function() { if (typeof generatorData !== 'undefined' && generatorData) { updateGeneratorBanner(generatorData); updateGeneratorCard(generatorData); } },
         function() { updateOnboardingUI(); },
         function() { renderAlerts(); },
+        function() { renderSmartMeter(); },
         function() { updateDashboard(); },
     ];
     refreshers.forEach(function(fn) {
@@ -1353,6 +1354,80 @@ function fetchWeather() {
             console.error('Weather fetch error:', err);
         });
 }
+
+// ===== SMART METER =====
+// Read-only readings of the MQTT smart meter (/api/smart-meter); the card stays
+// hidden unless the meter is enabled on the server.
+var SMART_METER_POLL_MS = 5000;
+var smartMeterData = null;
+
+function fetchSmartMeter() {
+    fetch('/api/smart-meter')
+        .then(function(r) { return r.json(); })
+        .then(function(data) { smartMeterData = data; renderSmartMeter(); })
+        .catch(function() { smartMeterData = { status: 'error' }; renderSmartMeter(); });
+}
+
+function renderSmartMeter() {
+    var d = smartMeterData;
+    var card = document.getElementById('smart-meter-card');
+    if (!card) return;
+    if (!d || d.status === 'disabled') {
+        card.style.display = 'none';
+        return;
+    }
+    card.style.display = '';
+
+    document.getElementById('meter-demo').hidden = !d.demo;
+    var badge = document.getElementById('meter-status');
+    var hasData = !!d.updated;
+    if (d.status === 'ok') {
+        badge.hidden = true;
+    } else {
+        badge.hidden = false;
+        badge.textContent = t('meter.status_' + (d.status === 'unknown' ? 'waiting' : d.status));
+    }
+    // Meter or broker unavailable: red badge; readings still on screen are the last known ones, dimmed
+    badge.classList.toggle('meter-status-bad', d.status === 'offline' || d.status === 'error');
+    card.classList.toggle('meter-not-live', d.status !== 'ok');
+
+    document.getElementById('meter-power').innerHTML =
+        (hasData ? fmt(d.power_w, 0) : '--') + '<span class="unit">' + t('units.w') + '</span>';
+
+    var threePhase = d.phases === 3;
+    document.getElementById('meter-single-phase').style.display = threePhase ? 'none' : '';
+    document.getElementById('meter-phases').hidden = !threePhase;
+    if (threePhase) {
+        var rows = '';
+        for (var i = 0; i < 3; i++) {
+            var pick = function(list) { return list && list.length > i ? list[i] : null; };
+            var label = '<td><span class="phase-label l' + (i + 1) + '">L' + (i + 1) + '</span></td>';
+            if (pick(d.phases_on) === false) {
+                // Phase without supply (voltage ~0)
+                rows += '<tr class="meter-phase-off">' + label + '<td class="meter-no-voltage" colspan="3">' +
+                    t('meter.no_voltage') + '</td></tr>';
+                continue;
+            }
+            rows += '<tr>' + label + '<td>' + fmt(pick(d.voltage), 0) + '</td><td>' +
+                fmt(pick(d.current), 1) + '</td><td>' + fmt(pick(d.power_phases), 0) + '</td></tr>';
+        }
+        document.getElementById('meter-phases-body').innerHTML = rows;
+    } else {
+        document.getElementById('meter-voltage').textContent = fmt((d.voltage || [])[0], 1);
+        document.getElementById('meter-current').textContent = fmt((d.current || [])[0], 2);
+    }
+
+    var freq = d.frequency_max != null ? d.frequency_max : d.frequency_min;
+    document.getElementById('meter-frequency').textContent =
+        typeof freq === 'number' ? t('meter.frequency', { value: freq.toFixed(1) }) : '';
+    var relays = d.relays || [];
+    document.getElementById('meter-relay').textContent = relays.length
+        ? t('meter.relay', { state: t(relays[0] > 0 ? 'meter.relay_on' : 'meter.relay_off') })
+        : '';
+}
+
+fetchSmartMeter();
+setInterval(fetchSmartMeter, SMART_METER_POLL_MS);
 
 // ===== AIR RAID ALERTS =====
 // Map of Ukraine's regions (static/data/ukraine-regions.json, ids are ISO 3166-2
