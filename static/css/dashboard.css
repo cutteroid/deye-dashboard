@@ -1228,12 +1228,15 @@ body.fullscreen-mode .fullscreen-banner-wrapper {
     grid-template-areas:
         "weather weather"
         "grid    battery";
-    grid-template-columns: 1fr 1fr;
+    /* Columns are as wide as the status banners (max 500px) and centred, so the
+       full-width rows (weather, planned outages) line up with their outer edges */
+    grid-template-columns: repeat(2, minmax(0, 500px));
+    justify-content: center;
     grid-template-rows: auto auto;
     /* Row gap shrinks on short screens so the planned outages row still fits */
     gap: clamp(24px, 4vh, 50px) 80px;
     align-content: center;
-    justify-items: center;
+    justify-items: stretch;
     min-height: 100vh;
     /* Bottom padding keeps content clear of the fixed scroll hint */
     padding: 40px 40px 100px;
@@ -1245,7 +1248,9 @@ body.fullscreen-mode.has-generator .fullscreen-banner-wrapper {
     grid-template-areas:
         "weather   weather   weather"
         "grid      battery   generator";
-    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-columns: repeat(3, minmax(0, 500px));
+    /* Three banners need narrower gaps on small screens to keep usable widths */
+    column-gap: clamp(24px, 4vw, 80px);
 }
 
 body.fullscreen-mode .weather-forecast-banner {
@@ -1260,8 +1265,9 @@ body.fullscreen-mode .grid-status-banner,
 body.fullscreen-mode .battery-status-banner,
 body.fullscreen-mode.has-generator .generator-status-banner {
     align-self: stretch;
-    max-width: 500px;
     width: 100%;
+    max-width: none;  /* fill the grid column; the column itself is capped at 500px */
+    min-width: 0;     /* never wider than the column (base styles use min-width: 280px) */
     padding: 30px 40px;
     display: flex;
     flex-direction: column;
@@ -1269,25 +1275,14 @@ body.fullscreen-mode.has-generator .generator-status-banner {
 
 body.fullscreen-mode .grid-status-banner {
     grid-area: grid;
-    justify-self: end;
 }
 
 body.fullscreen-mode .battery-status-banner {
     grid-area: battery;
-    justify-self: start;
 }
 
 body.fullscreen-mode .generator-status-banner {
     grid-area: generator;
-    justify-self: start;
-}
-
-body.fullscreen-mode.has-generator .grid-status-banner {
-    justify-self: center;
-}
-
-body.fullscreen-mode.has-generator .battery-status-banner {
-    justify-self: center;
 }
 
 body.fullscreen-mode .grid-status-icon,
@@ -1336,7 +1331,7 @@ body.fullscreen-mode .weather-forecast-banner {
     flex-wrap: wrap;
     gap: 40px;
     width: 100%;
-    max-width: 1080px;
+    box-sizing: border-box;
     padding: 20px 40px;
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(255, 255, 255, 0.1);
