@@ -76,14 +76,18 @@ class TestAppLocales:
         with app_module.app.test_client() as c:
             html = c.get("/").get_data(as_text=True)
         assert 'id="language-btn"' in html
-        assert '"uk":' in html and "\\u041f\\u0430\\u043d\\u0435\\u043b\\u044c" in html  # "Панель" from uk app.title, JSON-escaped
-        assert 'var I18N_DEFAULT = "en";' in html
+        # uk.json is embedded (non-ASCII is JSON-escaped in the page)
+        uk_name = json.dumps(_load("uk")["meta.name"])[1:-1]
+        assert '"uk":' in html and uk_name in html
+        assert 'defaultLanguage: "en"' in html
 
     def test_template_keys_exist_in_english(self):
         """Every data-i18n / t('...') key used by the page is defined in en.json."""
-        template = os.path.join(os.path.dirname(LOCALES_DIR), "templates", "index.html")
-        with open(template, encoding="utf-8") as f:
-            source = f.read()
+        root = os.path.dirname(LOCALES_DIR)
+        source = ""
+        for rel in ("templates/index.html", "static/js/dashboard.js"):
+            with open(os.path.join(root, rel), encoding="utf-8") as f:
+                source += f.read()
         keys = set(re.findall(r'data-i18n="([\w.\-]+)"', source))
         keys |= {k for pair in re.findall(r'data-i18n-attr="([^"]+)"', source)
                  for k in [p.split(":", 1)[1] for p in pair.split(";")]}

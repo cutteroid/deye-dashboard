@@ -108,6 +108,7 @@ FILES=(
     "update_manager.py"
     "requirements.txt"
     "templates"
+    "static"
     "locales"
     "discover_inverter.py"
     "check_inverter.py"

@@ -5,13 +5,14 @@ try:
 except ImportError:
     pass
 
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, url_for
 from inverter import DeyeInverter, BatterySampler, InverterConfig
 from telegram_bot import TelegramBot
 from outage_providers import OutageSchedulePoller, create_outage_provider
 from update_manager import get_current_version, UpdatePoller, UpdateManager
 from datetime import datetime, date
 from functools import wraps
+import hashlib
 import hmac
 import os
 import json
@@ -212,6 +213,30 @@ def load_locales(locales_dir=LOCALES_DIR):
 
 
 LOCALES = load_locales()
+
+# Static assets (static/css, static/js) get a content hash in their URL, so browsers
+# load the new file after an update instead of a cached old one.
+_asset_hashes = {}  # path -> (mtime_ns, short hash)
+
+
+def asset_version(filename):
+    """Short content hash of a file in static/, recomputed only when it changes."""
+    path = os.path.join(app.static_folder, filename)
+    mtime = os.stat(path).st_mtime_ns
+    cached = _asset_hashes.get(filename)
+    if cached and cached[0] == mtime:
+        return cached[1]
+    with open(path, "rb") as f:
+        digest = hashlib.sha256(f.read()).hexdigest()[:12]
+    _asset_hashes[filename] = (mtime, digest)
+    return digest
+
+
+@app.context_processor
+def inject_asset_url():
+    def asset_url(filename):
+        return url_for("static", filename=filename, v=asset_version(filename))
+    return {"asset_url": asset_url}
 
 # Configuration - can be overridden with environment variables
 INVERTER_IP = os.environ.get("INVERTER_IP", "0.0.0.0")
