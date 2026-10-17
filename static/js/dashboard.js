@@ -303,17 +303,33 @@ updatePageScrolled();
 // Settings panel (opening it requires the settings PIN)
 var settingsPin = null;  // last verified PIN, sent with settings API calls
 
+// The panel itself opens without a PIN: local (per-device) settings like low
+// power mode are always available. Server-side settings (updates, config) are
+// locked until the PIN is entered, and lock again when the panel closes.
 function toggleSettingsPanel() {
     var panel = document.getElementById('settings-panel');
     if (panel.classList.contains('open')) {
         closeSettingsPanel();
     } else {
-        showPinPrompt();
+        lockServerSettings();
+        panel.classList.add('open');
     }
 }
 
 function closeSettingsPanel() {
     document.getElementById('settings-panel').classList.remove('open');
+    lockServerSettings();
+}
+
+function lockServerSettings() {
+    document.getElementById('settings-server').classList.add('locked');
+}
+
+function unlockServerSettings() {
+    showPinPrompt(function() {
+        document.getElementById('settings-server').classList.remove('locked');
+        fetchOtaStatus();
+    });
 }
 
 // Low power mode: no animations, transitions or blur (CSS: html.low-power).
@@ -347,15 +363,11 @@ function settingsFetch(url, options) {
     return fetch(url, options);
 }
 
-// What to do after a correct PIN; defaults to opening the settings panel
+// What to do after a correct PIN (unlock server settings, clear stats, ...)
 var pinSuccessAction = null;
 
-function openSettingsPanel() {
-    document.getElementById('settings-panel').classList.add('open');
-}
-
 function showPinPrompt(onSuccess) {
-    pinSuccessAction = onSuccess || openSettingsPanel;
+    pinSuccessAction = onSuccess || null;
     var input = document.getElementById('pin-input');
     input.value = '';
     document.getElementById('pin-error').textContent = '';
@@ -387,9 +399,9 @@ function submitSettingsPin() {
             if (res.status === 200) {
                 settingsPin = pin;
                 closePinPrompt();
-                var action = pinSuccessAction || openSettingsPanel;
+                var action = pinSuccessAction;
                 pinSuccessAction = null;
-                action();
+                if (action) action();
                 return;
             }
             errorEl.textContent = res.status === 429

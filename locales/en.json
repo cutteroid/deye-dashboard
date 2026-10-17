@@ -193,6 +193,9 @@
   },
   "settings": {
     "title": "Settings",
+    "server_settings": "Server settings",
+    "server_locked_hint": "Updates and configuration change the server. Enter the settings PIN to unlock.",
+    "unlock": "Unlock",
     "ota_title": "OTA Updates",
     "version": "Version:",
     "update_available": "Update available",

@@ -237,7 +237,7 @@ DTEK has no public API, so this provider reads the community feed [outage-data-u
 
 ### Settings PIN
 
-The settings panel (gear button) asks for a PIN before opening. The same PIN is required by the API endpoints behind it: config read/save/reset, inverter discovery, and OTA update/rollback. After 5 wrong attempts, PIN checks are locked for 60 seconds.
+The settings panel (gear button) opens without a PIN for local, per-device settings such as low power mode (the language button is also always available). Server-side settings — OTA update/rollback, Edit Configuration and Factory Reset — are locked behind the settings PIN (**Unlock** in the panel) and lock again when the panel closes. The server enforces the same PIN on the API endpoints behind them: config read/save/reset, inverter discovery, OTA check/update/rollback and clearing phase statistics. After 5 wrong attempts, PIN checks are locked for 60 seconds.
 
 | Variable | Description | Default |
 |----------|-------------|---------|

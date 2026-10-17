@@ -1681,6 +1681,12 @@ body.fullscreen-mode.page-scrolled .scroll-hint {
     border-bottom: 1px solid rgba(255,255,255,0.1);
 }
 
+/* Server-side settings are hidden until unlocked with the settings PIN */
+.settings-server.locked .settings-server-content,
+.settings-server:not(.locked) .settings-lock {
+    display: none;
+}
+
 /* Pinned to the bottom of the panel (stays last if the panel scrolls) */
 .settings-section.settings-donate {
     margin-top: auto;
