@@ -298,6 +298,30 @@ function closeSettingsPanel() {
     document.getElementById('settings-panel').classList.remove('open');
 }
 
+// Low power mode: no animations, transitions or blur (CSS: html.low-power).
+// Stored per device; the inline script in <head> applies it before first paint.
+var LOW_POWER_STORAGE_KEY = 'dashboard-low-power';
+
+function isLowPower() {
+    return document.documentElement.classList.contains('low-power');
+}
+
+function toggleLowPower() {
+    var on = !isLowPower();
+    document.documentElement.classList.toggle('low-power', on);
+    try { localStorage.setItem(LOW_POWER_STORAGE_KEY, on ? '1' : '0'); } catch (e) {}
+    updateLowPowerToggle();
+}
+
+function updateLowPowerToggle() {
+    var toggle = document.getElementById('low-power-toggle');
+    if (!toggle) return;
+    toggle.classList.toggle('on', isLowPower());
+    toggle.setAttribute('aria-checked', String(isLowPower()));
+}
+
+updateLowPowerToggle();
+
 // fetch() for endpoints behind the settings PIN
 function settingsFetch(url, options) {
     options = options || {};

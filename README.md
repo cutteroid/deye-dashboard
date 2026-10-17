@@ -244,6 +244,10 @@ Translations live in `locales/<lang>.json` (one file per language, nested keys, 
 
 The Telegram bot is Ukrainian-only and is not affected by this setting.
 
+### Low Power Mode
+
+For always-on wall tablets, **Settings → Display → Low power mode** turns off all animations, transitions and blur effects to reduce CPU/GPU load. It is stored per device (browser local storage). Animations are also turned off automatically when the device has the system "Reduce motion" accessibility setting enabled.
+
 ### Telegram Bot (optional)
 
 | Variable | Description | Default |

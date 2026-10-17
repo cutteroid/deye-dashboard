@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Deye Solar Dashboard</title>
     <link rel="stylesheet" href="{{ asset_url('css/dashboard.css') }}">
+    <script>
+        // Low power mode is per device; apply it before the first paint
+        try {
+            if (localStorage.getItem('dashboard-low-power') === '1') document.documentElement.classList.add('low-power');
+        } catch (e) {}
+    </script>
     <!-- SortableJS for dashboard cards -->
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 </head>
@@ -574,12 +580,24 @@
         </div>
 
         <div class="settings-section">
+            <label data-i18n="settings.display">Display</label>
+            <div class="onboarding-toggle-row">
+                <span id="low-power-label" data-i18n="settings.low_power">Low power mode</span>
+                <button type="button" class="onboarding-toggle" id="low-power-toggle" role="switch" aria-checked="false"
+                        aria-labelledby="low-power-label" onclick="toggleLowPower()">
+                    <span class="toggle-knob"></span>
+                </button>
+            </div>
+            <div class="settings-hint" data-i18n="settings.low_power_hint">Turns off animations and blur effects. Saved on this device.</div>
+        </div>
+
+        <div class="settings-section">
             <label data-i18n="settings.configuration">Configuration</label>
             <button class="settings-btn" onclick="openConfigEditor()" data-i18n="settings.edit_configuration">Edit Configuration</button>
             <button class="settings-btn reset-btn" style="margin-top: 8px;" onclick="resetConfiguration()" data-i18n="settings.factory_reset">Factory Reset</button>
         </div>
 
-        <div class="settings-section">
+        <div class="settings-section settings-donate">
             <a class="donate-link" href="https://donatello.to/IvanUrsul" target="_blank" rel="noopener" data-i18n="settings.donate">Support the project</a>
         </div>
     </div>
