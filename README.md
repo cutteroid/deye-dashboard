@@ -1,4 +1,4 @@
-# Deye Solar Dashboard
+# Complex Dashboard
 
 A web dashboard for monitoring Deye solar inverters in real-time. Supports both single-phase (e.g. SUN-6K-SG03LP1) and 3-phase hybrid models. Displays solar production, battery status, grid power, home consumption, weather conditions, and power outage schedules.
 
