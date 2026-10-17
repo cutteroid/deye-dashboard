@@ -226,6 +226,16 @@ DTEK has no public API, so this provider reads the community feed [outage-data-u
 |----------|-------------|---------|
 | `OUTAGE_DTEK_REGION` | `kyiv-region` (Kyiv oblast), `kyiv`, `dnipro`, or `odesa` | `kyiv-region` |
 
+### Settings PIN
+
+The settings panel (gear button) asks for a PIN before opening. The same PIN is required by the API endpoints behind it: config read/save/reset, inverter discovery, and OTA update/rollback. After 5 wrong attempts, PIN checks are locked for 60 seconds.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `SETTINGS_PIN` | PIN for the settings panel | `0000` |
+
+This is basic protection for a kiosk display, not real authentication: the PIN is sent in plain HTTP. Factory Reset deletes `.env`, which resets the PIN to `0000`. During first-run setup no PIN is required.
+
 ### Telegram Bot (optional)
 
 | Variable | Description | Default |

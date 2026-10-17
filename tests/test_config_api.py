@@ -28,8 +28,12 @@ def client():
     app_module.weather_poller = mock_weather_poller
     app_module.inverter_config = InverterConfig(phases=3, has_battery=True, pv_strings=2)
     app_module._configured = True
+    app_module._pin_failures = 0
+    app_module._pin_locked_until = 0.0
 
     with app_module.app.test_client() as c:
+        # Settings endpoints need the PIN once configured (default 0000)
+        c.environ_base["HTTP_X_SETTINGS_PIN"] = "0000"
         yield c, app_module
 
     # Restore originals
@@ -241,3 +245,65 @@ class TestIsConfigured:
         env = dict(__builtins__="") # dummy to use clear
         with patch.dict("os.environ", {}, clear=True):
             assert is_configured() is False
+
+
+class TestSettingsPin:
+    @pytest.fixture(autouse=True)
+    def _default_pin(self, monkeypatch):
+        monkeypatch.delenv("SETTINGS_PIN", raising=False)
+
+    def _no_pin(self, c):
+        c.environ_base.pop("HTTP_X_SETTINGS_PIN", None)
+
+    def test_verify_default_pin(self, client):
+        c, _ = client
+        resp = c.post("/api/settings/verify-pin", json={"pin": "0000"})
+        assert resp.status_code == 200
+        assert resp.get_json()["status"] == "ok"
+
+    def test_verify_wrong_pin(self, client):
+        c, _ = client
+        resp = c.post("/api/settings/verify-pin", json={"pin": "1234"})
+        assert resp.status_code == 401
+
+    def test_verify_custom_pin_from_env(self, client, monkeypatch):
+        c, _ = client
+        monkeypatch.setenv("SETTINGS_PIN", "4821")
+        assert c.post("/api/settings/verify-pin", json={"pin": "0000"}).status_code == 401
+        assert c.post("/api/settings/verify-pin", json={"pin": "4821"}).status_code == 200
+
+    def test_lockout_after_repeated_failures(self, client):
+        c, app_module = client
+        for _ in range(app_module.PIN_MAX_ATTEMPTS - 1):
+            assert c.post("/api/settings/verify-pin", json={"pin": "9999"}).status_code == 401
+        resp = c.post("/api/settings/verify-pin", json={"pin": "9999"})
+        assert resp.status_code == 429
+        assert resp.get_json()["retry_after"] > 0
+        # Even the right PIN is refused while locked out
+        assert c.post("/api/settings/verify-pin", json={"pin": "0000"}).status_code == 429
+
+    @pytest.mark.parametrize("method,url", [
+        ("get", "/api/config"),
+        ("post", "/api/config"),
+        ("post", "/api/config/reset"),
+        ("get", "/api/config/discover"),
+        ("post", "/api/update/check"),
+        ("post", "/api/update/apply"),
+        ("post", "/api/update/rollback"),
+    ])
+    def test_settings_endpoints_require_pin(self, client, method, url):
+        c, _ = client
+        self._no_pin(c)
+        resp = getattr(c, method)(url, json={})
+        assert resp.status_code == 401
+
+    def test_wrong_pin_header_rejected(self, client):
+        c, _ = client
+        c.environ_base["HTTP_X_SETTINGS_PIN"] = "1111"
+        assert c.get("/api/config").status_code == 401
+
+    def test_first_run_does_not_need_pin(self, unconfigured_client):
+        c, _ = unconfigured_client
+        with patch("setup.load_existing_env", return_value=({}, [])):
+            resp = c.get("/api/config")
+        assert resp.status_code == 200

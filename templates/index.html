@@ -1895,6 +1895,70 @@
             gap: 16px;
         }
         .restart-overlay.hidden { display: none; }
+
+        /* Settings PIN prompt */
+        .pin-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            z-index: 10002;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+        .pin-overlay.hidden { display: none; }
+        .pin-dialog {
+            width: 100%;
+            max-width: 300px;
+            background: #1e293b;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 24px;
+            text-align: center;
+        }
+        .pin-dialog h3 {
+            font-size: 1.1rem;
+            font-weight: 500;
+            margin-bottom: 16px;
+        }
+        .pin-input {
+            width: 100%;
+            padding: 12px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 8px;
+            color: #e2e8f0;
+            font-size: 1.6rem;
+            letter-spacing: 0.5em;
+            text-align: center;
+            outline: none;
+        }
+        .pin-input:focus {
+            border-color: rgba(99, 102, 241, 0.6);
+        }
+        .pin-dialog.shake {
+            animation: pin-shake 0.3s;
+        }
+        @keyframes pin-shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-8px); }
+            75% { transform: translateX(8px); }
+        }
+        .pin-error {
+            min-height: 1.2em;
+            margin-top: 10px;
+            font-size: 0.8rem;
+            color: #f87171;
+        }
+        .pin-dialog .onboarding-btn-row {
+            margin-top: 12px;
+        }
+        .pin-dialog .onboarding-btn {
+            flex: 1;
+        }
         .restart-overlay .restart-spinner {
             width: 48px; height: 48px;
             border: 3px solid rgba(255,255,255,0.15);
@@ -2631,10 +2695,24 @@
         <div class="restart-text" id="restart-text">Restarting service...</div>
     </div>
 
+    <!-- Settings PIN prompt -->
+    <div class="pin-overlay hidden" id="pin-overlay" onclick="if (event.target === this) closePinPrompt()">
+        <form class="pin-dialog" id="pin-dialog" onsubmit="submitSettingsPin(); return false;">
+            <h3>Enter settings PIN</h3>
+            <input type="password" class="pin-input" id="pin-input" inputmode="numeric"
+                   autocomplete="off" maxlength="12" aria-label="Settings PIN">
+            <div class="pin-error" id="pin-error"></div>
+            <div class="onboarding-btn-row">
+                <button type="button" class="onboarding-btn secondary" onclick="closePinPrompt()">Cancel</button>
+                <button type="submit" class="onboarding-btn primary" id="pin-submit">Unlock</button>
+            </div>
+        </form>
+    </div>
+
     <div class="settings-panel" id="settings-panel">
         <h3>
             Settings
-            <button class="close-btn" onclick="toggleSettingsPanel()">&times;</button>
+            <button class="close-btn" onclick="closeSettingsPanel()">&times;</button>
         </h3>
 
         <div class="settings-section" id="settings-ota-section">
@@ -2787,10 +2865,85 @@
             }
         }
 
-        // Settings panel
+        // Settings panel (opening it requires the settings PIN)
+        var settingsPin = null;  // last verified PIN, sent with settings API calls
+
         function toggleSettingsPanel() {
-            document.getElementById('settings-panel').classList.toggle('open');
+            var panel = document.getElementById('settings-panel');
+            if (panel.classList.contains('open')) {
+                closeSettingsPanel();
+            } else {
+                showPinPrompt();
+            }
         }
+
+        function closeSettingsPanel() {
+            document.getElementById('settings-panel').classList.remove('open');
+        }
+
+        // fetch() for endpoints behind the settings PIN
+        function settingsFetch(url, options) {
+            options = options || {};
+            options.headers = Object.assign({}, options.headers, { 'X-Settings-Pin': settingsPin || '' });
+            return fetch(url, options);
+        }
+
+        function showPinPrompt() {
+            var input = document.getElementById('pin-input');
+            input.value = '';
+            document.getElementById('pin-error').textContent = '';
+            document.getElementById('pin-submit').disabled = false;
+            document.getElementById('pin-overlay').classList.remove('hidden');
+            input.focus();
+        }
+
+        function closePinPrompt() {
+            document.getElementById('pin-overlay').classList.add('hidden');
+        }
+
+        function submitSettingsPin() {
+            var input = document.getElementById('pin-input');
+            var errorEl = document.getElementById('pin-error');
+            var submitBtn = document.getElementById('pin-submit');
+            var pin = input.value;
+            if (!pin) return;
+            submitBtn.disabled = true;
+
+            fetch('/api/settings/verify-pin', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pin: pin }),
+            })
+                .then(function(r) { return r.json().then(function(data) { return { status: r.status, data: data }; }); })
+                .then(function(res) {
+                    submitBtn.disabled = false;
+                    if (res.status === 200) {
+                        settingsPin = pin;
+                        closePinPrompt();
+                        document.getElementById('settings-panel').classList.add('open');
+                        return;
+                    }
+                    errorEl.textContent = res.status === 429
+                        ? 'Too many attempts. Try again in ' + res.data.retry_after + 's.'
+                        : 'Wrong PIN';
+                    input.value = '';
+                    input.focus();
+                    var dialog = document.getElementById('pin-dialog');
+                    dialog.classList.remove('shake');
+                    void dialog.offsetWidth;  // restart the animation
+                    dialog.classList.add('shake');
+                })
+                .catch(function() {
+                    submitBtn.disabled = false;
+                    errorEl.textContent = 'Could not check PIN. Try again.';
+                });
+        }
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && !document.getElementById('pin-overlay').classList.contains('hidden')) {
+                closePinPrompt();
+            }
+        });
 
         // Track grid state
         let lastGridOnline = null;
@@ -3923,7 +4076,7 @@
         }
 
         function otaCheckNow() {
-            fetch('/api/update/check', { method: 'POST' })
+            settingsFetch('/api/update/check', { method: 'POST' })
                 .then(() => setTimeout(fetchOtaStatus, 2000))
                 .catch(() => {});
         }
@@ -3941,7 +4094,7 @@
                         alert('Preflight failed:\n- ' + data.issues.join('\n- '));
                         return;
                     }
-                    fetch('/api/update/apply', {
+                    settingsFetch('/api/update/apply', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ tag: tag }),
@@ -3963,7 +4116,7 @@
                         alert('Preflight failed:\n- ' + data.issues.join('\n- '));
                         return;
                     }
-                    fetch('/api/update/rollback', {
+                    settingsFetch('/api/update/rollback', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ tag: tag }),
@@ -4019,7 +4172,7 @@
 
             if (editMode) {
                 // Load current config values
-                fetch('/api/config')
+                settingsFetch('/api/config')
                     .then(function(r) { return r.json(); })
                     .then(function(cfg) {
                         if (cfg.INVERTER_IP) document.getElementById('onb-ip').value = cfg.INVERTER_IP;
@@ -4147,7 +4300,7 @@
             statusEl.innerHTML = '<span class="onboarding-spinner"></span> Scanning network...';
             resultsEl.innerHTML = '';
 
-            fetch('/api/config/discover')
+            settingsFetch('/api/config/discover')
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     btn.disabled = false;
@@ -4283,7 +4436,7 @@
             nextBtn.disabled = true;
             nextBtn.textContent = 'Saving...';
 
-            fetch('/api/config', {
+            settingsFetch('/api/config', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(config),
@@ -4332,7 +4485,7 @@
         }
 
         function openConfigEditor() {
-            toggleSettingsPanel();
+            closeSettingsPanel();
             showOnboarding(true);
         }
 
@@ -4340,7 +4493,7 @@
             if (!confirm('This will erase all settings and restart the dashboard in setup mode. Are you sure?')) return;
             if (!confirm('Really reset? This cannot be undone.')) return;
 
-            fetch('/api/config/reset', { method: 'POST' })
+            settingsFetch('/api/config/reset', { method: 'POST' })
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     if (data.status === 'ok') {

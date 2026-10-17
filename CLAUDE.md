@@ -126,4 +126,4 @@ All via environment variables (`.env` file). See `.env.example` for full templat
 
 Required: `INVERTER_IP`, `LOGGER_SERIAL`
 
-Optional: `WEATHER_LATITUDE/LONGITUDE`, `OUTAGE_PROVIDER` (lvivoblenergo/yasno/dtek/none), `TELEGRAM_ENABLED`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_USERS`
+Optional: `SETTINGS_PIN` (settings panel PIN, default `0000`; endpoints behind it use `@require_settings_pin`), `WEATHER_LATITUDE/LONGITUDE`, `OUTAGE_PROVIDER` (lvivoblenergo/yasno/dtek/none), `TELEGRAM_ENABLED`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_USERS`

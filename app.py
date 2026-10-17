@@ -11,6 +11,8 @@ from telegram_bot import TelegramBot
 from outage_providers import OutageSchedulePoller, create_outage_provider
 from update_manager import get_current_version, UpdatePoller, UpdateManager
 from datetime import datetime, date
+from functools import wraps
+import hmac
 import os
 import json
 import logging
@@ -247,6 +249,60 @@ update_poller = None
 update_manager = None
 
 _configured = is_configured()
+
+# Settings PIN: basic protection for the settings panel and the endpoints behind it.
+DEFAULT_SETTINGS_PIN = "0000"
+PIN_MAX_ATTEMPTS = 5
+PIN_LOCKOUT_SECONDS = 60
+_pin_lock = threading.Lock()
+_pin_failures = 0
+_pin_locked_until = 0.0
+
+
+def check_settings_pin(pin):
+    """Check a settings PIN, locking out further tries after repeated failures.
+
+    Returns (ok, retry_after_seconds); retry_after is set while locked out.
+    """
+    global _pin_failures, _pin_locked_until
+    expected = os.environ.get("SETTINGS_PIN") or DEFAULT_SETTINGS_PIN
+    with _pin_lock:
+        now = time.time()
+        if now < _pin_locked_until:
+            return False, int(_pin_locked_until - now) + 1
+        if hmac.compare_digest(str(pin or "").encode(), expected.encode()):
+            _pin_failures = 0
+            return True, None
+        _pin_failures += 1
+        if _pin_failures >= PIN_MAX_ATTEMPTS:
+            _pin_failures = 0
+            _pin_locked_until = now + PIN_LOCKOUT_SECONDS
+            logger.warning("Settings PIN: too many wrong attempts, locked for %ds",
+                           PIN_LOCKOUT_SECONDS)
+            return False, PIN_LOCKOUT_SECONDS
+        return False, None
+
+
+def _pin_error(retry_after):
+    if retry_after:
+        return jsonify({"status": "error", "error": "Too many attempts",
+                        "retry_after": retry_after}), 429
+    return jsonify({"status": "error", "error": "Invalid PIN"}), 401
+
+
+def require_settings_pin(view):
+    """Require a valid X-Settings-Pin header once the dashboard is configured.
+
+    First-run onboarding stays open: there is no config to protect yet.
+    """
+    @wraps(view)
+    def wrapper(*args, **kwargs):
+        if _configured:
+            ok, retry_after = check_settings_pin(request.headers.get("X-Settings-Pin"))
+            if not ok:
+                return _pin_error(retry_after)
+        return view(*args, **kwargs)
+    return wrapper
 
 
 def init_services():
@@ -722,6 +778,7 @@ def get_update_status():
 
 
 @app.route("/api/update/check", methods=["POST"])
+@require_settings_pin
 def check_for_updates():
     """Force an immediate check for updates."""
     update_poller.force_check()
@@ -729,6 +786,7 @@ def check_for_updates():
 
 
 @app.route("/api/update/apply", methods=["POST"])
+@require_settings_pin
 def apply_update():
     """Apply an update to the specified tag."""
     data = request.json or {}
@@ -742,6 +800,7 @@ def apply_update():
 
 
 @app.route("/api/update/rollback", methods=["POST"])
+@require_settings_pin
 def rollback_update():
     """Rollback to the specified tag (same mechanism as update)."""
     data = request.json or {}
@@ -761,6 +820,15 @@ def update_preflight():
     return jsonify({"ok": ok, "issues": issues})
 
 
+@app.route("/api/settings/verify-pin", methods=["POST"])
+def verify_settings_pin():
+    """Check the PIN entered to open the settings panel."""
+    ok, retry_after = check_settings_pin((request.json or {}).get("pin"))
+    if not ok:
+        return _pin_error(retry_after)
+    return jsonify({"status": "ok"})
+
+
 @app.route("/api/config/status")
 def config_status():
     """Return whether the dashboard is configured."""
@@ -768,6 +836,7 @@ def config_status():
 
 
 @app.route("/api/config", methods=["GET"])
+@require_settings_pin
 def get_config():
     """Return current configuration values from .env."""
     from setup import load_existing_env, MANAGED_KEYS
@@ -780,6 +849,7 @@ def get_config():
 
 
 @app.route("/api/config", methods=["POST"])
+@require_settings_pin
 def save_config():
     """Save configuration values to .env and restart the service."""
     from setup import load_existing_env, write_env
@@ -813,6 +883,7 @@ def save_config():
 
 
 @app.route("/api/config/reset", methods=["POST"])
+@require_settings_pin
 def reset_config():
     """Delete .env and restart the service to enter onboarding mode."""
     env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
@@ -836,6 +907,7 @@ def reset_config():
 
 
 @app.route("/api/config/discover")
+@require_settings_pin
 def config_discover():
     """Discover inverters on the local network with retries."""
     from discover_inverter import discover
