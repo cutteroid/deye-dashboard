@@ -53,7 +53,7 @@ python scan_phases.py       # phase registers
 
 - **`static/css/dashboard.css`** / **`static/js/dashboard.js`** — All styles and frontend logic (auto-refresh every 5 seconds, phase analytics, planned outages, fullscreen kiosk mode). Plain files, no build step; they must not contain Jinja syntax. Linked via `asset_url()`, which appends a content hash (`?v=…`) so browsers pick up changes after updates.
 
-- **`locales/*.json`** — UI translations (`en` default, `uk`), embedded into the page by `app.py`. Never hardcode user-facing text in `index.html` / `dashboard.js`: static markup uses `data-i18n="key"` / `data-i18n-attr="title:key"`, JS uses `t('key', {param})`, and text on elements that also carry a static key must go through `setI18nText()` / `setPlainText()` so language switches re-translate it. Add every new key to all locale files (`tests/test_i18n.py` enforces matching keys and placeholders).
+- **`locales/*.json`** — UI translations (`en` default, `uk`, `ru`), embedded into the page by `app.py`. Never hardcode user-facing text in `index.html` / `dashboard.js`: static markup uses `data-i18n="key"` / `data-i18n-attr="title:key"`, JS uses `t('key', {param})`, and text on elements that also carry a static key must go through `setI18nText()` / `setPlainText()` so language switches re-translate it. Add every new key to all locale files (`tests/test_i18n.py` enforces matching keys and placeholders).
 
 ### Outage Providers
 
