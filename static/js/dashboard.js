@@ -159,6 +159,7 @@ function refreshTranslatedContent() {
         function() { fetchOtaStatus(); },
         function() { if (typeof generatorData !== 'undefined' && generatorData) { updateGeneratorBanner(generatorData); updateGeneratorCard(generatorData); } },
         function() { updateOnboardingUI(); },
+        function() { renderAlerts(); },
         function() { updateDashboard(); },
     ];
     refreshers.forEach(function(fn) {
@@ -212,6 +213,7 @@ function applyInverterConfig(config) {
         if (outageInfo) outageInfo.style.display = 'none';
         var plannedOutages = document.getElementById('planned-outages-card');
         if (plannedOutages) plannedOutages.style.display = 'none';
+        document.body.classList.add('outages-disabled');
         var plannedOutagesBanner = document.getElementById('planned-outages-banner');
         if (plannedOutagesBanner) plannedOutagesBanner.style.display = 'none';
         // Stop outage polling intervals
@@ -1067,6 +1069,7 @@ function renderPlannedOutages() {
 
     if (d && d.status === 'disabled') {
         targets.forEach(function(t) { t.container.style.display = 'none'; });
+        document.body.classList.add('outages-disabled');
         return;
     }
 
@@ -1432,6 +1435,131 @@ function updateBackground(data) {
     fetchWeatherAndApply();
     updateBatteryOverlay(data);
 }
+
+// ===== AIR RAID ALERTS =====
+// Map of Ukraine's regions (static/data/ukraine-regions.json, ids are ISO 3166-2
+// codes) coloured by /api/alerts. Drawn into every [data-alerts-map]: the
+// dashboard card and the fullscreen banner.
+var ALERTS_POLL_MS = 30000;
+var alertsMapData = null;
+var alertsData = null;
+var alertsIntervalId = null;
+
+function loadAlertsMap() {
+    fetch(window.DASHBOARD_CONFIG.alertsMapUrl)
+        .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function(map) {
+            alertsMapData = map;
+            buildAlertsMaps();
+            renderAlerts();
+        })
+        .catch(function(e) { console.error('Failed to load alerts map:', e); });
+}
+
+// Kyiv and Sevastopol are cities: their single "district" is the city itself
+var ALERTS_CITY_DISTRICTS = { 'UA8000': true, 'UA8500': true };
+var alertsDistrictRegion = {};   // district code -> region code
+var alertsDistrictNames = {};    // district code -> {uk, en}
+
+function buildAlertsMaps() {
+    var enclaveLast = function(a, b) {
+        var enclave = function(id) { return id === 'UA-30' || id === 'UA-40' || ALERTS_CITY_DISTRICTS[id] ? 1 : 0; };
+        return enclave(a.id) - enclave(b.id);
+    };
+    var districts = (alertsMapData.districts || []).slice().sort(enclaveLast);
+    var regions = alertsMapData.regions.slice().sort(enclaveLast);
+    districts.forEach(function(d) {
+        alertsDistrictRegion[d.id] = d.region;
+        alertsDistrictNames[d.id] = d.name || {};
+    });
+    var svg = '<svg viewBox="' + alertsMapData.viewBox + '" role="img" preserveAspectRatio="xMidYMid meet">' +
+        '<g class="alerts-districts">' + districts.map(function(d) {
+            return '<path class="alerts-district status-unknown" data-district="' + escapeHtml(d.id) +
+                '" data-region="' + escapeHtml(d.region) + '" d="' + d.d + '"><title></title></path>';
+        }).join('') + '</g>' +
+        '<g class="alerts-outlines">' + regions.map(function(r) {
+            return '<path class="alerts-outline" d="' + r.d + '"/>';
+        }).join('') + '</g></svg>';
+    document.querySelectorAll('[data-alerts-map]').forEach(function(el) { el.innerHTML = svg; });
+}
+
+// Colour of one district: its own status, or its region's when the region is
+// under alert as a whole (or partially, without district details)
+function alertsDistrictStatus(d, districtId, regionId, regionsWithDistrictInfo) {
+    if (!d || d.status !== 'ok') return 'unknown';
+    var region = (d.regions[regionId] || {}).status || 'none';
+    var own = ((d.districts || {})[districtId] || {}).status || 'none';
+    if (own === 'alert' || region === 'alert') return 'alert';
+    if (own === 'partial') return 'partial';
+    if (region === 'partial' && !regionsWithDistrictInfo[regionId]) return 'partial';
+    return 'none';
+}
+
+function alertsDistrictTitle(districtId, regionId) {
+    var regionName = t('alerts.regions.' + regionId);
+    if (ALERTS_CITY_DISTRICTS[districtId]) return regionName;
+    var names = alertsDistrictNames[districtId] || {};
+    var name = (i18nLang === 'en' ? names.en : names.uk) || names.uk || districtId;
+    return t('alerts.district_name', { name: name }) + ', ' + regionName;
+}
+
+function fetchAlerts() {
+    fetch('/api/alerts')
+        .then(function(r) { return r.json(); })
+        .then(function(data) { alertsData = data; renderAlerts(); })
+        .catch(function() { alertsData = { status: 'error' }; renderAlerts(); });
+}
+
+function renderAlerts() {
+    var d = alertsData;
+    var enabled = !(d && d.status === 'disabled');
+    document.body.classList.toggle('alerts-enabled', enabled);
+    var card = document.getElementById('alerts-card');
+    if (card) card.style.display = enabled ? '' : 'none';
+    if (!enabled) {
+        if (alertsIntervalId) { clearInterval(alertsIntervalId); alertsIntervalId = null; }
+        return;
+    }
+
+    var ok = d && d.status === 'ok';
+    var regionsWithDistrictInfo = {};
+    if (ok) {
+        Object.keys(d.districts || {}).forEach(function(id) {
+            if (alertsDistrictRegion[id]) regionsWithDistrictInfo[alertsDistrictRegion[id]] = true;
+        });
+    }
+    document.querySelectorAll('[data-alerts-map] .alerts-district').forEach(function(path) {
+        var id = path.getAttribute('data-district');
+        var region = path.getAttribute('data-region');
+        var status = alertsDistrictStatus(d, id, region, regionsWithDistrictInfo);
+        path.setAttribute('class', 'alerts-district status-' + status);
+        var title = alertsDistrictTitle(id, region);
+        if (status !== 'unknown') title += ' — ' + t('alerts.status_' + status);
+        path.firstChild.textContent = title;
+    });
+
+    var active = 0, total = 0;
+    if (ok) {
+        Object.keys(d.regions).forEach(function(id) {
+            total++;
+            if (d.regions[id].status !== 'none') active++;
+        });
+    }
+
+    var summary;
+    if (!d || d.status === 'unknown') summary = t('alerts.loading');
+    else if (!ok) summary = t('alerts.unavailable');
+    else {
+        summary = active ? t('alerts.active_count', { count: active, total: total }) : t('alerts.none_active');
+        summary += ' · ' + t('alerts.updated', { time: new Date(d.updated).toLocaleTimeString(i18nLocale(), { hour: '2-digit', minute: '2-digit' }) });
+    }
+    document.querySelectorAll('[data-alerts-summary]').forEach(function(el) { el.textContent = summary; });
+    document.querySelectorAll('.alerts-demo-badge').forEach(function(el) { el.hidden = !(d && d.demo); });
+}
+
+loadAlertsMap();
+fetchAlerts();
+alertsIntervalId = setInterval(fetchAlerts, ALERTS_POLL_MS);
 
 // ===== GENERATOR =====
 function fetchGeneratorData() {
@@ -2053,9 +2181,16 @@ checkFirstRun();
                     // "Planned outages" replaced "Outage history"; keep its saved position
                     // "Consumption" replaced "Home consumption" + "Load per phase"
                     var renamed = { 'outage-history-card': 'planned-outages-card', 'load-card': 'consumption-card' };
-                    return order ? JSON.parse(order).map(function(id) {
+                    if (!order) return [];
+                    var saved = JSON.parse(order).map(function(id) {
                         return renamed[id] || id;
-                    }).filter(function(id) { return id !== 'phase-card'; }) : [];
+                    }).filter(function(id) { return id !== 'phase-card'; });
+                    // Cards added since the order was saved (e.g. "Air raid alerts") go last;
+                    // Sortable would otherwise leave them in front of the saved ones
+                    sortable.toArray().forEach(function(id) {
+                        if (saved.indexOf(id) < 0) saved.push(id);
+                    });
+                    return saved;
                 },
                 set: function (sortable) {
                     var order = JSON.stringify(sortable.toArray());

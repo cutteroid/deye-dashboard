@@ -1388,6 +1388,7 @@ body.fullscreen-mode .weather-detail-label {
 body.fullscreen-mode .planned-outages-banner {
     display: block;
     grid-column: 1 / -1;  /* auto-placed after the status banners, full width */
+    align-self: stretch;
     justify-self: stretch;
     width: 100%;
     padding: 20px 30px;
@@ -1399,14 +1400,16 @@ body.fullscreen-mode .planned-outages-banner {
 
 body.fullscreen-mode .planned-outages-banner-header {
     display: flex;
+    flex-wrap: wrap;      /* in the half-width layout the source goes below the title */
     align-items: baseline;
-    gap: 16px;
+    gap: 4px 16px;
     margin-bottom: 14px;
 }
 
 body.fullscreen-mode .planned-outages-banner-title {
     font-size: 1.1rem;
     color: #94a3b8;
+    white-space: nowrap;
 }
 
 body.fullscreen-mode .planned-outages-banner-source {
@@ -1446,6 +1449,193 @@ body.fullscreen-mode .planned-outages-banner .planned-window {
 /* The card would repeat the banner further down */
 body.fullscreen-mode #planned-outages-card {
     display: none;
+}
+
+/* Bottom row with air raid alerts: [planned outages | alerts map].
+   2 columns: one each (days stacked); 3 columns (generator): outages span 2. */
+body.fullscreen-mode.alerts-enabled:not(.outages-disabled) .planned-outages-banner {
+    grid-column: span 1;
+}
+
+body.fullscreen-mode.alerts-enabled.has-generator:not(.outages-disabled) .planned-outages-banner {
+    grid-column: span 2;
+}
+
+body.fullscreen-mode.alerts-enabled:not(.has-generator):not(.outages-disabled) .planned-outages-banner-body {
+    grid-template-columns: 1fr;
+    gap: 16px;
+}
+
+/* Short screens (e.g. 1024x768 tablets): compact first screen so all rows fit */
+@media (max-height: 820px) {
+    body.fullscreen-mode .fullscreen-banner-wrapper {
+        padding-top: 24px;
+        padding-bottom: 84px;
+    }
+
+    body.fullscreen-mode .weather-forecast-banner {
+        padding: 12px 32px;
+    }
+
+    body.fullscreen-mode .grid-status-banner,
+    body.fullscreen-mode .battery-status-banner,
+    body.fullscreen-mode.has-generator .generator-status-banner {
+        padding: 18px 28px;
+    }
+
+    body.fullscreen-mode .grid-status-icon,
+    body.fullscreen-mode .battery-banner-icon,
+    body.fullscreen-mode .generator-banner-icon {
+        font-size: 2.6rem;
+    }
+
+    body.fullscreen-mode .grid-status-value,
+    body.fullscreen-mode .battery-banner-value,
+    body.fullscreen-mode .generator-banner-value {
+        font-size: 2.3rem;
+    }
+
+    body.fullscreen-mode .planned-outages-banner,
+    body.fullscreen-mode.alerts-enabled .alerts-banner {
+        padding: 14px 20px;
+    }
+}
+
+/* ===== Air raid alerts ===== */
+.alerts-banner {
+    display: none;
+}
+
+body.fullscreen-mode.alerts-enabled .alerts-banner {
+    display: flex;
+    flex-direction: column;
+    grid-column: span 1;
+    align-self: stretch;
+    width: 100%;
+    min-width: 0;
+    padding: 20px 24px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    box-sizing: border-box;
+}
+
+/* No outage schedule: the map gets the whole row */
+body.fullscreen-mode.alerts-enabled.outages-disabled .alerts-banner {
+    grid-column: 1 / -1;
+}
+
+body.fullscreen-mode #alerts-card {
+    display: none;
+}
+
+.alerts-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.alerts-title {
+    font-size: 1.1rem;
+    color: #94a3b8;
+}
+
+.alerts-demo-badge {
+    margin-left: auto;
+    padding: 2px 8px;
+    font-size: 0.7rem;
+    color: #fbbf24;
+    border: 1px solid rgba(251, 191, 36, 0.5);
+    border-radius: 999px;
+    white-space: nowrap;
+}
+
+.alerts-demo-badge[hidden] {
+    display: none;
+}
+
+.alerts-map {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.alerts-map svg {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+/* Fullscreen: keep the whole first screen visible on short displays */
+body.fullscreen-mode .alerts-banner .alerts-map svg {
+    max-height: 36vh;
+}
+
+/* Districts (raions) carry the status colour; oblast borders are drawn on top */
+.alerts-district {
+    fill: #334155;
+    fill-rule: evenodd;   /* Kyiv Oblast has a hole for Kyiv city */
+    stroke: rgba(15, 23, 42, 0.55);
+    stroke-width: 0.5;
+    stroke-linejoin: round;
+    transition: fill 0.4s ease;
+}
+
+.alerts-outline {
+    fill: none;
+    fill-rule: evenodd;
+    stroke: #0f172a;
+    stroke-width: 1.4;
+    stroke-linejoin: round;
+    pointer-events: none;
+}
+
+.alerts-district.status-alert,
+.alerts-swatch.status-alert {
+    fill: #dc2626;
+    background: #dc2626;
+}
+
+.alerts-district.status-partial,
+.alerts-swatch.status-partial {
+    fill: #d97706;
+    background: #d97706;
+}
+
+.alerts-district.status-unknown {
+    fill: #1e293b;
+}
+
+.alerts-footer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px 12px;
+    margin-top: 10px;
+    font-size: 0.75rem;
+    color: #94a3b8;
+}
+
+.alerts-legend {
+    display: flex;
+    gap: 12px;
+    color: #64748b;
+}
+
+.alerts-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.alerts-swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
 }
 
 .scroll-hint {

@@ -139,6 +139,22 @@
             </div>
         </div>
 
+        <!-- Air Raid Alerts Banner (visible in fullscreen only) -->
+        <div class="alerts-banner" id="alerts-banner">
+            <div class="alerts-header">
+                <span class="alerts-title">🚨 <span data-i18n="alerts.title">Air raid alerts</span></span>
+                <span class="alerts-demo-badge" data-i18n="alerts.demo" hidden>Demo data</span>
+            </div>
+            <div class="alerts-map" data-alerts-map></div>
+            <div class="alerts-footer">
+                <span class="alerts-summary" data-alerts-summary></span>
+                <span class="alerts-legend">
+                    <span class="alerts-legend-item"><span class="alerts-swatch status-alert"></span><span data-i18n="alerts.legend_alert">Air raid alert</span></span>
+                    <span class="alerts-legend-item"><span class="alerts-swatch status-partial"></span><span data-i18n="alerts.legend_partial">Part of the region</span></span>
+                </span>
+            </div>
+        </div>
+
         <!-- Scroll hint for fullscreen mode -->
         <button class="scroll-hint" onclick="document.querySelector('.dashboard').scrollIntoView({behavior:'smooth'})" title="Scroll to details" data-i18n-attr="title:toolbar.scroll_details">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -358,6 +374,23 @@
                 <div class="planned-none" data-i18n="planned.loading">Loading schedule...</div>
             </div>
             <div class="planned-outages-source" id="planned-outages-source"></div>
+        </div>
+
+        <!-- Air Raid Alerts -->
+        <div class="card" id="alerts-card" data-id="alerts-card">
+            <div class="card-header">
+                <span class="icon">🚨</span>
+                <h2 data-i18n="alerts.title">Air raid alerts</h2>
+                <span class="alerts-demo-badge" data-i18n="alerts.demo" hidden>Demo data</span>
+            </div>
+            <div class="alerts-map" data-alerts-map></div>
+            <div class="alerts-footer">
+                <span class="alerts-summary" data-alerts-summary></span>
+                <span class="alerts-legend">
+                    <span class="alerts-legend-item"><span class="alerts-swatch status-alert"></span><span data-i18n="alerts.legend_alert">Air raid alert</span></span>
+                    <span class="alerts-legend-item"><span class="alerts-swatch status-partial"></span><span data-i18n="alerts.legend_partial">Part of the region</span></span>
+                </span>
+            </div>
         </div>
 
     </div>
@@ -619,7 +652,8 @@
         window.DASHBOARD_CONFIG = {
             locales: {{ locales|tojson }},
             defaultLanguage: {{ default_language|tojson }},
-            firstRun: {{ first_run|tojson }}
+            firstRun: {{ first_run|tojson }},
+            alertsMapUrl: {{ alerts_map_url|tojson }}
         };
     </script>
     <script src="{{ asset_url('js/dashboard.js') }}"></script>

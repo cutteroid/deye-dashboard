@@ -11,6 +11,7 @@ from telegram_bot import TelegramBot
 from outage_providers import OutageSchedulePoller, create_outage_provider
 from update_manager import get_current_version, UpdatePoller, UpdateManager
 from storage import atomic_write_json, load_json
+from air_alerts import AlertsPoller, create_alerts_provider
 from datetime import datetime, date, timedelta
 from functools import wraps
 import hashlib
@@ -260,11 +261,14 @@ def asset_version(filename):
     return digest
 
 
+def asset_version_url(filename):
+    """URL of a static file with its content hash, e.g. /static/css/x.css?v=ab12cd34ef56."""
+    return url_for("static", filename=filename, v=asset_version(filename))
+
+
 @app.context_processor
 def inject_asset_url():
-    def asset_url(filename):
-        return url_for("static", filename=filename, v=asset_version(filename))
-    return {"asset_url": asset_url}
+    return {"asset_url": asset_version_url}
 
 # Configuration - can be overridden with environment variables
 INVERTER_IP = os.environ.get("INVERTER_IP", "0.0.0.0")
@@ -373,6 +377,7 @@ weather_poller = None
 inverter_poller = None
 update_poller = None
 update_manager = None
+alerts_poller = None
 
 _configured = is_configured()
 
@@ -435,7 +440,7 @@ def init_services():
     """Initialise all background services (inverter, pollers, etc.)."""
     global inverter, inverter_config, battery_sampler
     global outage_poller, weather_poller, inverter_poller
-    global update_poller, update_manager
+    global update_poller, update_manager, alerts_poller
 
     inverter = DeyeInverter(INVERTER_IP, LOGGER_SERIAL)
     inverter_config = initial_inverter_config()
@@ -462,6 +467,15 @@ def init_services():
         outage_poller.start()
     else:
         logger.info("Outage schedule disabled (OUTAGE_PROVIDER=none)")
+
+    # Air raid alerts: alerts.in.ua when a token is configured, otherwise mock (demo)
+    alerts_provider = create_alerts_provider(os.environ.get("AIR_ALERTS_PROVIDER"),
+                                             token=os.environ.get("ALERTS_IN_UA_TOKEN"))
+    if alerts_provider is not None:
+        alerts_poller = AlertsPoller(alerts_provider)
+        alerts_poller.start()
+    else:
+        logger.info("Air raid alerts disabled (AIR_ALERTS_PROVIDER=none)")
 
     weather_poller = WeatherPoller()
     weather_poller.start()
@@ -733,7 +747,8 @@ def add_no_cache_headers(response):
 def index():
     """Serve the dashboard page."""
     return render_template("index.html", first_run=not _configured,
-                           locales=LOCALES, default_language=DEFAULT_LANGUAGE)
+                           locales=LOCALES, default_language=DEFAULT_LANGUAGE,
+                           alerts_map_url=asset_version_url("data/ukraine-regions.json"))
 
 
 @app.route("/api/data")
@@ -836,6 +851,14 @@ def get_outage_schedule():
             for day in status["days"]
         ]
     return jsonify(result)
+
+
+@app.route("/api/alerts")
+def get_alerts():
+    """Air raid alert status per region (ISO 3166-2 codes)."""
+    if alerts_poller is None:
+        return jsonify({"status": "disabled"})
+    return jsonify(alerts_poller.get_status())
 
 
 @app.route("/api/weather")

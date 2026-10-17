@@ -35,6 +35,7 @@ COPY static/ ./static/
 COPY locales/ ./locales/
 COPY update_manager.py .
 COPY storage.py .
+COPY air_alerts.py .
 COPY setup.py .
 COPY discover_inverter.py .
 

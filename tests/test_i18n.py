@@ -93,7 +93,8 @@ class TestAppLocales:
                  for k in [p.split(":", 1)[1] for p in pair.split(";")]}
         keys |= set(re.findall(r"\bt\('([\w.\-]+)'", source))
         keys |= set(re.findall(r"setI18nText\([^,]+,\s*'([\w.\-]+)'", source))
-        # Keys built at runtime: weather.codes.<code>, battery.status.<key>
-        keys = {k for k in keys if not k.endswith(".")}
+        # Prefixes of keys built at runtime: weather.codes.<code>, battery.status.<key>,
+        # alerts.regions.<code>, alerts.status_<status>
+        keys = {k for k in keys if not k.endswith((".", "_"))}
         en = _load("en")
         assert sorted(k for k in keys if k not in en) == []

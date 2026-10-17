@@ -107,6 +107,7 @@ FILES=(
     "outage_providers"
     "update_manager.py"
     "storage.py"
+    "air_alerts.py"
     "requirements.txt"
     "templates"
     "static"
