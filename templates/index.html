@@ -1223,11 +1223,13 @@
                 "grid    battery";
             grid-template-columns: 1fr 1fr;
             grid-template-rows: auto auto;
-            gap: 50px 80px;
+            /* Row gap shrinks on short screens so the planned outages row still fits */
+            gap: clamp(24px, 4vh, 50px) 80px;
             align-content: center;
             justify-items: center;
             min-height: 100vh;
-            padding: 40px;
+            /* Bottom padding keeps content clear of the fixed scroll hint */
+            padding: 40px 40px 100px;
             box-sizing: border-box;
         }
 
@@ -1374,6 +1376,74 @@
         body.fullscreen-mode .weather-detail-label {
             opacity: 0.6;
             font-size: 0.9rem;
+        }
+
+        /* Planned Outages Banner: full-width row under the status banners */
+        .planned-outages-banner {
+            display: none;
+        }
+
+        body.fullscreen-mode .planned-outages-banner {
+            display: block;
+            grid-column: 1 / -1;  /* auto-placed after the status banners, full width */
+            justify-self: stretch;
+            width: 100%;
+            padding: 20px 30px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            box-sizing: border-box;
+        }
+
+        body.fullscreen-mode .planned-outages-banner-header {
+            display: flex;
+            align-items: baseline;
+            gap: 16px;
+            margin-bottom: 14px;
+        }
+
+        body.fullscreen-mode .planned-outages-banner-title {
+            font-size: 1.1rem;
+            color: #94a3b8;
+        }
+
+        body.fullscreen-mode .planned-outages-banner-source {
+            margin-left: auto;
+            font-size: 0.8rem;
+            color: #64748b;
+        }
+
+        /* Today and Tomorrow side by side to fit the first screen */
+        body.fullscreen-mode .planned-outages-banner-body {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+        }
+
+        body.fullscreen-mode .planned-outages-banner .planned-day + .planned-day {
+            margin-top: 0;
+            padding-top: 0;
+            border-top: none;
+        }
+
+        body.fullscreen-mode .planned-outages-banner .planned-day-name {
+            font-size: 1.1rem;
+        }
+
+        body.fullscreen-mode .planned-outages-banner .planned-windows {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        body.fullscreen-mode .planned-outages-banner .planned-window {
+            margin-bottom: 0;
+            font-size: 1rem;
+        }
+
+        /* The card would repeat the banner further down */
+        body.fullscreen-mode #planned-outages-card {
+            display: none;
         }
 
         .scroll-hint {
@@ -2297,6 +2367,18 @@
                 <div class="generator-banner-status" id="generator-banner-status">--</div>
             </div>
         </div>
+
+        <!-- Planned Outages Banner (visible in fullscreen only) -->
+        <div class="planned-outages-banner" id="planned-outages-banner">
+            <div class="planned-outages-banner-header">
+                <span class="planned-outages-banner-title">🗓️ Planned outages</span>
+                <span class="planned-outages-banner-source" id="planned-outages-banner-source"></span>
+            </div>
+            <div class="planned-outages-banner-body" id="planned-outages-banner-body">
+                <div class="planned-none">Loading schedule...</div>
+            </div>
+        </div>
+
         <!-- Scroll hint for fullscreen mode -->
         <button class="scroll-hint" onclick="document.querySelector('.dashboard').scrollIntoView({behavior:'smooth'})" title="Scroll to details">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -2791,6 +2873,8 @@
                 if (outageInfo) outageInfo.style.display = 'none';
                 var plannedOutages = document.getElementById('planned-outages-card');
                 if (plannedOutages) plannedOutages.style.display = 'none';
+                var plannedOutagesBanner = document.getElementById('planned-outages-banner');
+                if (plannedOutagesBanner) plannedOutagesBanner.style.display = 'none';
                 // Stop outage polling intervals
                 if (outageScheduleIntervalId) {
                     clearInterval(outageScheduleIntervalId);
@@ -3541,39 +3625,46 @@
         }
 
         function renderPlannedOutages() {
-            var card = document.getElementById('planned-outages-card');
-            var body = document.getElementById('planned-outages-body');
-            var source = document.getElementById('planned-outages-source');
-            if (!card || !body) return;
             var d = outageScheduleData;
+            // Same content in the dashboard card and the fullscreen banner
+            var targets = [
+                { container: document.getElementById('planned-outages-card'),
+                  body: document.getElementById('planned-outages-body'),
+                  source: document.getElementById('planned-outages-source') },
+                { container: document.getElementById('planned-outages-banner'),
+                  body: document.getElementById('planned-outages-banner-body'),
+                  source: document.getElementById('planned-outages-banner-source') },
+            ].filter(function(t) { return t.container && t.body; });
 
             if (d && d.status === 'disabled') {
-                card.style.display = 'none';
+                targets.forEach(function(t) { t.container.style.display = 'none'; });
                 return;
             }
-            source.textContent = (d && d.provider) ? 'Source: ' + d.provider : '';
 
+            var html;
             if (!d || d.status === 'unknown') {
-                body.innerHTML = '<div class="planned-none">Loading schedule...</div>';
-                return;
-            }
-            if (d.status === 'error') {
-                body.innerHTML = '<div class="planned-none">Outage schedule unavailable</div>' +
+                html = '<div class="planned-none">Loading schedule...</div>';
+            } else if (d.status === 'error') {
+                html = '<div class="planned-none">Outage schedule unavailable</div>' +
                     '<div class="planned-error-detail">' + escapeHtml(d.error || '') + '</div>';
-                return;
+            } else {
+                var now = new Date();
+                var days = d.days || [];
+                html = '';
+                if (days[0]) html += renderPlannedDay('Today', days[0], now);
+                if (days[1]) {
+                    html += renderPlannedDay('Tomorrow', days[1], now);
+                } else {
+                    html += '<div class="planned-day"><div class="planned-day-header"><span class="planned-day-name">Tomorrow</span></div>' +
+                        '<div class="planned-none">Schedule not published yet</div></div>';
+                }
             }
 
-            var now = new Date();
-            var days = d.days || [];
-            var html = '';
-            if (days[0]) html += renderPlannedDay('Today', days[0], now);
-            if (days[1]) {
-                html += renderPlannedDay('Tomorrow', days[1], now);
-            } else {
-                html += '<div class="planned-day"><div class="planned-day-header"><span class="planned-day-name">Tomorrow</span></div>' +
-                    '<div class="planned-none">Schedule not published yet</div></div>';
-            }
-            body.innerHTML = html;
+            var sourceText = (d && d.provider) ? 'Source: ' + d.provider : '';
+            targets.forEach(function(t) {
+                t.body.innerHTML = html;
+                if (t.source) t.source.textContent = sourceText;
+            });
         }
 
         function updateOutageInfo() {
