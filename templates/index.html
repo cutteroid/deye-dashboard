@@ -1153,6 +1153,20 @@
                 height: 40px;
             }
 
+            .language-btn {
+                top: 12px;
+                right: 58px;
+                width: 40px;
+                height: 40px;
+            }
+
+            .settings-toggle-btn {
+                top: 12px;
+                right: 104px;
+                width: 40px;
+                height: 40px;
+            }
+
             .grid-status-banner {
                 padding: 16px 20px;
                 gap: 12px;
@@ -1509,7 +1523,7 @@
         .settings-toggle-btn {
             position: fixed;
             top: 20px;
-            right: 74px;
+            right: 128px;
             width: 44px;
             height: 44px;
             background: rgba(255, 255, 255, 0.1);
@@ -1523,6 +1537,89 @@
             display: flex;
             align-items: center;
             justify-content: center;
+        }
+
+        /* Language switch, next to the fullscreen button */
+        .language-btn {
+            position: fixed;
+            top: 20px;
+            right: 74px;
+            width: 44px;
+            height: 44px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            color: #94a3b8;
+            cursor: pointer;
+            font-size: 0.8rem;
+            font-weight: 600;
+            letter-spacing: 0.03em;
+            z-index: 100;
+            transition: all 0.3s ease;
+        }
+
+        .language-btn:hover,
+        .language-btn[aria-expanded="true"] {
+            background: rgba(255, 255, 255, 0.2);
+            color: #fff;
+        }
+
+        /* Language list, opened from the language button (positioned by JS) */
+        .language-menu {
+            position: fixed;
+            min-width: 180px;
+            padding: 6px;
+            background: #1e293b;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+            z-index: 1001;
+        }
+
+        .language-menu.hidden {
+            display: none;
+        }
+
+        .language-option {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            padding: 10px 12px;
+            background: none;
+            border: none;
+            border-radius: 6px;
+            color: #e2e8f0;
+            font-size: 0.9rem;
+            text-align: left;
+            cursor: pointer;
+        }
+
+        .language-option:hover,
+        .language-option:focus-visible {
+            background: rgba(255, 255, 255, 0.1);
+            outline: none;
+        }
+
+        .language-option-code {
+            width: 28px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #94a3b8;
+        }
+
+        .language-option-check {
+            margin-left: auto;
+            color: #6ec89b;
+            visibility: hidden;
+        }
+
+        .language-option[aria-checked="true"] {
+            background: rgba(99, 102, 241, 0.2);
+        }
+
+        .language-option[aria-checked="true"] .language-option-check {
+            visibility: visible;
         }
 
         .settings-toggle-btn:hover {
@@ -2263,12 +2360,12 @@
     <div id="battery-overlay"></div>
 
     <div class="header">
-        <h1>Deye Solar Dashboard</h1>
-        <div class="status" id="status">Connecting...</div>
+        <h1 data-i18n="app.title">Deye Solar Dashboard</h1>
+        <div class="status" id="status" data-i18n="status.connecting">Connecting...</div>
     </div>
 
     <!-- Fullscreen Button -->
-    <button class="fullscreen-btn" id="fullscreen-btn" onclick="toggleFullscreen()" title="Toggle Fullscreen">
+    <button class="fullscreen-btn" id="fullscreen-btn" onclick="toggleFullscreen()" title="Toggle Fullscreen" data-i18n-attr="title:toolbar.fullscreen">
         <svg id="fullscreen-icon-enter" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
         </svg>
@@ -2277,8 +2374,13 @@
         </svg>
     </button>
 
+    <!-- Language Button (next to fullscreen) -->
+    <button class="language-btn" id="language-btn" onclick="toggleLanguageMenu(event)" title="Language"
+            data-i18n-attr="title:toolbar.language" aria-haspopup="menu" aria-expanded="false" aria-controls="language-menu">EN</button>
+    <div class="language-menu hidden" id="language-menu" role="menu"></div>
+
     <!-- Settings Button -->
-    <button class="settings-toggle-btn" onclick="toggleSettingsPanel()" title="Settings">
+    <button class="settings-toggle-btn" onclick="toggleSettingsPanel()" title="Settings" data-i18n-attr="title:toolbar.settings">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="3"/>
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
@@ -2287,9 +2389,9 @@
 
     <!-- Notification Permission Request -->
     <div class="notification-setup" id="notification-setup">
-        <button class="close-btn" onclick="closeNotificationSetup()" aria-label="Close">✕</button>
-        <span>Enable notifications to get alerts during power outages</span>
-        <button onclick="requestNotificationPermission()">Enable Alerts</button>
+        <button class="close-btn" onclick="closeNotificationSetup()" aria-label="Close" data-i18n-attr="aria-label:common.close">✕</button>
+        <span data-i18n="notifications.banner">Enable notifications to get alerts during power outages</span>
+        <button onclick="requestNotificationPermission()" data-i18n="notifications.enable">Enable Alerts</button>
     </div>
 
     <!-- Fullscreen Banner Wrapper -->
@@ -2305,19 +2407,19 @@
             </div>
             <div class="weather-forecast-details">
                 <div class="weather-forecast-detail">
-                    <span class="weather-detail-label">H:</span>
+                    <span class="weather-detail-label" data-i18n="weather.high">H:</span>
                     <span id="weather-forecast-high">--</span>
                 </div>
                 <div class="weather-forecast-detail">
-                    <span class="weather-detail-label">L:</span>
+                    <span class="weather-detail-label" data-i18n="weather.low">L:</span>
                     <span id="weather-forecast-low">--</span>
                 </div>
                 <div class="weather-forecast-detail">
-                    <span class="weather-detail-label">Sunrise:</span>
+                    <span class="weather-detail-label" data-i18n="weather.sunrise">Sunrise:</span>
                     <span id="weather-forecast-sunrise">--</span>
                 </div>
                 <div class="weather-forecast-detail">
-                    <span class="weather-detail-label">Sunset:</span>
+                    <span class="weather-detail-label" data-i18n="weather.sunset">Sunset:</span>
                     <span id="weather-forecast-sunset">--</span>
                 </div>
             </div>
@@ -2330,8 +2432,8 @@
                 <div class="grid-banner-header">
                     <div class="grid-status-icon" id="grid-status-icon">⚡</div>
                     <div class="grid-status-text">
-                        <div class="grid-status-label" id="grid-status-label">Grid Status</div>
-                        <div class="grid-status-value" id="grid-status-value">Checking...</div>
+                        <div class="grid-status-label" id="grid-status-label" data-i18n="grid_banner.label">Grid Status</div>
+                        <div class="grid-status-value" id="grid-status-value" data-i18n="grid_banner.checking">Checking...</div>
                     </div>
                 </div>
                 <div class="grid-banner-bar" id="grid-banner-bar">
@@ -2345,7 +2447,7 @@
                 <div class="battery-banner-header">
                     <div class="battery-banner-icon">🔋</div>
                     <div class="battery-banner-text">
-                        <div class="battery-banner-label">Battery Level</div>
+                        <div class="battery-banner-label" data-i18n="battery_banner.label">Battery Level</div>
                         <div class="battery-banner-value" id="battery-banner-value">--%</div>
                     </div>
                 </div>
@@ -2360,8 +2462,8 @@
                 <div class="generator-banner-header">
                     <div class="generator-banner-icon">&#9981;</div>
                     <div class="generator-banner-text">
-                        <div class="generator-banner-label">Generator</div>
-                        <div class="generator-banner-value" id="generator-banner-value">OFF</div>
+                        <div class="generator-banner-label" data-i18n="generator.title">Generator</div>
+                        <div class="generator-banner-value" id="generator-banner-value" data-i18n="generator.off">OFF</div>
                     </div>
                 </div>
                 <div class="generator-banner-status" id="generator-banner-status">--</div>
@@ -2371,16 +2473,16 @@
         <!-- Planned Outages Banner (visible in fullscreen only) -->
         <div class="planned-outages-banner" id="planned-outages-banner">
             <div class="planned-outages-banner-header">
-                <span class="planned-outages-banner-title">🗓️ Planned outages</span>
+                <span class="planned-outages-banner-title">🗓️ <span data-i18n="planned.title">Planned outages</span></span>
                 <span class="planned-outages-banner-source" id="planned-outages-banner-source"></span>
             </div>
             <div class="planned-outages-banner-body" id="planned-outages-banner-body">
-                <div class="planned-none">Loading schedule...</div>
+                <div class="planned-none" data-i18n="planned.loading">Loading schedule...</div>
             </div>
         </div>
 
         <!-- Scroll hint for fullscreen mode -->
-        <button class="scroll-hint" onclick="document.querySelector('.dashboard').scrollIntoView({behavior:'smooth'})" title="Scroll to details">
+        <button class="scroll-hint" onclick="document.querySelector('.dashboard').scrollIntoView({behavior:'smooth'})" title="Scroll to details" data-i18n-attr="title:toolbar.scroll_details">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M6 9l6 6 6-6"/>
             </svg>
@@ -2392,25 +2494,25 @@
         <div class="card" id="solar-card" data-id="solar-card">
             <div class="card-header">
                 <span class="icon">☀️</span>
-                <h2>Solar Production</h2>
+                <h2 data-i18n="solar.title">Solar Production</h2>
             </div>
             <div class="metric">
-                <div class="metric-label">Total PV Power</div>
-                <div class="metric-value positive" id="pv-total">--<span class="unit">W</span></div>
+                <div class="metric-label" data-i18n="solar.total_power">Total PV Power</div>
+                <div class="metric-value positive" id="pv-total">--<span class="unit" data-i18n="units.w">W</span></div>
             </div>
             <div class="stats-row">
                 <div class="stat">
                     <div class="value" id="pv1-power">--</div>
-                    <div class="label">PV1 (W)</div>
+                    <div class="label" data-i18n="solar.pv1">PV1 (W)</div>
                 </div>
                 <div class="stat" id="pv2-stat">
                     <div class="value" id="pv2-power">--</div>
-                    <div class="label">PV2 (W)</div>
+                    <div class="label" data-i18n="solar.pv2">PV2 (W)</div>
                 </div>
             </div>
             <div class="stat" style="margin-top: 16px;">
                 <div class="value" id="daily-pv">--</div>
-                <div class="label">Today's Generation (kWh)</div>
+                <div class="label" data-i18n="solar.today_generation">Today's Generation (kWh)</div>
             </div>
         </div>
 
@@ -2418,7 +2520,7 @@
         <div class="card" id="battery-card" data-id="battery-card">
             <div class="card-header">
                 <span class="icon">🔋</span>
-                <h2>Battery</h2>
+                <h2 data-i18n="battery.title">Battery</h2>
             </div>
             <div class="battery-gauge">
                 <div class="battery-bar">
@@ -2429,16 +2531,16 @@
             <div class="stats-row">
                 <div class="stat">
                     <div class="value" id="battery-voltage">--</div>
-                    <div class="label">Voltage (V)</div>
+                    <div class="label" data-i18n="battery.voltage">Voltage (V)</div>
                 </div>
                 <div class="stat">
                     <div class="value" id="battery-current">--</div>
-                    <div class="label">Current (A)</div>
+                    <div class="label" data-i18n="battery.current">Current (A)</div>
                 </div>
             </div>
             <div class="stat" style="margin-top: 16px;">
                 <div class="value" id="battery-power">--</div>
-                <div class="label" id="battery-status">Power (W)</div>
+                <div class="label" id="battery-status" data-i18n="battery.power">Power (W)</div>
             </div>
         </div>
 
@@ -2446,24 +2548,24 @@
         <div class="card" id="grid-card" data-id="grid-card">
             <div class="card-header">
                 <span class="icon">⚡</span>
-                <h2>Grid</h2>
+                <h2 data-i18n="grid.title">Grid</h2>
             </div>
             <div class="metric">
-                <div class="metric-label">Grid Power</div>
-                <div class="metric-value" id="grid-power">--<span class="unit">W</span></div>
+                <div class="metric-label" data-i18n="grid.power">Grid Power</div>
+                <div class="metric-value" id="grid-power">--<span class="unit" data-i18n="units.w">W</span></div>
             </div>
             <div class="stat">
                 <div class="value" id="grid-voltage">--</div>
-                <div class="label">Voltage (V)</div>
+                <div class="label" data-i18n="grid.voltage">Voltage (V)</div>
             </div>
             <div class="stats-row" style="margin-top: 16px;">
                 <div class="stat">
                     <div class="value" id="daily-import">--</div>
-                    <div class="label">Import (kWh)</div>
+                    <div class="label" data-i18n="grid.import">Import (kWh)</div>
                 </div>
                 <div class="stat">
                     <div class="value" id="daily-export">--</div>
-                    <div class="label">Export (kWh)</div>
+                    <div class="label" data-i18n="grid.export">Export (kWh)</div>
                 </div>
             </div>
         </div>
@@ -2472,35 +2574,35 @@
         <div class="card" id="generator-card" data-id="generator-card">
             <div class="card-header">
                 <span class="icon">&#9981;</span>
-                <h2>Generator</h2>
+                <h2 data-i18n="generator.title">Generator</h2>
             </div>
             <div class="metric">
-                <div class="metric-label">Generator Power</div>
-                <div class="metric-value" id="generator-power">--<span class="unit">W</span></div>
+                <div class="metric-label" data-i18n="generator.power">Generator Power</div>
+                <div class="metric-value" id="generator-power">--<span class="unit" data-i18n="units.w">W</span></div>
             </div>
             <div class="stats-row">
                 <div class="stat">
                     <div class="value" id="generator-today-runtime">--</div>
-                    <div class="label">Today Runtime</div>
+                    <div class="label" data-i18n="generator.today_runtime">Today Runtime</div>
                 </div>
                 <div class="stat">
                     <div class="value" id="generator-monthly-runtime">--</div>
-                    <div class="label">Monthly Runtime</div>
+                    <div class="label" data-i18n="generator.monthly_runtime">Monthly Runtime</div>
                 </div>
             </div>
             <div class="stats-row" id="generator-fuel-row" style="display: none; margin-top: 16px;">
                 <div class="stat">
                     <div class="value" id="generator-fuel-today">--</div>
-                    <div class="label">Fuel Today (L)</div>
+                    <div class="label" data-i18n="generator.fuel_today">Fuel Today (L)</div>
                 </div>
                 <div class="stat">
                     <div class="value" id="generator-fuel-monthly">--</div>
-                    <div class="label">Fuel This Month (L)</div>
+                    <div class="label" data-i18n="generator.fuel_month">Fuel This Month (L)</div>
                 </div>
             </div>
             <div class="stat" id="generator-oil-row" style="display: none; margin-top: 16px;">
                 <div class="value" id="generator-oil-hours">--</div>
-                <div class="label">Since Oil Change</div>
+                <div class="label" data-i18n="generator.since_oil_change">Since Oil Change</div>
             </div>
         </div>
 
@@ -2508,18 +2610,18 @@
         <div class="card" id="consumption-card" data-id="consumption-card">
             <div class="card-header">
                 <span class="icon">🏠</span>
-                <h2>Consumption</h2>
+                <h2 data-i18n="consumption.title">Consumption</h2>
             </div>
             <div class="metric">
-                <div class="metric-label">Current Load</div>
-                <div class="metric-value neutral" id="load-power">--<span class="unit">W</span></div>
+                <div class="metric-label" data-i18n="consumption.current_load">Current Load</div>
+                <div class="metric-value neutral" id="load-power">--<span class="unit" data-i18n="units.w">W</span></div>
             </div>
             <div class="stat" style="margin-top: 16px;">
                 <div class="value" id="daily-load">--</div>
-                <div class="label">Today's Usage (kWh)</div>
+                <div class="label" data-i18n="consumption.today_usage">Today's Usage (kWh)</div>
             </div>
             <div class="consumption-phases" id="consumption-phases">
-                <div class="metric-label consumption-phases-label">Load per Phase</div>
+                <div class="metric-label consumption-phases-label" data-i18n="consumption.per_phase">Load per Phase</div>
                 <div class="phase-bars">
                     <div class="phase-bar-item">
                         <span class="phase-label l1">L1</span>
@@ -2527,7 +2629,7 @@
                             <div class="phase-bar-fill l1" id="phase-bar-l1" style="width: 0%"></div>
                             <span class="phase-bar-text" id="phase-pct-l1">0%</span>
                         </div>
-                        <span class="phase-value" id="phase-l1">-- W</span>
+                        <span class="phase-value" id="phase-l1">-- <span data-i18n="units.w">W</span></span>
                     </div>
                     <div class="phase-bar-item">
                         <span class="phase-label l2">L2</span>
@@ -2535,7 +2637,7 @@
                             <div class="phase-bar-fill l2" id="phase-bar-l2" style="width: 0%"></div>
                             <span class="phase-bar-text" id="phase-pct-l2">0%</span>
                         </div>
-                        <span class="phase-value" id="phase-l2">-- W</span>
+                        <span class="phase-value" id="phase-l2">-- <span data-i18n="units.w">W</span></span>
                     </div>
                     <div class="phase-bar-item">
                         <span class="phase-label l3">L3</span>
@@ -2543,21 +2645,21 @@
                             <div class="phase-bar-fill l3" id="phase-bar-l3" style="width: 0%"></div>
                             <span class="phase-bar-text" id="phase-pct-l3">0%</span>
                         </div>
-                        <span class="phase-value" id="phase-l3">-- W</span>
+                        <span class="phase-value" id="phase-l3">-- <span data-i18n="units.w">W</span></span>
                     </div>
                 </div>
                 <div class="phase-voltage">
                     <div class="voltage-item">
-                        <div class="voltage-value" id="voltage-l1">--V</div>
-                        <div class="voltage-label">L1 Voltage</div>
+                        <div class="voltage-value" id="voltage-l1">--<span data-i18n="units.v">V</span></div>
+                        <div class="voltage-label" data-i18n="consumption.l1_voltage">L1 Voltage</div>
                     </div>
                     <div class="voltage-item">
-                        <div class="voltage-value" id="voltage-l2">--V</div>
-                        <div class="voltage-label">L2 Voltage</div>
+                        <div class="voltage-value" id="voltage-l2">--<span data-i18n="units.v">V</span></div>
+                        <div class="voltage-label" data-i18n="consumption.l2_voltage">L2 Voltage</div>
                     </div>
                     <div class="voltage-item">
-                        <div class="voltage-value" id="voltage-l3">--V</div>
-                        <div class="voltage-label">L3 Voltage</div>
+                        <div class="voltage-value" id="voltage-l3">--<span data-i18n="units.v">V</span></div>
+                        <div class="voltage-label" data-i18n="consumption.l3_voltage">L3 Voltage</div>
                     </div>
                 </div>
             </div>
@@ -2567,22 +2669,22 @@
         <div class="card" id="phase-analytics-card" data-id="phase-analytics-card">
             <div class="card-header">
                 <span class="icon">📈</span>
-                <h2>Daily Phase Analytics</h2>
-                <button class="btn" onclick="clearPhaseStats()">Clear</button>
+                <h2 data-i18n="phase_stats.title">Daily Phase Analytics</h2>
+                <button class="btn" onclick="clearPhaseStats()" data-i18n="common.clear">Clear</button>
             </div>
             <div id="phase-stats-container">
                 <table class="phase-stats-table">
                     <thead>
                         <tr>
-                            <th>Date</th>
+                            <th data-i18n="phase_stats.date">Date</th>
                             <th>L1</th>
                             <th>L2</th>
                             <th>L3</th>
-                            <th>Total</th>
+                            <th data-i18n="phase_stats.total">Total</th>
                         </tr>
                     </thead>
                     <tbody id="phase-stats-body">
-                        <tr><td colspan="5" style="text-align:center; color:#64748b;">Loading...</td></tr>
+                        <tr><td colspan="5" style="text-align:center; color:#64748b;" data-i18n="common.loading">Loading...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -2592,10 +2694,10 @@
         <div class="card" id="planned-outages-card" data-id="planned-outages-card">
             <div class="card-header">
                 <span class="icon">🗓️</span>
-                <h2>Planned outages</h2>
+                <h2 data-i18n="planned.title">Planned outages</h2>
             </div>
             <div id="planned-outages-body">
-                <div class="planned-none">Loading schedule...</div>
+                <div class="planned-none" data-i18n="planned.loading">Loading schedule...</div>
             </div>
             <div class="planned-outages-source" id="planned-outages-source"></div>
         </div>
@@ -2618,93 +2720,89 @@
 
             <!-- Step 1: Inverter Connection -->
             <div class="onboarding-step active" id="onb-step-1">
-                <h2>Inverter Connection</h2>
-                <p class="subtitle">Connect to your Deye/Solarman inverter on the local network.</p>
+                <h2 data-i18n="onboarding.step1_title">Inverter Connection</h2>
+                <p class="subtitle" data-i18n="onboarding.step1_subtitle">Connect to your Deye/Solarman inverter on the local network.</p>
 
                 <div style="margin-bottom: 16px;">
-                    <button class="onboarding-btn secondary" id="onb-scan-btn" onclick="discoverInverters()" style="width:100%;">
-                        Scan Network
-                    </button>
+                    <button class="onboarding-btn secondary" id="onb-scan-btn" onclick="discoverInverters()" style="width:100%;" data-i18n="onboarding.scan_network">Scan Network</button>
                     <div id="onb-scan-status" style="text-align:center; margin-top:8px; font-size:0.8rem; color:#94a3b8;"></div>
                 </div>
                 <div class="discover-results" id="onb-discover-results"></div>
 
                 <div class="onboarding-field">
-                    <label>Inverter IP Address *</label>
+                    <label data-i18n="onboarding.inverter_ip">Inverter IP Address *</label>
                     <input type="text" class="onboarding-input" id="onb-ip" placeholder="192.168.1.100">
                 </div>
                 <div class="onboarding-field">
-                    <label>Logger Serial Number *</label>
+                    <label data-i18n="onboarding.logger_serial">Logger Serial Number *</label>
                     <input type="text" class="onboarding-input" id="onb-serial" placeholder="2712345678">
                 </div>
             </div>
 
             <!-- Step 2: Weather & Location -->
             <div class="onboarding-step" id="onb-step-2">
-                <h2>Weather & Location</h2>
-                <p class="subtitle">Set your coordinates for weather forecasts. You can skip this step.</p>
+                <h2 data-i18n="onboarding.step2_title">Weather & Location</h2>
+                <p class="subtitle" data-i18n="onboarding.step2_subtitle">Set your coordinates for weather forecasts. You can skip this step.</p>
 
                 <div style="margin-bottom: 16px;">
-                    <button class="onboarding-btn secondary" onclick="useMyLocation()" style="width:100%;">
-                        Use My Location
-                    </button>
+                    <button class="onboarding-btn secondary" onclick="useMyLocation()" style="width:100%;" data-i18n="onboarding.use_location">Use My Location</button>
                 </div>
                 <div class="onboarding-field">
-                    <label>Latitude</label>
+                    <label data-i18n="onboarding.latitude">Latitude</label>
                     <input type="number" step="any" class="onboarding-input" id="onb-lat" placeholder="50.4501" value="50.4501">
                 </div>
                 <div class="onboarding-field">
-                    <label>Longitude</label>
+                    <label data-i18n="onboarding.longitude">Longitude</label>
                     <input type="number" step="any" class="onboarding-input" id="onb-lon" placeholder="30.5234" value="30.5234">
                 </div>
             </div>
 
             <!-- Step 3: Outage Provider -->
             <div class="onboarding-step" id="onb-step-3">
-                <h2>Outage Provider</h2>
-                <p class="subtitle">Get power outage schedules for your region. You can skip this step.</p>
+                <h2 data-i18n="onboarding.step3_title">Outage Provider</h2>
+                <p class="subtitle" data-i18n="onboarding.step3_subtitle">Get power outage schedules for your region. You can skip this step.</p>
 
                 <div class="onboarding-radio-group" id="onb-outage-radios">
-                    <div class="onboarding-radio selected" data-value="lvivoblenergo" onclick="selectOutageProvider(this)">Lvivoblenergo</div>
-                    <div class="onboarding-radio" data-value="yasno" onclick="selectOutageProvider(this)">YASNO (DTEK)</div>
-                    <div class="onboarding-radio" data-value="dtek" onclick="selectOutageProvider(this)">DTEK regions</div>
-                    <div class="onboarding-radio" data-value="none" onclick="selectOutageProvider(this)">None (disable)</div>
+                    <div class="onboarding-radio selected" data-value="lvivoblenergo" onclick="selectOutageProvider(this)" data-i18n="onboarding.provider_lvivoblenergo">Lvivoblenergo</div>
+                    <div class="onboarding-radio" data-value="yasno" onclick="selectOutageProvider(this)" data-i18n="onboarding.provider_yasno">YASNO (DTEK)</div>
+                    <div class="onboarding-radio" data-value="dtek" onclick="selectOutageProvider(this)" data-i18n="onboarding.provider_dtek">DTEK regions</div>
+                    <div class="onboarding-radio" data-value="none" onclick="selectOutageProvider(this)" data-i18n="onboarding.provider_none">None (disable)</div>
                 </div>
 
                 <div class="onboarding-conditional visible" id="onb-outage-lviv-fields">
                     <div class="onboarding-field">
-                        <label>Outage Group (e.g. 1.1)</label>
+                        <label data-i18n="onboarding.outage_group">Outage Group (e.g. 1.1)</label>
                         <input type="text" class="onboarding-input" id="onb-outage-group" placeholder="1.1" value="1.1">
                     </div>
                 </div>
 
                 <div class="onboarding-conditional" id="onb-outage-yasno-fields">
                     <div class="onboarding-field">
-                        <label>Region ID (e.g. 25 = Kyiv)</label>
+                        <label data-i18n="onboarding.yasno_region">Region ID (e.g. 25 = Kyiv)</label>
                         <input type="number" class="onboarding-input" id="onb-yasno-region" placeholder="25" value="25">
                     </div>
                     <div class="onboarding-field">
-                        <label>DSO ID (e.g. 902 = DTEK Kyiv)</label>
+                        <label data-i18n="onboarding.yasno_dso">DSO ID (e.g. 902 = DTEK Kyiv)</label>
                         <input type="number" class="onboarding-input" id="onb-yasno-dso" placeholder="902" value="902">
                     </div>
                     <div class="onboarding-field">
-                        <label>Group (e.g. 2.1)</label>
+                        <label data-i18n="onboarding.yasno_group">Group (e.g. 2.1)</label>
                         <input type="text" class="onboarding-input" id="onb-yasno-group" placeholder="2.1" value="2.1">
                     </div>
                 </div>
 
                 <div class="onboarding-conditional" id="onb-outage-dtek-fields">
                     <div class="onboarding-field">
-                        <label>Region</label>
+                        <label data-i18n="onboarding.dtek_region">Region</label>
                         <select class="onboarding-select" id="onb-dtek-region">
-                            <option value="kyiv-region">Kyiv oblast (ДТЕК КРЕМ)</option>
-                            <option value="kyiv">Kyiv city</option>
-                            <option value="dnipro">Dnipro</option>
-                            <option value="odesa">Odesa</option>
+                            <option value="kyiv-region" data-i18n="onboarding.dtek_regions.kyiv-region">Kyiv oblast (ДТЕК КРЕМ)</option>
+                            <option value="kyiv" data-i18n="onboarding.dtek_regions.kyiv">Kyiv city</option>
+                            <option value="dnipro" data-i18n="onboarding.dtek_regions.dnipro">Dnipro</option>
+                            <option value="odesa" data-i18n="onboarding.dtek_regions.odesa">Odesa</option>
                         </select>
                     </div>
                     <div class="onboarding-field">
-                        <label>Group (e.g. 4.2)</label>
+                        <label data-i18n="onboarding.dtek_group">Group (e.g. 4.2)</label>
                         <input type="text" class="onboarding-input" id="onb-dtek-group" placeholder="1.1" value="1.1">
                     </div>
                 </div>
@@ -2712,23 +2810,23 @@
 
             <!-- Step 4: Optional Features -->
             <div class="onboarding-step" id="onb-step-4">
-                <h2>Optional Features</h2>
-                <p class="subtitle">Configure generator tracking and Telegram bot.</p>
+                <h2 data-i18n="onboarding.step4_title">Optional Features</h2>
+                <p class="subtitle" data-i18n="onboarding.step4_subtitle">Configure generator tracking and Telegram bot.</p>
 
                 <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 16px; margin-bottom: 16px;">
                     <div class="onboarding-toggle-row">
-                        <span>Generator connected</span>
+                        <span data-i18n="onboarding.generator_connected">Generator connected</span>
                         <div class="onboarding-toggle" id="onb-gen-toggle" onclick="toggleOnb(this, 'onb-gen-fields')">
                             <div class="toggle-knob"></div>
                         </div>
                     </div>
                     <div class="onboarding-conditional" id="onb-gen-fields">
                         <div class="onboarding-field">
-                            <label>Fuel consumption (L/hour)</label>
+                            <label data-i18n="onboarding.fuel_rate">Fuel consumption (L/hour)</label>
                             <input type="number" step="0.1" class="onboarding-input" id="onb-gen-fuel" placeholder="0" value="0">
                         </div>
                         <div class="onboarding-field">
-                            <label>Last oil change date</label>
+                            <label data-i18n="onboarding.oil_change_date">Last oil change date</label>
                             <input type="date" class="onboarding-input" id="onb-gen-oil">
                         </div>
                     </div>
@@ -2736,22 +2834,22 @@
 
                 <div>
                     <div class="onboarding-toggle-row">
-                        <span>Telegram Bot</span>
+                        <span data-i18n="onboarding.telegram_bot">Telegram Bot</span>
                         <div class="onboarding-toggle" id="onb-tg-toggle" onclick="toggleOnb(this, 'onb-tg-fields')">
                             <div class="toggle-knob"></div>
                         </div>
                     </div>
                     <div class="onboarding-conditional" id="onb-tg-fields">
                         <div class="onboarding-field">
-                            <label>Bot Token</label>
+                            <label data-i18n="onboarding.bot_token">Bot Token</label>
                             <input type="text" class="onboarding-input" id="onb-tg-token" placeholder="123456:ABC-DEF...">
                         </div>
                         <div class="onboarding-field">
-                            <label>Allowed User IDs (comma-separated)</label>
+                            <label data-i18n="onboarding.allowed_users">Allowed User IDs (comma-separated)</label>
                             <input type="text" class="onboarding-input" id="onb-tg-users" placeholder="12345678, 87654321">
                         </div>
                         <div class="onboarding-toggle-row">
-                            <span style="font-size:0.85rem;">Public mode (any user can query)</span>
+                            <span style="font-size:0.85rem;" data-i18n="onboarding.public_mode">Public mode (any user can query)</span>
                             <div class="onboarding-toggle" id="onb-tg-public-toggle" onclick="toggleOnb(this)">
                                 <div class="toggle-knob"></div>
                             </div>
@@ -2762,10 +2860,10 @@
 
             <!-- Navigation buttons -->
             <div class="onboarding-btn-row">
-                <button class="onboarding-btn secondary" id="onb-back-btn" onclick="onboardingGoTo(onboardingStep - 1)" style="visibility:hidden;">Back</button>
+                <button class="onboarding-btn secondary" id="onb-back-btn" onclick="onboardingGoTo(onboardingStep - 1)" style="visibility:hidden;" data-i18n="onboarding.back">Back</button>
                 <div style="display:flex; gap:8px;">
-                    <button class="onboarding-btn secondary" id="onb-skip-btn" onclick="onboardingGoTo(onboardingStep + 1)" style="display:none;">Skip</button>
-                    <button class="onboarding-btn primary" id="onb-next-btn" onclick="onboardingNext()">Next</button>
+                    <button class="onboarding-btn secondary" id="onb-skip-btn" onclick="onboardingGoTo(onboardingStep + 1)" style="display:none;" data-i18n="onboarding.skip">Skip</button>
+                    <button class="onboarding-btn primary" id="onb-next-btn" onclick="onboardingNext()" data-i18n="onboarding.next">Next</button>
                 </div>
             </div>
         </div>
@@ -2774,67 +2872,237 @@
     <!-- Restart Overlay -->
     <div class="restart-overlay hidden" id="restart-overlay">
         <div class="restart-spinner"></div>
-        <div class="restart-text" id="restart-text">Restarting service...</div>
+        <div class="restart-text" id="restart-text" data-i18n="onboarding.restarting_service">Restarting service...</div>
     </div>
 
     <!-- Settings PIN prompt -->
     <div class="pin-overlay hidden" id="pin-overlay" onclick="if (event.target === this) closePinPrompt()">
         <form class="pin-dialog" id="pin-dialog" onsubmit="submitSettingsPin(); return false;">
-            <h3>Enter settings PIN</h3>
+            <h3 data-i18n="pin.title">Enter settings PIN</h3>
             <input type="password" class="pin-input" id="pin-input" inputmode="numeric"
-                   autocomplete="off" maxlength="12" aria-label="Settings PIN">
+                   autocomplete="off" maxlength="12" aria-label="Settings PIN" data-i18n-attr="aria-label:pin.label">
             <div class="pin-error" id="pin-error"></div>
             <div class="onboarding-btn-row">
-                <button type="button" class="onboarding-btn secondary" onclick="closePinPrompt()">Cancel</button>
-                <button type="submit" class="onboarding-btn primary" id="pin-submit">Unlock</button>
+                <button type="button" class="onboarding-btn secondary" onclick="closePinPrompt()" data-i18n="common.cancel">Cancel</button>
+                <button type="submit" class="onboarding-btn primary" id="pin-submit" data-i18n="pin.unlock">Unlock</button>
             </div>
         </form>
     </div>
 
     <div class="settings-panel" id="settings-panel">
         <h3>
-            Settings
-            <button class="close-btn" onclick="closeSettingsPanel()">&times;</button>
+            <span data-i18n="settings.title">Settings</span>
+            <button class="close-btn" onclick="closeSettingsPanel()" aria-label="Close" data-i18n-attr="aria-label:common.close">&times;</button>
         </h3>
 
         <div class="settings-section" id="settings-ota-section">
-            <label>OTA Updates</label>
+            <label data-i18n="settings.ota_title">OTA Updates</label>
             <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
-                <span style="color: #94a3b8; font-size: 0.8rem;">Version:</span>
+                <span style="color: #94a3b8; font-size: 0.8rem;" data-i18n="settings.version">Version:</span>
                 <span class="settings-version-badge" id="ota-version">...</span>
             </div>
             <div class="settings-update-available" id="ota-update-notice" style="display: none;">
                 <span class="pulse-dot"></span>
-                <span id="ota-update-text">Update available</span>
+                <span id="ota-update-text" data-i18n="settings.update_available">Update available</span>
             </div>
             <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px;">
-                <button class="settings-btn" onclick="otaCheckNow()">Check for Updates</button>
-                <button class="settings-btn update-btn" id="ota-apply-btn" style="display: none;" onclick="otaApplyUpdate()">Update</button>
+                <button class="settings-btn" onclick="otaCheckNow()" data-i18n="settings.check_updates">Check for Updates</button>
+                <button class="settings-btn update-btn" id="ota-apply-btn" style="display: none;" onclick="otaApplyUpdate()" data-i18n="settings.update">Update</button>
             </div>
             <div style="margin-top: 8px;">
-                <label style="font-size: 0.75rem; color: #94a3b8;">Rollback to:</label>
+                <label style="font-size: 0.75rem; color: #94a3b8;" data-i18n="settings.rollback_to">Rollback to:</label>
                 <div style="display: flex; gap: 6px; margin-top: 4px;">
                     <select class="settings-select" id="ota-rollback-select">
-                        <option value="">Select tag...</option>
+                        <option value="" data-i18n="settings.select_tag">Select tag...</option>
                     </select>
-                    <button class="settings-btn rollback-btn" onclick="otaRollback()">Rollback</button>
+                    <button class="settings-btn rollback-btn" onclick="otaRollback()" data-i18n="settings.rollback">Rollback</button>
                 </div>
             </div>
-            <div class="update-status-text state-idle" id="ota-status">Idle</div>
+            <div class="update-status-text state-idle" id="ota-status" data-i18n="settings.idle">Idle</div>
         </div>
 
         <div class="settings-section">
-            <label>Configuration</label>
-            <button class="settings-btn" onclick="openConfigEditor()">Edit Configuration</button>
-            <button class="settings-btn reset-btn" style="margin-top: 8px;" onclick="resetConfiguration()">Factory Reset</button>
+            <label data-i18n="settings.configuration">Configuration</label>
+            <button class="settings-btn" onclick="openConfigEditor()" data-i18n="settings.edit_configuration">Edit Configuration</button>
+            <button class="settings-btn reset-btn" style="margin-top: 8px;" onclick="resetConfiguration()" data-i18n="settings.factory_reset">Factory Reset</button>
         </div>
 
         <div class="settings-section">
-            <a class="donate-link" href="https://donatello.to/IvanUrsul" target="_blank" rel="noopener">Підтримати проект</a>
+            <a class="donate-link" href="https://donatello.to/IvanUrsul" target="_blank" rel="noopener" data-i18n="settings.donate">Support the project</a>
         </div>
     </div>
 
     <script>
+        // ===== I18N =====
+        // UI strings live in locales/<lang>.json (embedded by app.py). Static markup
+        // uses data-i18n (text) and data-i18n-attr (attr:key;...) attributes; code uses t(key, params).
+        var I18N_MESSAGES = {{ locales|tojson }};
+        var I18N_DEFAULT = {{ default_language|tojson }};
+        var I18N_STORAGE_KEY = 'dashboard-language';
+        var i18nLang = (function() {
+            try {
+                var saved = localStorage.getItem(I18N_STORAGE_KEY);
+                if (saved && I18N_MESSAGES[saved]) return saved;
+            } catch (e) {}
+            return I18N_DEFAULT;
+        })();
+
+        function i18nLookup(messages, key) {
+            var value = messages;
+            var parts = key.split('.');
+            for (var i = 0; i < parts.length; i++) {
+                if (value == null || typeof value !== 'object') return null;
+                value = value[parts[i]];
+            }
+            return typeof value === 'string' ? value : null;
+        }
+
+        // Translate a key, falling back to the default language, then the key itself.
+        // {name} placeholders are filled from params.
+        function t(key, params) {
+            var msg = i18nLookup(I18N_MESSAGES[i18nLang], key);
+            if (msg == null) msg = i18nLookup(I18N_MESSAGES[I18N_DEFAULT], key);
+            if (msg == null) return key;
+            if (params) {
+                msg = msg.replace(/\{(\w+)\}/g, function(m, name) {
+                    return params[name] != null ? params[name] : m;
+                });
+            }
+            return msg;
+        }
+
+        // Locale for dates/times, e.g. "uk-UA"
+        function i18nLocale() {
+            return t('meta.locale');
+        }
+
+        // Set translated text on an element and remember the key, so a language
+        // switch re-translates it without waiting for the next data refresh.
+        function setI18nText(el, key, params) {
+            if (!el) return;
+            el.setAttribute('data-i18n', key);
+            if (params) el.setAttribute('data-i18n-params', JSON.stringify(params));
+            else el.removeAttribute('data-i18n-params');
+            el.textContent = t(key, params);
+        }
+
+        // Set untranslated text (numbers, values) on an element that may carry a key.
+        function setPlainText(el, text) {
+            if (!el) return;
+            el.removeAttribute('data-i18n');
+            el.removeAttribute('data-i18n-params');
+            el.textContent = text;
+        }
+
+        function applyTranslations() {
+            document.querySelectorAll('[data-i18n]').forEach(function(el) {
+                var params = el.getAttribute('data-i18n-params');
+                el.textContent = t(el.getAttribute('data-i18n'), params ? JSON.parse(params) : null);
+            });
+            document.querySelectorAll('[data-i18n-attr]').forEach(function(el) {
+                el.getAttribute('data-i18n-attr').split(';').forEach(function(pair) {
+                    var idx = pair.indexOf(':');
+                    if (idx < 0) return;
+                    var attr = pair.slice(0, idx).trim();
+                    var key = pair.slice(idx + 1).trim();
+                    el.setAttribute(attr, t(key, { name: t('meta.name') }));
+                });
+            });
+            document.documentElement.lang = i18nLang;
+            document.title = t('app.title');
+            var langBtn = document.getElementById('language-btn');
+            if (langBtn) langBtn.textContent = t('meta.short');
+        }
+
+        function setLanguage(lang) {
+            if (!I18N_MESSAGES[lang]) return;
+            i18nLang = lang;
+            try { localStorage.setItem(I18N_STORAGE_KEY, lang); } catch (e) {}
+            applyTranslations();
+            refreshTranslatedContent();
+        }
+
+        // Language button: opens a list of the available languages
+        function toggleLanguageMenu(event) {
+            if (event) event.stopPropagation();
+            var menu = document.getElementById('language-menu');
+            if (menu.classList.contains('hidden')) openLanguageMenu();
+            else closeLanguageMenu();
+        }
+
+        function openLanguageMenu() {
+            var menu = document.getElementById('language-menu');
+            var btn = document.getElementById('language-btn');
+            // Each language is listed by its own name ("English", "Українська")
+            menu.innerHTML = Object.keys(I18N_MESSAGES).map(function(lang) {
+                var meta = I18N_MESSAGES[lang].meta || {};
+                return '<button type="button" class="language-option" role="menuitemradio" data-lang="' + lang + '"' +
+                    ' aria-checked="' + (lang === i18nLang) + '" lang="' + lang + '">' +
+                    '<span class="language-option-code">' + escapeHtml(meta.short || lang.toUpperCase()) + '</span>' +
+                    '<span>' + escapeHtml(meta.name || lang) + '</span>' +
+                    '<span class="language-option-check">✓</span></button>';
+            }).join('');
+            menu.querySelectorAll('.language-option').forEach(function(option) {
+                option.addEventListener('click', function() {
+                    closeLanguageMenu();
+                    setLanguage(option.getAttribute('data-lang'));
+                });
+            });
+
+            positionLanguageMenu();
+            menu.classList.remove('hidden');
+            btn.setAttribute('aria-expanded', 'true');
+            var current = menu.querySelector('[aria-checked="true"]');
+            if (current) current.focus();
+        }
+
+        // Below the button, right edges aligned
+        function positionLanguageMenu() {
+            var menu = document.getElementById('language-menu');
+            var rect = document.getElementById('language-btn').getBoundingClientRect();
+            menu.style.top = (rect.bottom + 8) + 'px';
+            menu.style.right = (document.documentElement.clientWidth - rect.right) + 'px';
+        }
+
+        function closeLanguageMenu() {
+            var menu = document.getElementById('language-menu');
+            if (menu.classList.contains('hidden')) return;
+            menu.classList.add('hidden');
+            document.getElementById('language-btn').setAttribute('aria-expanded', 'false');
+        }
+
+        // Close on outside click or Escape
+        document.addEventListener('click', function(e) {
+            var menu = document.getElementById('language-menu');
+            if (menu && !menu.contains(e.target)) closeLanguageMenu();
+        });
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') closeLanguageMenu();
+        });
+        // Keep it attached to the button when the screen rotates or resizes
+        window.addEventListener('resize', function() {
+            if (!document.getElementById('language-menu').classList.contains('hidden')) positionLanguageMenu();
+        });
+
+        // Re-render content that code builds from translated strings
+        function refreshTranslatedContent() {
+            var refreshers = [
+                function() { if (typeof cachedWeatherData !== 'undefined' && cachedWeatherData) updateWeatherForecastBanner(cachedWeatherData); },
+                function() { renderPlannedOutages(); },
+                function() { updateOutageInfo(); },
+                function() { loadPhaseStats(); },
+                function() { fetchOtaStatus(); },
+                function() { if (typeof generatorData !== 'undefined' && generatorData) { updateGeneratorBanner(generatorData); updateGeneratorCard(generatorData); } },
+                function() { updateOnboardingUI(); },
+                function() { updateDashboard(); },
+            ];
+            refreshers.forEach(function(fn) {
+                try { fn(); } catch (e) { console.error('i18n refresh failed:', e); }
+            });
+        }
+
+        applyTranslations();
+
         // Inverter config (populated from /api/data response)
         var inverterConfig = null;
         var outageScheduleIntervalId = null;
@@ -3008,8 +3276,8 @@
                         return;
                     }
                     errorEl.textContent = res.status === 429
-                        ? 'Too many attempts. Try again in ' + res.data.retry_after + 's.'
-                        : 'Wrong PIN';
+                        ? t('pin.too_many', { seconds: res.data.retry_after })
+                        : t('pin.wrong');
                     input.value = '';
                     input.focus();
                     var dialog = document.getElementById('pin-dialog');
@@ -3019,7 +3287,7 @@
                 })
                 .catch(function() {
                     submitBtn.disabled = false;
-                    errorEl.textContent = 'Could not check PIN. Try again.';
+                    errorEl.textContent = t('pin.check_failed');
                 });
         }
 
@@ -3054,7 +3322,7 @@
                     if (permission === 'granted') {
                         notificationsEnabled = true;
                         document.getElementById('notification-setup').classList.add('hidden');
-                        showNotification('Notifications Enabled', 'You will be alerted during power outages.');
+                        showNotification(t('notifications.enabled_title'), t('notifications.enabled_body'));
                     }
                 });
             }
@@ -3077,15 +3345,22 @@
             }
         }
 
+        var BATTERY_STATUS_KEYS = { 'Charging': 'charging', 'Discharging': 'discharging', 'Idle': 'idle', 'N/A': 'na' };
+
+        function batteryStatusText(status) {
+            var key = BATTERY_STATUS_KEYS[status];
+            return key ? t('battery.status.' + key) : status;
+        }
+
         function formatGeneratorDuration(decimalHours) {
             if (decimalHours === null || decimalHours === undefined || isNaN(decimalHours)) return '--';
             var totalMinutes = Math.round(decimalHours * 60);
             var h = Math.floor(totalMinutes / 60);
             var m = totalMinutes % 60;
             if (h > 0) {
-                return h + 'h ' + m + 'mins';
+                return t('duration.hm', { h: h, m: m });
             } else {
-                return m + 'mins';
+                return t('duration.m', { m: m });
             }
         }
         // Phase statistics
@@ -3103,7 +3378,7 @@
             const tbody = document.getElementById('phase-stats-body');
 
             if (stats.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#64748b;">No data yet. Keep the dashboard running to collect data.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#64748b;">' + t('phase_stats.no_data') + '</td></tr>';
                 return;
             }
 
@@ -3118,24 +3393,24 @@
                         <td>${day.date}</td>
                         <td>
                             <span class="phase-pct l1 ${l1Highest}">${day.l1_pct}%</span>
-                            <br><small style="color:#64748b">${day.l1_kwh} kWh</small>
+                            <br><small style="color:#64748b">${day.l1_kwh} ${t('units.kwh')}</small>
                         </td>
                         <td>
                             <span class="phase-pct l2 ${l2Highest}">${day.l2_pct}%</span>
-                            <br><small style="color:#64748b">${day.l2_kwh} kWh</small>
+                            <br><small style="color:#64748b">${day.l2_kwh} ${t('units.kwh')}</small>
                         </td>
                         <td>
                             <span class="phase-pct l3 ${l3Highest}">${day.l3_pct}%</span>
-                            <br><small style="color:#64748b">${day.l3_kwh} kWh</small>
+                            <br><small style="color:#64748b">${day.l3_kwh} ${t('units.kwh')}</small>
                         </td>
-                        <td><strong>${day.total_kwh}</strong> kWh</td>
+                        <td><strong>${day.total_kwh}</strong> ${t('units.kwh')}</td>
                     </tr>
                 `;
             }).join('');
         }
 
         async function clearPhaseStats() {
-            if (confirm('Clear all phase statistics?')) {
+            if (confirm(t('phase_stats.confirm_clear'))) {
                 await fetch('/api/phase-stats/clear', { method: 'POST' });
                 loadPhaseStats();
             }
@@ -3165,14 +3440,14 @@
             document.getElementById('phase-pct-l3').textContent = l3Pct + '%';
 
             // Update values
-            document.getElementById('phase-l1').textContent = l1 + ' W';
-            document.getElementById('phase-l2').textContent = l2 + ' W';
-            document.getElementById('phase-l3').textContent = l3 + ' W';
+            document.getElementById('phase-l1').textContent = l1 + ' ' + t('units.w');
+            document.getElementById('phase-l2').textContent = l2 + ' ' + t('units.w');
+            document.getElementById('phase-l3').textContent = l3 + ' ' + t('units.w');
 
             // Update voltages
-            document.getElementById('voltage-l1').textContent = (data.voltage_l1 || 0).toFixed(0) + 'V';
-            document.getElementById('voltage-l2').textContent = (data.voltage_l2 || 0).toFixed(0) + 'V';
-            document.getElementById('voltage-l3').textContent = (data.voltage_l3 || 0).toFixed(0) + 'V';
+            document.getElementById('voltage-l1').textContent = t('units.voltage_v', { value: (data.voltage_l1 || 0).toFixed(0) });
+            document.getElementById('voltage-l2').textContent = t('units.voltage_v', { value: (data.voltage_l2 || 0).toFixed(0) });
+            document.getElementById('voltage-l3').textContent = t('units.voltage_v', { value: (data.voltage_l3 || 0).toFixed(0) });
         }
 
         function updateBatteryBanner(data) {
@@ -3192,11 +3467,11 @@
             // Update status text
             let statusText = '';
             if (current > 0.5) {
-                statusText = 'Charging ' + power + 'W';
+                statusText = t('battery_banner.charging', { power: power });
             } else if (current < -0.5) {
-                statusText = 'Discharging ' + power + 'W';
+                statusText = t('battery_banner.discharging', { power: power });
             } else {
-                statusText = 'Idle';
+                statusText = t('battery_banner.idle');
             }
             statusEl.textContent = statusText;
 
@@ -3238,10 +3513,10 @@
 
             // Calculate total through inverter
             const inverterPower = solarPower + Math.abs(batteryPower) + Math.abs(gridPower);
-            inverterValue.textContent = loadPower + 'W';
+            inverterValue.textContent = t('units.power_w', { value: loadPower });
 
             // Update component values
-            document.getElementById('ef-home-value').textContent = loadPower + 'W';
+            document.getElementById('ef-home-value').textContent = t('units.power_w', { value: loadPower });
 
             // Reset all classes
             solarComp.classList.remove('active', 'solar-active', 'hidden');
@@ -3272,7 +3547,7 @@
             if (solarPower > 10) {
                 solarComp.classList.add('active', 'solar-active');
                 pathSolar.classList.add('active', 'solar-flow');
-                document.getElementById('ef-label-solar').textContent = solarPower + 'W';
+                document.getElementById('ef-label-solar').textContent = t('units.power_w', { value: solarPower });
                 document.getElementById('ef-label-solar').classList.remove('hidden');
                 document.getElementById('ef-label-bg-solar').classList.remove('hidden');
             } else if (solarPower === 0 || solarPower === undefined) {
@@ -3289,14 +3564,14 @@
                     // Charging
                     batteryComp.classList.add('active', 'battery-charging');
                     pathBattery.classList.add('active', 'battery-charge-flow');
-                    document.getElementById('ef-label-battery').textContent = Math.abs(batteryPower) + 'W';
+                    document.getElementById('ef-label-battery').textContent = t('units.power_w', { value: Math.abs(batteryPower) });
                     document.getElementById('ef-label-battery').classList.remove('hidden');
                     document.getElementById('ef-label-bg-battery').classList.remove('hidden');
                 } else if (batteryCurrent < -0.5) {
                     // Discharging
                     batteryComp.classList.add('active', 'battery-discharging');
                     pathBattery.classList.add('active', 'battery-discharge-flow', 'reverse');
-                    document.getElementById('ef-label-battery').textContent = Math.abs(batteryPower) + 'W';
+                    document.getElementById('ef-label-battery').textContent = t('units.power_w', { value: Math.abs(batteryPower) });
                     document.getElementById('ef-label-battery').classList.remove('hidden');
                     document.getElementById('ef-label-bg-battery').classList.remove('hidden');
                 }
@@ -3309,7 +3584,7 @@
             if (loadPower > 10) {
                 homeComp.classList.add('active', 'load-active');
                 pathHome.classList.add('active', 'load-flow');
-                document.getElementById('ef-label-home').textContent = loadPower + 'W';
+                document.getElementById('ef-label-home').textContent = t('units.power_w', { value: loadPower });
                 document.getElementById('ef-label-home').classList.remove('hidden');
                 document.getElementById('ef-label-bg-home').classList.remove('hidden');
             }
@@ -3320,14 +3595,14 @@
                     // Importing from grid
                     gridComp.classList.add('active', 'grid-importing');
                     pathGrid.classList.add('active', 'grid-import-flow', 'reverse');
-                    document.getElementById('ef-label-grid').textContent = gridPower + 'W';
+                    document.getElementById('ef-label-grid').textContent = t('units.power_w', { value: gridPower });
                     document.getElementById('ef-label-grid').classList.remove('hidden');
                     document.getElementById('ef-label-bg-grid').classList.remove('hidden');
                 } else if (gridPower < -50) {
                     // Exporting to grid
                     gridComp.classList.add('active', 'grid-exporting');
                     pathGrid.classList.add('active', 'grid-export-flow');
-                    document.getElementById('ef-label-grid').textContent = Math.abs(gridPower) + 'W';
+                    document.getElementById('ef-label-grid').textContent = t('units.power_w', { value: Math.abs(gridPower) });
                     document.getElementById('ef-label-grid').classList.remove('hidden');
                     document.getElementById('ef-label-bg-grid').classList.remove('hidden');
                 }
@@ -3347,10 +3622,10 @@
 
             if (lastGridOnline && !isOnline) {
                 // Grid just went offline
-                showNotification('Power Outage', 'Grid electricity is now offline.');
+                showNotification(t('notifications.outage_title'), t('notifications.outage_body'));
             } else if (!lastGridOnline && isOnline) {
                 // Grid just came back online
-                showNotification('Power Restored', 'Grid electricity is back online.');
+                showNotification(t('notifications.restored_title'), t('notifications.restored_body'));
             }
 
             lastGridOnline = isOnline;
@@ -3362,10 +3637,10 @@
                 .then(data => {
                     if (data.error) {
                         if (data.error === 'not yet available') {
-                            document.getElementById('status').textContent = 'Pulling data from inverter...';
+                            setI18nText(document.getElementById('status'), 'status.pulling');
                             document.getElementById('status').className = 'status loading';
                         } else {
-                            document.getElementById('status').textContent = 'Error: ' + data.error;
+                            setI18nText(document.getElementById('status'), 'common.error', { message: data.error });
                             document.getElementById('status').className = 'status error';
                         }
                         // Apply config even on error so UI elements stay visible
@@ -3375,7 +3650,7 @@
                         return;
                     }
 
-                    document.getElementById('status').textContent = 'Online - Updated ' + new Date().toLocaleTimeString();
+                    setI18nText(document.getElementById('status'), 'status.online', { time: new Date().toLocaleTimeString(i18nLocale()) });
                     document.getElementById('status').className = 'status online';
 
                     // Apply config once when first received
@@ -3386,7 +3661,7 @@
                     latestInverterData = data;
 
                     // Solar
-                    document.getElementById('pv-total').innerHTML = data.pv_total_power + '<span class="unit">W</span>';
+                    document.getElementById('pv-total').innerHTML = data.pv_total_power + '<span class="unit">' + t('units.w') + '</span>';
                     document.getElementById('pv1-power').textContent = data.pv1_power;
                     if (!inverterConfig || inverterConfig.pv_strings >= 2) {
                         document.getElementById('pv2-power').textContent = data.pv2_power;
@@ -3400,19 +3675,19 @@
                         document.getElementById('battery-voltage').textContent = data.battery_voltage.toFixed(1);
                         document.getElementById('battery-current').textContent = data.battery_current.toFixed(1);
                         document.getElementById('battery-power').textContent = Math.abs(data.battery_power);
-                        document.getElementById('battery-status').textContent = data.battery_status + ' (W)';
+                        setI18nText(document.getElementById('battery-status'), 'battery.status_power', { status: batteryStatusText(data.battery_status) });
                     }
 
                     // Grid
                     const gridPowerEl = document.getElementById('grid-power');
-                    gridPowerEl.innerHTML = Math.abs(data.grid_power) + '<span class="unit">W</span>';
+                    gridPowerEl.innerHTML = Math.abs(data.grid_power) + '<span class="unit">' + t('units.w') + '</span>';
                     gridPowerEl.className = 'metric-value ' + (data.grid_power > 0 ? 'negative' : data.grid_power < 0 ? 'positive' : 'neutral');
                     document.getElementById('grid-voltage').textContent = data.grid_voltage.toFixed(1);
                     document.getElementById('daily-import').textContent = data.daily_grid_import.toFixed(1);
                     document.getElementById('daily-export').textContent = data.daily_grid_export.toFixed(1);
 
                     // Load
-                    document.getElementById('load-power').innerHTML = data.load_power + '<span class="unit">W</span>';
+                    document.getElementById('load-power').innerHTML = data.load_power + '<span class="unit">' + t('units.w') + '</span>';
                     document.getElementById('daily-load').textContent = data.daily_load.toFixed(1);
 
                     // ===== ANIMATIONS =====
@@ -3467,13 +3742,13 @@
                     if (isOnline) {
                         gridBanner.classList.remove('offline');
                         gridBanner.classList.add('online');
-                        gridStatusValue.textContent = 'ONLINE';
-                        gridStatusLabel.textContent = data.grid_voltage.toFixed(0) + 'V';
+                        setI18nText(gridStatusValue, 'grid_banner.online');
+                        setPlainText(gridStatusLabel, t('units.voltage_v', { value: data.grid_voltage.toFixed(0) }));
                     } else {
                         gridBanner.classList.remove('online');
                         gridBanner.classList.add('offline');
-                        gridStatusValue.textContent = 'OUTAGE';
-                        gridStatusLabel.textContent = 'No grid power';
+                        setI18nText(gridStatusValue, 'grid_banner.outage');
+                        setI18nText(gridStatusLabel, 'grid_banner.no_power');
                     }
 
                     // Handle grid state changes (notification)
@@ -3493,7 +3768,7 @@
                     if (inverterConfig && inverterConfig.has_generator) {
                         var genPower = data.generator_power || 0;
                         var genPowerEl = document.getElementById('generator-power');
-                        if (genPowerEl) genPowerEl.innerHTML = genPower + '<span class="unit">W</span>';
+                        if (genPowerEl) genPowerEl.innerHTML = genPower + '<span class="unit">' + t('units.w') + '</span>';
                         // Update banner with real-time power
                         if (generatorData) {
                             generatorData.power = genPower;
@@ -3510,7 +3785,7 @@
 
                 })
                 .catch(error => {
-                    document.getElementById('status').textContent = 'Connection failed';
+                    setI18nText(document.getElementById('status'), 'status.connection_failed');
                     document.getElementById('status').className = 'status error';
                     console.error('Error:', error);
                 });
@@ -3570,13 +3845,13 @@
 
         function formatPlannedDuration(mins) {
             var h = Math.floor(mins / 60), m = mins % 60;
-            if (h && m) return h + 'h ' + m + 'm';
-            return h ? h + 'h' : m + 'm';
+            if (h && m) return t('duration.hm', { h: h, m: m });
+            return h ? t('duration.h', { h: h }) : t('duration.m', { m: m });
         }
 
         function renderPlannedDay(label, day, now) {
             var dateObj = new Date(day.date + 'T00:00:00');
-            var dateText = dateObj.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+            var dateText = dateObj.toLocaleDateString(i18nLocale(), { weekday: 'short', day: 'numeric', month: 'short' });
             var isToday = dateObj.toDateString() === now.toDateString();
             var nowMins = now.getHours() * 60 + now.getMinutes();
 
@@ -3593,7 +3868,7 @@
             var html = '<div class="planned-day">';
             html += '<div class="planned-day-header"><span class="planned-day-name">' + label + '</span>';
             html += '<span class="planned-day-date">' + escapeHtml(dateText) + '</span>';
-            if (totalMins > 0) html += '<span class="planned-day-total">' + formatPlannedDuration(totalMins) + ' without power</span>';
+            if (totalMins > 0) html += '<span class="planned-day-total">' + t('planned.without_power', { time: formatPlannedDuration(totalMins) }) + '</span>';
             html += '</div>';
 
             html += '<div class="planned-timeline">';
@@ -3606,14 +3881,14 @@
             html += '<div class="planned-timeline-scale"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>';
 
             if (windows.length === 0) {
-                html += '<div class="planned-none clear">No planned outages</div>';
+                html += '<div class="planned-none clear">' + t('planned.none') + '</div>';
             } else {
                 html += '<ul class="planned-windows">';
                 windows.forEach(function(w) {
                     var tag = '';
-                    if (w.state === 'active') tag = 'now · ends in ' + formatCountdown(Math.max(0, w.endDate - now));
-                    else if (w.state === 'past') tag = 'done';
-                    else if (isToday) tag = 'in ' + formatCountdown(Math.max(0, w.startDate - now));
+                    if (w.state === 'active') tag = t('planned.now_ends_in', { time: formatCountdown(Math.max(0, w.endDate - now)) });
+                    else if (w.state === 'past') tag = t('planned.done');
+                    else if (isToday) tag = t('planned.starts_in', { time: formatCountdown(Math.max(0, w.startDate - now)) });
                     html += '<li class="planned-window ' + w.state + '">' +
                         '<span class="planned-window-time">' + formatPlannedMinutes(w.start) + '–' + formatPlannedMinutes(w.end) + '</span>' +
                         '<span class="planned-window-duration">' + formatPlannedDuration(w.end - w.start) + '</span>' +
@@ -3643,24 +3918,24 @@
 
             var html;
             if (!d || d.status === 'unknown') {
-                html = '<div class="planned-none">Loading schedule...</div>';
+                html = '<div class="planned-none">' + t('planned.loading') + '</div>';
             } else if (d.status === 'error') {
-                html = '<div class="planned-none">Outage schedule unavailable</div>' +
+                html = '<div class="planned-none">' + t('planned.unavailable') + '</div>' +
                     '<div class="planned-error-detail">' + escapeHtml(d.error || '') + '</div>';
             } else {
                 var now = new Date();
                 var days = d.days || [];
                 html = '';
-                if (days[0]) html += renderPlannedDay('Today', days[0], now);
+                if (days[0]) html += renderPlannedDay(t('planned.today'), days[0], now);
                 if (days[1]) {
-                    html += renderPlannedDay('Tomorrow', days[1], now);
+                    html += renderPlannedDay(t('planned.tomorrow'), days[1], now);
                 } else {
-                    html += '<div class="planned-day"><div class="planned-day-header"><span class="planned-day-name">Tomorrow</span></div>' +
-                        '<div class="planned-none">Schedule not published yet</div></div>';
+                    html += '<div class="planned-day"><div class="planned-day-header"><span class="planned-day-name">' + t('planned.tomorrow') + '</span></div>' +
+                        '<div class="planned-none">' + t('planned.not_published') + '</div></div>';
                 }
             }
 
-            var sourceText = (d && d.provider) ? 'Source: ' + d.provider : '';
+            var sourceText = (d && d.provider) ? t('planned.source', { provider: d.provider }) : '';
             targets.forEach(function(t) {
                 t.body.innerHTML = html;
                 if (t.source) t.source.textContent = sourceText;
@@ -3682,14 +3957,14 @@
                 // itself rather than assuming an outage.
                 if (d.status === 'active' && d.end_time) {
                     var activeLeft = new Date(d.end_time) - now;
-                    el.textContent = activeLeft > 0 ? 'Scheduled outage · ends in ' + formatCountdown(activeLeft) : '';
+                    el.textContent = activeLeft > 0 ? t('outage_info.scheduled_now', { time: formatCountdown(activeLeft) }) : '';
                 } else if (d.status === 'upcoming' && d.upcoming_windows && d.upcoming_windows.length > 0) {
                     var untilStart = new Date(d.upcoming_windows[0].start) - now;
-                    el.textContent = untilStart > 0 ? 'Outage in ' + formatCountdown(untilStart) : '';
+                    el.textContent = untilStart > 0 ? t('outage_info.outage_in', { time: formatCountdown(untilStart) }) : '';
                 } else if (d.status === 'clear') {
-                    el.textContent = 'No outages today';
+                    el.textContent = t('outage_info.no_outages_today');
                 } else if (d.status === 'error') {
-                    el.textContent = 'Outage schedule unavailable';
+                    el.textContent = t('outage_info.unavailable');
                 } else {
                     el.textContent = '';
                 }
@@ -3699,15 +3974,15 @@
                     var end = new Date(d.end_time);
                     var diff = end - now;
                     if (diff > 0) {
-                        el.textContent = 'Back in ' + formatCountdown(diff);
+                        el.textContent = t('outage_info.back_in', { time: formatCountdown(diff) });
                     } else {
-                        el.textContent = 'Should be back soon';
+                        el.textContent = t('outage_info.back_soon');
                     }
                 } else {
                     // Unscheduled outage — show estimated battery remaining time
                     var remaining = '';
                     if (inverterConfig && inverterConfig.has_battery === false) {
-                        remaining = d.status === 'error' ? 'Outage (schedule unavailable)' : 'Unscheduled outage';
+                        remaining = d.status === 'error' ? t('outage_info.outage_unavailable') : t('outage_info.unscheduled');
                     } else if (latestInverterData) {
                         var soc = latestInverterData.battery_soc || 0;
                         var capacityWh = latestInverterData.battery_max_available_capacity_wh || 0;
@@ -3715,12 +3990,12 @@
                         if (loadW > 0 && capacityWh > 0) {
                             var remainingWh = (soc / 100) * capacityWh;
                             var remainingMs = (remainingWh / loadW) * 3600 * 1000;
-                            remaining = '~' + formatCountdown(remainingMs) + ' remaining';
+                            remaining = t('outage_info.remaining', { time: formatCountdown(remainingMs) });
                         } else {
-                            remaining = 'Battery: ' + soc + '%';
+                            remaining = t('outage_info.battery', { soc: soc });
                         }
                     }
-                    el.textContent = remaining || (d.status === 'error' ? 'Outage (schedule unavailable)' : 'Unscheduled outage');
+                    el.textContent = remaining || (d.status === 'error' ? t('outage_info.outage_unavailable') : t('outage_info.unscheduled'));
                 }
             } else {
                 // Grid is on — show next outage countdown
@@ -3728,14 +4003,14 @@
                     var start = new Date(d.upcoming_windows[0].start);
                     var diff = start - now;
                     if (diff > 0) {
-                        el.textContent = 'Outage in ' + formatCountdown(diff);
+                        el.textContent = t('outage_info.outage_in', { time: formatCountdown(diff) });
                     } else {
                         el.textContent = '';
                     }
                 } else if (d.status === 'clear') {
-                    el.textContent = 'No outages today';
+                    el.textContent = t('outage_info.no_outages_today');
                 } else if (d.status === 'error') {
-                    el.textContent = 'Outage schedule unavailable';
+                    el.textContent = t('outage_info.unavailable');
                 } else {
                     el.textContent = '';
                 }
@@ -3747,9 +4022,9 @@
             var h = Math.floor(totalSec / 3600);
             var m = Math.floor((totalSec % 3600) / 60);
             var s = totalSec % 60;
-            if (h > 0) return h + 'h ' + m + 'm';
-            if (m > 0) return m + 'm ' + s + 's';
-            return s + 's';
+            if (h > 0) return t('duration.hm', { h: h, m: m });
+            if (m > 0) return t('duration.ms', { m: m, s: s });
+            return t('duration.s', { s: s });
         }
 
         fetchOutageSchedule();
@@ -3832,41 +4107,41 @@
         var lastWeatherFetch = 0;
         var cachedWeatherData = null;
 
-        var WMO_DESCRIPTIONS = {
-            0: ['Clear sky', '☀️'],
-            1: ['Mainly clear', '🌤️'],
-            2: ['Partly cloudy', '⛅'],
-            3: ['Overcast', '☁️'],
-            45: ['Foggy', '🌫️'],
-            48: ['Rime fog', '🌫️'],
-            51: ['Light drizzle', '🌦️'],
-            53: ['Moderate drizzle', '🌦️'],
-            55: ['Dense drizzle', '🌧️'],
-            56: ['Freezing drizzle', '🌧️'],
-            57: ['Heavy freezing drizzle', '🌧️'],
-            61: ['Slight rain', '🌦️'],
-            63: ['Moderate rain', '🌧️'],
-            65: ['Heavy rain', '🌧️'],
-            66: ['Light freezing rain', '🌧️'],
-            67: ['Heavy freezing rain', '🌧️'],
-            71: ['Slight snow', '🌨️'],
-            73: ['Moderate snow', '🌨️'],
-            75: ['Heavy snow', '❄️'],
-            77: ['Snow grains', '🌨️'],
-            80: ['Slight showers', '🌦️'],
-            81: ['Moderate showers', '🌧️'],
-            82: ['Violent showers', '🌧️'],
-            85: ['Slight snow showers', '🌨️'],
-            86: ['Heavy snow showers', '❄️'],
-            95: ['Thunderstorm', '⛈️'],
-            96: ['Thunderstorm w/ hail', '⛈️'],
-            99: ['Thunderstorm w/ heavy hail', '⛈️']
+        // WMO weather code -> icon; descriptions are in locales (weather.codes.<code>)
+        var WMO_ICONS = {
+            0: '☀️',
+            1: '🌤️',
+            2: '⛅',
+            3: '☁️',
+            45: '🌫️',
+            48: '🌫️',
+            51: '🌦️',
+            53: '🌦️',
+            55: '🌧️',
+            56: '🌧️',
+            57: '🌧️',
+            61: '🌦️',
+            63: '🌧️',
+            65: '🌧️',
+            66: '🌧️',
+            67: '🌧️',
+            71: '🌨️',
+            73: '🌨️',
+            75: '❄️',
+            77: '🌨️',
+            80: '🌦️',
+            81: '🌧️',
+            82: '🌧️',
+            85: '🌨️',
+            86: '❄️',
+            95: '⛈️',
+            96: '⛈️',
+            99: '⛈️'
         };
 
         function getWeatherDescription(code) {
-            var entry = WMO_DESCRIPTIONS[code];
-            if (entry) return { text: entry[0], icon: entry[1] };
-            return { text: 'Unknown', icon: '🌡️' };
+            if (WMO_ICONS[code]) return { text: t('weather.codes.' + code), icon: WMO_ICONS[code] };
+            return { text: t('weather.unknown'), icon: '🌡️' };
         }
 
         function formatTimeFromISO(isoStr) {
@@ -4028,13 +4303,13 @@
             banner.classList.remove('generator-running', 'generator-off');
             if (running) {
                 banner.classList.add('generator-running');
-                valueEl.textContent = power + 'W';
+                setPlainText(valueEl, t('units.power_w', { value: power }));
                 var hours = data ? data.today_runtime_hours : 0;
-                statusEl.textContent = 'Runtime: ' + formatGeneratorDuration(hours) + ' today';
+                statusEl.textContent = t('generator.runtime_today', { time: formatGeneratorDuration(hours) });
             } else {
                 banner.classList.add('generator-off');
-                valueEl.textContent = 'OFF';
-                statusEl.textContent = 'Standby';
+                setI18nText(valueEl, 'generator.off');
+                statusEl.textContent = t('generator.standby');
             }
         }
 
@@ -4061,7 +4336,7 @@
             }
 
             var powerEl = document.getElementById('generator-power');
-            if (powerEl) powerEl.innerHTML = power + '<span class="unit">W</span>';
+            if (powerEl) powerEl.innerHTML = power + '<span class="unit">' + t('units.w') + '</span>';
 
             var todayEl = document.getElementById('generator-today-runtime');
             if (todayEl) todayEl.textContent = data ? formatGeneratorDuration(data.today_runtime_hours) : '--';
@@ -4109,7 +4384,7 @@
         function updateOtaUI(data) {
             // Version badge
             const versionEl = document.getElementById('ota-version');
-            if (versionEl) versionEl.textContent = data.current_version || 'unknown';
+            if (versionEl) versionEl.textContent = data.current_version || t('common.unknown');
 
             // Update available notice
             const noticeEl = document.getElementById('ota-update-notice');
@@ -4117,10 +4392,10 @@
             const updateTextEl = document.getElementById('ota-update-text');
             if (data.update_available && data.latest_tag) {
                 if (noticeEl) noticeEl.style.display = 'flex';
-                if (updateTextEl) updateTextEl.textContent = 'Update available: ' + data.latest_tag;
+                if (updateTextEl) setI18nText(updateTextEl, 'settings.update_available_tag', { tag: data.latest_tag });
                 if (applyBtn) {
                     applyBtn.style.display = '';
-                    applyBtn.textContent = 'Update to ' + data.latest_tag;
+                    setI18nText(applyBtn, 'settings.update_to', { tag: data.latest_tag });
                     applyBtn.setAttribute('data-tag', data.latest_tag);
                 }
             } else {
@@ -4132,12 +4407,11 @@
             const selectEl = document.getElementById('ota-rollback-select');
             if (selectEl && data.available_tags) {
                 const currentVal = selectEl.value;
-                selectEl.innerHTML = '<option value="">Select tag...</option>';
+                selectEl.innerHTML = '<option value="" data-i18n="settings.select_tag">' + t('settings.select_tag') + '</option>';
                 data.available_tags.forEach(function(tag) {
                     const opt = document.createElement('option');
                     opt.value = tag;
-                    opt.textContent = tag;
-                    if (tag === data.current_version) opt.textContent += ' (current)';
+                    opt.textContent = tag === data.current_version ? t('settings.current_tag', { tag: tag }) : tag;
                     selectEl.appendChild(opt);
                 });
                 if (currentVal) selectEl.value = currentVal;
@@ -4149,20 +4423,22 @@
                 const state = data.manager_state || 'idle';
                 statusEl.className = 'update-status-text state-' + state;
                 if (state === 'error') {
-                    statusEl.textContent = 'Error: ' + (data.manager_error || 'unknown');
+                    setI18nText(statusEl, 'common.error', { message: data.manager_error || t('common.unknown') });
                 } else if (state === 'updating' || state === 'restarting') {
-                    statusEl.textContent = data.manager_message || state;
+                    setPlainText(statusEl, data.manager_message || state);
                 } else {
-                    statusEl.textContent = data.last_checked
-                        ? 'Last checked: ' + new Date(data.last_checked).toLocaleTimeString()
-                        : 'Not checked yet';
+                    if (data.last_checked) {
+                        setI18nText(statusEl, 'settings.last_checked', { time: new Date(data.last_checked).toLocaleTimeString(i18nLocale()) });
+                    } else {
+                        setI18nText(statusEl, 'settings.not_checked');
+                    }
                 }
             }
 
             // Show message if not a git repo
             const section = document.getElementById('settings-ota-section');
             if (section && data.is_git_repo === false) {
-                section.innerHTML = '<label>OTA Updates</label><div style="color: #64748b; font-size: 0.8rem;">Not available (not a git repository)</div>';
+                section.innerHTML = '<label data-i18n="settings.ota_title">' + t('settings.ota_title') + '</label><div style="color: #64748b; font-size: 0.8rem;" data-i18n="settings.not_git_repo">' + t('settings.not_git_repo') + '</div>';
             }
         }
 
@@ -4176,13 +4452,13 @@
             const btn = document.getElementById('ota-apply-btn');
             const tag = btn ? btn.getAttribute('data-tag') : null;
             if (!tag) return;
-            if (!confirm('Update to ' + tag + '? The server will restart.')) return;
+            if (!confirm(t('settings.confirm_update', { tag: tag }))) return;
 
             fetch('/api/update/preflight')
                 .then(r => r.json())
                 .then(data => {
                     if (!data.ok) {
-                        alert('Preflight failed:\n- ' + data.issues.join('\n- '));
+                        alert(t('settings.preflight_failed', { issues: data.issues.join('\n- ') }));
                         return;
                     }
                     settingsFetch('/api/update/apply', {
@@ -4191,20 +4467,20 @@
                         body: JSON.stringify({ tag: tag }),
                     }).then(() => startOtaStatusPolling());
                 })
-                .catch(e => alert('Error: ' + e));
+                .catch(e => alert(t('common.error', { message: e })));
         }
 
         function otaRollback() {
             const selectEl = document.getElementById('ota-rollback-select');
             const tag = selectEl ? selectEl.value : '';
-            if (!tag) { alert('Select a tag first'); return; }
-            if (!confirm('Rollback to ' + tag + '? The server will restart.')) return;
+            if (!tag) { alert(t('settings.select_tag_first')); return; }
+            if (!confirm(t('settings.confirm_rollback', { tag: tag }))) return;
 
             fetch('/api/update/preflight')
                 .then(r => r.json())
                 .then(data => {
                     if (!data.ok) {
-                        alert('Preflight failed:\n- ' + data.issues.join('\n- '));
+                        alert(t('settings.preflight_failed', { issues: data.issues.join('\n- ') }));
                         return;
                     }
                     settingsFetch('/api/update/rollback', {
@@ -4213,7 +4489,7 @@
                         body: JSON.stringify({ tag: tag }),
                     }).then(() => startOtaStatusPolling());
                 })
-                .catch(e => alert('Error: ' + e));
+                .catch(e => alert(t('common.error', { message: e })));
         }
 
         function startOtaStatusPolling() {
@@ -4233,7 +4509,7 @@
                         const statusEl = document.getElementById('ota-status');
                         if (statusEl) {
                             statusEl.className = 'update-status-text state-restarting';
-                            statusEl.textContent = 'Server restarting...';
+                            setI18nText(statusEl, 'settings.server_restarting');
                         }
                     });
             }, 2000);
@@ -4340,9 +4616,9 @@
             // Next/Finish button text
             var nextBtn = document.getElementById('onb-next-btn');
             if (onboardingStep === 4) {
-                nextBtn.textContent = onboardingEditMode ? 'Save & Restart' : 'Finish & Start';
+                setI18nText(nextBtn, onboardingEditMode ? 'onboarding.save_restart' : 'onboarding.finish_start');
             } else {
-                nextBtn.textContent = 'Next';
+                setI18nText(nextBtn, 'onboarding.next');
             }
         }
 
@@ -4388,7 +4664,7 @@
             var resultsEl = document.getElementById('onb-discover-results');
 
             btn.disabled = true;
-            statusEl.innerHTML = '<span class="onboarding-spinner"></span> Scanning network...';
+            statusEl.innerHTML = '<span class="onboarding-spinner"></span> ' + t('onboarding.scanning');
             resultsEl.innerHTML = '';
 
             settingsFetch('/api/config/discover')
@@ -4397,16 +4673,16 @@
                     btn.disabled = false;
                     var devices = data.devices || [];
                     if (devices.length === 0) {
-                        statusEl.textContent = 'No inverters found on the network.';
+                        statusEl.textContent = t('onboarding.no_devices');
                         return;
                     }
-                    statusEl.textContent = 'Found ' + devices.length + ' device(s):';
+                    statusEl.textContent = t('onboarding.devices_found', { count: devices.length });
                     resultsEl.innerHTML = '';
                     devices.forEach(function(dev) {
                         var div = document.createElement('div');
                         div.className = 'discover-device';
                         div.innerHTML = '<div class="device-ip">' + dev.ip + '</div>' +
-                            '<div class="device-model">' + (dev.model || 'Unknown model') + '</div>';
+                            '<div class="device-model">' + (dev.model || t('onboarding.unknown_model')) + '</div>';
                         div.onclick = function() {
                             document.querySelectorAll('.discover-device').forEach(function(d) { d.classList.remove('selected'); });
                             div.classList.add('selected');
@@ -4417,7 +4693,7 @@
                 })
                 .catch(function() {
                     btn.disabled = false;
-                    statusEl.textContent = 'Scan failed. Enter details manually.';
+                    statusEl.textContent = t('onboarding.scan_failed');
                 });
         }
 
@@ -4525,7 +4801,7 @@
 
             var nextBtn = document.getElementById('onb-next-btn');
             nextBtn.disabled = true;
-            nextBtn.textContent = 'Saving...';
+            setI18nText(nextBtn, 'onboarding.saving');
 
             settingsFetch('/api/config', {
                 method: 'POST',
@@ -4539,14 +4815,14 @@
                     showRestartOverlay();
                 } else {
                     nextBtn.disabled = false;
-                    nextBtn.textContent = 'Retry';
-                    alert('Error: ' + (data.error || 'Unknown error'));
+                    setI18nText(nextBtn, 'onboarding.retry');
+                    alert(t('common.error', { message: data.error || t('onboarding.unknown_error') }));
                 }
             })
             .catch(function(e) {
                 nextBtn.disabled = false;
-                nextBtn.textContent = 'Retry';
-                alert('Failed to save: ' + e);
+                setI18nText(nextBtn, 'onboarding.retry');
+                alert(t('onboarding.save_failed', { message: e }));
             });
         }
 
@@ -4562,14 +4838,14 @@
                     .then(function(data) {
                         if (data.configured) {
                             clearInterval(pollInterval);
-                            textEl.textContent = 'Ready! Reloading...';
+                            setI18nText(textEl, 'onboarding.ready');
                             setTimeout(function() { window.location.reload(); }, 500);
                         }
                     })
                     .catch(function() {
                         // Server still restarting
                         if (Date.now() - startTime > 30000) {
-                            textEl.textContent = 'Taking longer than expected. Try refreshing manually.';
+                            setI18nText(textEl, 'onboarding.taking_longer');
                         }
                     });
             }, 2000);
@@ -4581,19 +4857,19 @@
         }
 
         function resetConfiguration() {
-            if (!confirm('This will erase all settings and restart the dashboard in setup mode. Are you sure?')) return;
-            if (!confirm('Really reset? This cannot be undone.')) return;
+            if (!confirm(t('settings.reset_confirm'))) return;
+            if (!confirm(t('settings.reset_confirm_again'))) return;
 
             settingsFetch('/api/config/reset', { method: 'POST' })
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     if (data.status === 'ok') {
-                        document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#94a3b8;font-size:1.2rem;">Restarting\u2026</div>';
+                        document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#94a3b8;font-size:1.2rem;">' + t('settings.restarting') + '</div>';
                         setTimeout(function() { location.reload(); }, 4000);
                     }
                 })
                 .catch(function() {
-                    alert('Reset failed. Try again.');
+                    alert(t('settings.reset_failed'));
                 });
         }
 

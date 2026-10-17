@@ -31,6 +31,7 @@ COPY telegram_bot.py .
 COPY poems.py .
 COPY outage_providers/ ./outage_providers/
 COPY templates/ ./templates/
+COPY locales/ ./locales/
 COPY update_manager.py .
 COPY setup.py .
 COPY discover_inverter.py .

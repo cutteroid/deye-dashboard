@@ -195,6 +195,24 @@ class InverterPoller:
 
 app = Flask(__name__)
 
+# UI translations: one JSON file per language in locales/, embedded into the page
+LOCALES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "locales")
+DEFAULT_LANGUAGE = "en"
+
+
+def load_locales(locales_dir=LOCALES_DIR):
+    """Load locales/<lang>.json files, default language first."""
+    locales = {}
+    names = sorted(f[:-5] for f in os.listdir(locales_dir) if f.endswith(".json"))
+    names.sort(key=lambda name: name != DEFAULT_LANGUAGE)
+    for name in names:
+        with open(os.path.join(locales_dir, f"{name}.json"), encoding="utf-8") as f:
+            locales[name] = json.load(f)
+    return locales
+
+
+LOCALES = load_locales()
+
 # Configuration - can be overridden with environment variables
 INVERTER_IP = os.environ.get("INVERTER_IP", "0.0.0.0")
 LOGGER_SERIAL = int(os.environ.get("LOGGER_SERIAL", "0"))
@@ -564,7 +582,8 @@ def add_no_cache_headers(response):
 @app.route("/")
 def index():
     """Serve the dashboard page."""
-    return render_template("index.html", first_run=not _configured)
+    return render_template("index.html", first_run=not _configured,
+                           locales=LOCALES, default_language=DEFAULT_LANGUAGE)
 
 
 @app.route("/api/data")

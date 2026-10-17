@@ -236,6 +236,14 @@ The settings panel (gear button) asks for a PIN before opening. The same PIN is 
 
 This is basic protection for a kiosk display, not real authentication: the PIN is sent in plain HTTP. Factory Reset deletes `.env`, which resets the PIN to `0000`. During first-run setup no PIN is required.
 
+### Language
+
+The dashboard UI is available in English (default) and Ukrainian. Switch with the language button next to the fullscreen button, which opens a list of the available languages; the choice is stored in the browser's local storage, so each device keeps its own language.
+
+Translations live in `locales/<lang>.json` (one file per language, nested keys, `{name}` placeholders). To add a language, copy `locales/en.json` to e.g. `locales/pl.json`, translate the values, and restart — the language button picks it up automatically. `tests/test_i18n.py` checks that every locale has the same keys and placeholders as English.
+
+The Telegram bot is Ukrainian-only and is not affected by this setting.
+
 ### Telegram Bot (optional)
 
 | Variable | Description | Default |

@@ -47,6 +47,8 @@ python scan_phases.py       # phase registers
 
 - **`templates/index.html`** — Single-page dashboard UI with auto-refresh every 5 seconds. Contains energy flow diagrams, phase analytics, planned outages (today/tomorrow), and fullscreen kiosk mode. All frontend logic is inline (no build step).
 
+- **`locales/*.json`** — UI translations (`en` default, `uk`), embedded into the page by `app.py`. Never hardcode user-facing text in `index.html`: static markup uses `data-i18n="key"` / `data-i18n-attr="title:key"`, JS uses `t('key', {param})`, and text on elements that also carry a static key must go through `setI18nText()` / `setPlainText()` so language switches re-translate it. Add every new key to all locale files (`tests/test_i18n.py` enforces matching keys and placeholders).
+
 ### Outage Providers
 
 `outage_providers/` is a provider pattern for power outage schedules:
