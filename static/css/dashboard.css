@@ -1218,8 +1218,11 @@ body.fullscreen-mode {
 }
 
 body.fullscreen-mode .header,
-body.fullscreen-mode .notification-setup {
-    display: none !important;
+body.fullscreen-mode .notification-setup,
+body.fullscreen-mode .settings-toggle-btn,
+body.fullscreen-mode .language-btn,
+body.fullscreen-mode .language-menu {
+    display: none !important;   /* only the fullscreen (exit) button stays */
 }
 
 /* ── Fullscreen: CSS Grid layout ── */

@@ -279,6 +279,9 @@ function updateFullscreenIcon() {
         enterIcon.style.display = 'none';
         exitIcon.style.display = 'block';
         document.body.classList.add('fullscreen-mode');
+        // Their buttons are hidden in fullscreen, so don't leave them open
+        closeLanguageMenu();
+        closeSettingsPanel();
     } else {
         enterIcon.style.display = 'block';
         exitIcon.style.display = 'none';
