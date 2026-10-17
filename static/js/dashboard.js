@@ -1096,10 +1096,13 @@ function renderPlannedOutages() {
         }
     }
 
-    var sourceText = (d && d.provider) ? t('planned.source', { provider: d.provider }) : '';
+    // Provider name highlighted like the NEPTUN link in the alerts card (escaped: it comes from the server)
+    var sourceHtml = (d && d.provider)
+        ? t('planned.source', { provider: '<span class="source-name">' + escapeHtml(d.provider) + '</span>' })
+        : '';
     targets.forEach(function(t) {
         t.body.innerHTML = html;
-        if (t.source) t.source.textContent = sourceText;
+        if (t.source) t.source.innerHTML = sourceHtml;
     });
 }
 
