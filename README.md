@@ -118,7 +118,16 @@ Run the dashboard:
 python app.py
 ```
 
-Open http://localhost:8080 in your browser.
+Open http://localhost:8080 in your browser. The app is served by [waitress](https://docs.pylonsproject.org/projects/waitress/) (a production WSGI server). For local development with the Flask debugger, run `DASHBOARD_DEV=1 python app.py` — never on a device reachable from the network.
+
+Inverter capabilities (phases, battery, PV strings, generator) are auto-detected in the background after startup and saved to `inverter_config.json` (override the path with `INVERTER_CONFIG_FILE`); the next start uses the saved result immediately. Set `INVERTER_PHASES`, `INVERTER_HAS_BATTERY`, `INVERTER_PV_STRINGS` and `INVERTER_HAS_GENERATOR` to skip detection.
+
+Run the tests:
+
+```bash
+pip install pytest
+python -m pytest        # runs tests/ (see pytest.ini), takes a few seconds
+```
 
 ## Docker
 

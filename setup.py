@@ -8,6 +8,8 @@ Uses only Python stdlib — no external dependencies required.
 """
 
 import os
+import re
+from datetime import datetime
 import subprocess
 import sys
 import json
@@ -30,6 +32,113 @@ MANAGED_KEYS = [
     "TELEGRAM_ENABLED", "TELEGRAM_BOT_TOKEN", "TELEGRAM_ALLOWED_USERS",
     "TELEGRAM_PUBLIC",
 ]
+
+MAX_LOGGER_SERIAL = 0xFFFFFFFF  # Solarman V5 packs the serial as an unsigned 32-bit int
+OUTAGE_PROVIDERS = ("lvivoblenergo", "yasno", "dtek", "none")
+DTEK_REGIONS = ("kyiv-region", "kyiv", "dnipro", "odesa")
+_BOOL_VALUES = ("true", "false", "1", "0", "yes", "no")
+_HOSTNAME_RE = re.compile(
+    r"^(?=.{1,253}$)[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$")
+
+
+def _check_host(v):
+    parts = v.split(".")
+    if all(p.isdigit() for p in parts):
+        if len(parts) != 4 or any(int(p) > 255 for p in parts):
+            return "must be a valid IPv4 address"
+        return None
+    return None if _HOSTNAME_RE.match(v) else "must be an IPv4 address or hostname"
+
+
+def _check_int_range(lo, hi):
+    def check(v):
+        if not v.isdigit() or not lo <= int(v) <= hi:
+            return f"must be a whole number from {lo} to {hi}"
+        return None
+    return check
+
+
+def _check_float_range(lo, hi):
+    def check(v):
+        try:
+            f = float(v)
+        except ValueError:
+            return "must be a number"
+        return None if lo <= f <= hi else f"must be between {lo} and {hi}"
+    return check
+
+
+def _check_choice(choices):
+    return lambda v: None if v in choices else f"must be one of: {', '.join(choices)}"
+
+
+def _check_regex(pattern, message):
+    rx = re.compile(pattern)
+    return lambda v: None if rx.match(v) else message
+
+
+def _check_date(v):
+    try:
+        datetime.strptime(v, "%Y-%m-%d")
+        return None
+    except ValueError:
+        return "must be a date in YYYY-MM-DD format"
+
+
+def _check_token(v):
+    if "****" in v:  # masked value echoed back by the config editor: keep existing
+        return None
+    return None if re.match(r"^\d+:[A-Za-z0-9_-]{20,}$", v) else "must look like 123456:ABC-DEF..."
+
+
+# Validators per managed key; empty values are allowed for optional keys.
+_VALIDATORS = {
+    "INVERTER_IP": _check_host,
+    "LOGGER_SERIAL": _check_int_range(1, MAX_LOGGER_SERIAL),
+    "WEATHER_LATITUDE": _check_float_range(-90, 90),
+    "WEATHER_LONGITUDE": _check_float_range(-180, 180),
+    "OUTAGE_PROVIDER": _check_choice(OUTAGE_PROVIDERS),
+    "OUTAGE_GROUP": _check_regex(r"^(GPV)?\d{1,2}\.\d{1,2}$", "must look like 4.2"),
+    "OUTAGE_REGION_ID": _check_int_range(1, 100000),
+    "OUTAGE_DSO_ID": _check_int_range(1, 100000),
+    "OUTAGE_DTEK_REGION": _check_choice(DTEK_REGIONS),
+    "INVERTER_HAS_GENERATOR": _check_choice(_BOOL_VALUES),
+    "GENERATOR_FUEL_RATE": _check_float_range(0, 100),
+    "GENERATOR_OIL_CHANGE_DATE": _check_date,
+    "TELEGRAM_ENABLED": _check_choice(_BOOL_VALUES),
+    "TELEGRAM_BOT_TOKEN": _check_token,
+    "TELEGRAM_ALLOWED_USERS": _check_regex(r"^[\d,\s]*$", "must be comma-separated numeric user IDs"),
+    "TELEGRAM_PUBLIC": _check_choice(_BOOL_VALUES),
+}
+_REQUIRED_KEYS = ("INVERTER_IP", "LOGGER_SERIAL")
+
+
+def validate_config(values):
+    """Validate config values (as submitted by the config editor).
+
+    Returns {key: error message}; empty when everything is valid. Rejects unknown
+    keys, non-string values and line breaks (which would inject extra .env lines).
+    """
+    errors = {}
+    for key, value in values.items():
+        if key not in _VALIDATORS:
+            errors[key] = "unknown setting"
+            continue
+        if not isinstance(value, str):
+            errors[key] = "must be a string"
+            continue
+        if any(c in value for c in "\r\n\0"):
+            errors[key] = "must not contain line breaks"
+            continue
+        value = value.strip()
+        if not value:
+            if key in _REQUIRED_KEYS:
+                errors[key] = "is required"
+            continue
+        message = _VALIDATORS[key](value)
+        if message:
+            errors[key] = message
+    return errors
 
 
 def ask(prompt, default=""):

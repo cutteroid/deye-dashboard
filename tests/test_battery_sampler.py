@@ -93,3 +93,18 @@ class TestSample:
         sampler._sample()
         assert len(sampler._buffer) == 0
         assert len(sampler._soc_buffer) == 0
+
+
+class TestConnectionCleanup:
+    def test_disconnects_after_failed_read(self):
+        from unittest.mock import MagicMock
+        from inverter import BatterySampler, InverterConfig
+        import threading
+        inv = MagicMock()
+        inv.config = InverterConfig(phases=3, has_battery=True)
+        inv.lock = threading.Lock()
+        inv.inverter = MagicMock()
+        inv.read_register.side_effect = Exception("No socket available")
+        sampler = BatterySampler(inv)
+        sampler._sample()
+        inv.disconnect.assert_called_once()

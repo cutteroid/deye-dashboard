@@ -34,6 +34,7 @@ COPY templates/ ./templates/
 COPY static/ ./static/
 COPY locales/ ./locales/
 COPY update_manager.py .
+COPY storage.py .
 COPY setup.py .
 COPY discover_inverter.py .
 

@@ -19,6 +19,7 @@ def client():
     orig_outage_poller = app_module.outage_poller
     orig_weather_poller = app_module.weather_poller
     orig_inverter_config = app_module.inverter_config
+    orig_configured = app_module._configured
 
     # Create mock pollers
     mock_inv_poller = MagicMock()
@@ -27,6 +28,7 @@ def client():
     app_module.inverter_poller = mock_inv_poller
     app_module.weather_poller = mock_weather_poller
     app_module.inverter_config = InverterConfig(phases=3, has_battery=True, pv_strings=2, has_generator=False)
+    app_module._configured = True  # endpoints return 503/defaults when unconfigured
 
     with app_module.app.test_client() as c:
         yield c, mock_inv_poller, app_module
@@ -36,6 +38,7 @@ def client():
     app_module.outage_poller = orig_outage_poller
     app_module.weather_poller = orig_weather_poller
     app_module.inverter_config = orig_inverter_config
+    app_module._configured = orig_configured
 
 
 class TestGetData:
@@ -217,7 +220,8 @@ class TestClearEndpoints:
         c, _, app_module = client
         with patch.object(app_module, "save_phase_stats") as mock_phase, \
              patch.object(app_module, "save_phase_history") as mock_hist:
-            resp = c.post("/api/phase-stats/clear")
+            app_module._pin_failures, app_module._pin_locked_until = 0, 0.0
+            resp = c.post("/api/phase-stats/clear", headers={"X-Settings-Pin": "0000"})
         assert resp.status_code == 200
         mock_phase.assert_called_once_with({})
         mock_hist.assert_called_once_with({})

@@ -106,6 +106,7 @@ FILES=(
     "poems.py"
     "outage_providers"
     "update_manager.py"
+    "storage.py"
     "requirements.txt"
     "templates"
     "static"

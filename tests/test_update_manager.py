@@ -161,6 +161,7 @@ class TestOtaApiEndpoints:
         orig_outage_poller = app_module.outage_poller
         orig_weather_poller = app_module.weather_poller
         orig_inverter_config = app_module.inverter_config
+        orig_configured = app_module._configured
         orig_update_poller = app_module.update_poller
         orig_update_manager = app_module.update_manager
 
@@ -169,14 +170,22 @@ class TestOtaApiEndpoints:
 
         app_module.inverter_poller = mock_inv_poller
         app_module.weather_poller = mock_weather_poller
+        app_module._configured = True  # /api/update/status returns defaults when unconfigured
+        known_poller = MagicMock()
+        type(known_poller).data = PropertyMock(return_value={"available_tags": ["v1.1.0", "v1.0.0"]})
+        app_module.update_poller = known_poller
+        app_module._pin_failures = 0
+        app_module._pin_locked_until = 0.0
 
         with app_module.app.test_client() as c:
+            c.environ_base["HTTP_X_SETTINGS_PIN"] = "0000"  # update endpoints need the settings PIN
             yield c, app_module
 
         app_module.inverter_poller = orig_inverter_poller
         app_module.outage_poller = orig_outage_poller
         app_module.weather_poller = orig_weather_poller
         app_module.inverter_config = orig_inverter_config
+        app_module._configured = orig_configured
         app_module.update_poller = orig_update_poller
         app_module.update_manager = orig_update_manager
 
@@ -259,3 +268,59 @@ class TestOtaApiEndpoints:
         data = resp.get_json()
         assert data["ok"] is True
         assert data["issues"] == []
+
+
+class TestTagSafety:
+    def test_version_ordering(self):
+        poller = UpdatePoller(repo="owner/repo")
+        mock_resp = MagicMock()
+        mock_resp.ok = True
+        mock_resp.json.return_value = [{"name": "v1.9.0"}, {"name": "v1.10.0"}, {"name": "v1.2.0"}]
+        with patch("update_manager.requests.get", return_value=mock_resp), \
+             patch("update_manager.get_current_version", return_value="v1.9.0-4-gabc1234"):
+            poller._fetch()
+        assert poller.data["available_tags"] == ["v1.10.0", "v1.9.0", "v1.2.0"]
+        assert poller.data["latest_tag"] == "v1.10.0"
+        assert poller.data["update_available"] is True
+
+    def test_no_update_when_ahead_of_latest_tag(self):
+        poller = UpdatePoller(repo="owner/repo")
+        mock_resp = MagicMock()
+        mock_resp.ok = True
+        mock_resp.json.return_value = [{"name": "v1.2.0"}, {"name": "v1.1.0"}]
+        with patch("update_manager.requests.get", return_value=mock_resp), \
+             patch("update_manager.get_current_version", return_value="v1.2.0-7-gdeadbee"):
+            poller._fetch()
+        assert poller.data["update_available"] is False
+
+    def test_invalid_tags_rejected(self):
+        from update_manager import is_valid_tag
+        assert is_valid_tag("v1.2.0") and is_valid_tag("2026.10-rc1")
+        for bad in ("--upload-pack=evil", "-f", "", "v1 2", "a;b", None):
+            assert not is_valid_tag(bad), bad
+
+    def test_manager_refuses_invalid_tag(self):
+        mgr = UpdateManager()
+        with patch("update_manager.threading.Thread") as mock_thread:
+            assert mgr.update_to_tag("--orphan=x") is False
+        mock_thread.assert_not_called()
+        assert mgr.status["state"] == "error"
+
+    def test_api_rejects_unknown_tag(self):
+        import app as app_module
+        app_module.app.config["TESTING"] = True
+        orig = (app_module._configured, app_module.update_poller, app_module.update_manager)
+        try:
+            app_module._configured = True
+            app_module._pin_failures, app_module._pin_locked_until = 0, 0.0
+            poller = MagicMock()
+            type(poller).data = PropertyMock(return_value={"available_tags": ["v1.1.0"]})
+            app_module.update_poller = poller
+            app_module.update_manager = MagicMock()
+            with app_module.app.test_client() as c:
+                resp = c.post("/api/update/apply", json={"tag": "main"},
+                              headers={"X-Settings-Pin": "0000"})
+            assert resp.status_code == 400
+            app_module.update_manager.update_to_tag.assert_not_called()
+        finally:
+            app_module._configured, app_module.update_poller, app_module.update_manager = orig

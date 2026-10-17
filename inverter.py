@@ -335,6 +335,14 @@ class DeyeInverter:
         return data
 
     def detect_config(self):
+        """Auto-detect inverter configuration; see _detect_config(). Always disconnects."""
+        try:
+            return self._detect_config()
+        finally:
+            with self.lock:
+                self.disconnect()
+
+    def _detect_config(self):
         """Auto-detect inverter configuration by reading diagnostic registers.
 
         Two-stage detection:
@@ -491,7 +499,6 @@ class BatterySampler:
         self._lock = threading.Lock()
         self._running = False
         self._thread = None
-        self._disabled = False
 
     def _sample(self):
         """Read battery voltage and SOC once, store if valid."""
@@ -501,11 +508,15 @@ class BatterySampler:
             reg_voltage, reg_soc = 587, 588
         try:
             with self.inverter.lock:
-                if not self.inverter.inverter:
-                    self.inverter.connect()
-                raw_v = self.inverter.read_register(reg_voltage)
-                raw_soc = self.inverter.read_register(reg_soc)
-                self.inverter.disconnect()
+                try:
+                    if not self.inverter.inverter:
+                        self.inverter.connect()
+                    raw_v = self.inverter.read_register(reg_voltage)
+                    raw_soc = self.inverter.read_register(reg_soc)
+                finally:
+                    # Also on errors: a broken socket left open would be reused
+                    # by the next reader and fail again
+                    self.inverter.disconnect()
             voltage = raw_v / 100
         except Exception as e:
             logger.warning("BatterySampler: failed to read battery registers: %s", e)
@@ -541,17 +552,15 @@ class BatterySampler:
             return sorted(self._soc_buffer)[len(self._soc_buffer) // 2]
 
     def _run(self):
-        """Main sampling loop."""
+        """Main sampling loop (idle while no battery is configured)."""
         while self._running:
-            self._sample()
+            # Checked every loop: background auto-detect may change the config
+            if self.inverter.config.has_battery:
+                self._sample()
             time.sleep(self.interval)
 
     def start(self):
-        """Start sampling in a background thread. Skips if inverter has no battery."""
-        if not self.inverter.config.has_battery:
-            self._disabled = True
-            logger.info("BatterySampler: skipping start (no battery configured)")
-            return
+        """Start sampling in a background thread."""
         self._running = True
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()

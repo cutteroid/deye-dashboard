@@ -4,6 +4,7 @@ Polls GitHub for new tagged releases and manages git-based updates.
 """
 import logging
 import os
+import re
 import subprocess
 import threading
 import time
@@ -12,6 +13,24 @@ from datetime import datetime
 import requests
 
 logger = logging.getLogger(__name__)
+
+# Tag names we are willing to pass to git: no leading "-" (would be read as an option)
+TAG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{0,99}$")
+_DESCRIBE_SUFFIX_RE = re.compile(r"-\d+-g[0-9a-f]+$")
+
+
+def is_valid_tag(tag):
+    return isinstance(tag, str) and bool(TAG_RE.match(tag))
+
+
+def version_key(tag):
+    """Sort key so v1.10.0 > v1.9.0 (numeric parts compared as numbers)."""
+    return tuple(int(n) for n in re.findall(r"\d+", tag))
+
+
+def base_tag(version):
+    """Tag part of `git describe` output: v1.2.0-3-gabc123 -> v1.2.0."""
+    return _DESCRIBE_SUFFIX_RE.sub("", version)
 
 
 def get_current_version():
@@ -49,13 +68,19 @@ class UpdatePoller:
                 logger.warning("Unexpected GitHub API response format")
                 return
 
-            tag_names = [t["name"] for t in tags if "name" in t]
+            # GitHub doesn't guarantee newest-first order: sort by version number
+            tag_names = sorted((t["name"] for t in tags if "name" in t and is_valid_tag(t["name"])),
+                               key=version_key, reverse=True)
             current = get_current_version()
             latest = tag_names[0] if tag_names else None
 
             update_available = False
             if latest and current != "unknown":
-                update_available = latest != current and not current.startswith(latest)
+                current_tag = base_tag(current)
+                if current_tag in tag_names:
+                    update_available = version_key(latest) > version_key(current_tag)
+                else:
+                    update_available = latest != current_tag
 
             result = {
                 "current_version": current,
@@ -168,7 +193,7 @@ class UpdateManager:
         """Check if requirements.txt differs between current HEAD and target tag."""
         try:
             result = subprocess.run(
-                ["git", "diff", "--name-only", "HEAD", tag, "--", "requirements.txt"],
+                ["git", "diff", "--name-only", "HEAD", f"refs/tags/{tag}", "--", "requirements.txt"],
                 capture_output=True, text=True, timeout=10,
             )
             return "requirements.txt" in result.stdout
@@ -177,6 +202,9 @@ class UpdateManager:
 
     def update_to_tag(self, tag):
         """Start an update to the specified tag in a background thread."""
+        if not is_valid_tag(tag):
+            self._set_status("error", error=f"Invalid tag name: {tag!r}")
+            return False
         if not self._lock.acquire(blocking=False):
             self._set_status("error", error="Update already in progress")
             return False
@@ -203,7 +231,7 @@ class UpdateManager:
 
             # Checkout the tag (force to discard local changes)
             result = subprocess.run(
-                ["git", "checkout", "-f", tag],
+                ["git", "checkout", "-f", f"refs/tags/{tag}"],
                 capture_output=True, text=True, timeout=30,
             )
             if result.returncode != 0:

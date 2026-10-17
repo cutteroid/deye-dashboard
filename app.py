@@ -10,7 +10,8 @@ from inverter import DeyeInverter, BatterySampler, InverterConfig
 from telegram_bot import TelegramBot
 from outage_providers import OutageSchedulePoller, create_outage_provider
 from update_manager import get_current_version, UpdatePoller, UpdateManager
-from datetime import datetime, date
+from storage import atomic_write_json, load_json
+from datetime import datetime, date, timedelta
 from functools import wraps
 import hashlib
 import hmac
@@ -35,11 +36,40 @@ OPEN_METEO_URL = (
 logger = logging.getLogger(__name__)
 
 
+def parse_logger_serial(raw):
+    """Logger serial as int, or 0 if missing/invalid (must fit in 32 bits)."""
+    try:
+        serial = int(str(raw).strip())
+    except (TypeError, ValueError):
+        return 0
+    return serial if 0 < serial <= 0xFFFFFFFF else 0
+
+
+def env_float(name, default):
+    """Float env var; a bad value falls back to the default instead of crashing."""
+    raw = os.environ.get(name, "")
+    try:
+        return float(raw) if raw.strip() else default
+    except ValueError:
+        logger.warning("Ignoring invalid %s=%r, using %s", name, raw, default)
+        return default
+
+
 def is_configured():
-    """Check if .env has valid required config."""
+    """Check if .env has valid required config.
+
+    An invalid serial counts as not configured, so the dashboard opens the
+    setup wizard (where it can be fixed) instead of failing at startup.
+    """
     ip = os.environ.get("INVERTER_IP", "0.0.0.0")
-    serial = os.environ.get("LOGGER_SERIAL", "0")
-    return ip != "0.0.0.0" and ip != "" and serial != "0" and serial != ""
+    serial_raw = os.environ.get("LOGGER_SERIAL", "")
+    if ip in ("0.0.0.0", "") or not serial_raw:
+        return False
+    if not parse_logger_serial(serial_raw):
+        logger.warning("LOGGER_SERIAL=%r is not a valid logger serial (1..4294967295); "
+                       "starting in setup mode", serial_raw)
+        return False
+    return True
 
 
 class WeatherPoller:
@@ -110,11 +140,10 @@ class InverterPoller:
 
     def _load_cache(self):
         """Load last inverter data from file if fresh enough."""
-        if not self.cache_file or not os.path.exists(self.cache_file):
+        if not self.cache_file:
             return
         try:
-            with open(self.cache_file, "r") as f:
-                data = json.load(f)
+            data = load_json(self.cache_file, {})
             last = data.get("last_updated")
             if last:
                 age = (datetime.now() - datetime.fromisoformat(last)).total_seconds()
@@ -134,8 +163,7 @@ class InverterPoller:
         try:
             with self._lock:
                 data = dict(self._cache)
-            with open(self.cache_file, "w") as f:
-                json.dump(data, f)
+            atomic_write_json(self.cache_file, data)
         except Exception:
             logger.exception("Failed to save inverter cache")
 
@@ -240,29 +268,46 @@ def inject_asset_url():
 
 # Configuration - can be overridden with environment variables
 INVERTER_IP = os.environ.get("INVERTER_IP", "0.0.0.0")
-LOGGER_SERIAL = int(os.environ.get("LOGGER_SERIAL", "0"))
+LOGGER_SERIAL = parse_logger_serial(os.environ.get("LOGGER_SERIAL", "0"))
 PHASE_STATS_FILE = os.environ.get("PHASE_STATS_FILE", "phase_stats.json")
 PHASE_HISTORY_FILE = os.environ.get("PHASE_HISTORY_FILE", "phase_history.json")
 GRID_DAILY_LOG_FILE = os.environ.get("GRID_DAILY_LOG_FILE", "grid_daily_log.json")
 GENERATOR_LOG_FILE = os.environ.get("GENERATOR_LOG_FILE", "generator_log.json")
-GENERATOR_FUEL_RATE = float(os.environ.get("GENERATOR_FUEL_RATE", "0"))
+GENERATOR_FUEL_RATE = env_float("GENERATOR_FUEL_RATE", 0.0)
 GENERATOR_OIL_CHANGE_DATE = os.environ.get("GENERATOR_OIL_CHANGE_DATE", "")
 
 
-def build_inverter_config(inv):
-    """Build InverterConfig from env vars, auto-detecting any missing values."""
+INVERTER_CONFIG_FILE = os.environ.get("INVERTER_CONFIG_FILE", "inverter_config.json")
+_CONFIG_ENV_KEYS = ("INVERTER_PHASES", "INVERTER_HAS_BATTERY", "INVERTER_PV_STRINGS", "INVERTER_HAS_GENERATOR")
+
+
+def _env_bool(value):
+    return value.lower() in ("true", "1", "yes")
+
+
+def env_config_complete():
+    """True if all inverter capabilities are set in env (no detection needed)."""
+    return all(os.environ.get(key) for key in _CONFIG_ENV_KEYS)
+
+
+def apply_env_overrides(base):
+    """Return a copy of base with any INVERTER_* env values applied on top."""
     env_phases = os.environ.get("INVERTER_PHASES")
     env_battery = os.environ.get("INVERTER_HAS_BATTERY")
     env_pv = os.environ.get("INVERTER_PV_STRINGS")
     env_generator = os.environ.get("INVERTER_HAS_GENERATOR")
+    return InverterConfig(
+        phases=int(env_phases) if env_phases else base.phases,
+        has_battery=_env_bool(env_battery) if env_battery else base.has_battery,
+        pv_strings=int(env_pv) if env_pv else base.pv_strings,
+        has_generator=_env_bool(env_generator) if env_generator else base.has_generator,
+    )
 
-    if env_phases and env_battery and env_pv and env_generator:
-        return InverterConfig(
-            phases=int(env_phases),
-            has_battery=env_battery.lower() in ("true", "1", "yes"),
-            pv_strings=int(env_pv),
-            has_generator=env_generator.lower() in ("true", "1", "yes"),
-        )
+
+def build_inverter_config(inv):
+    """Build InverterConfig from env vars, auto-detecting any missing values (blocking)."""
+    if env_config_complete():
+        return apply_env_overrides(InverterConfig())
 
     # Auto-detect missing values
     try:
@@ -270,15 +315,53 @@ def build_inverter_config(inv):
     except Exception:
         logger.warning("Auto-detect failed, using defaults")
         detected = InverterConfig()
+    return apply_env_overrides(detected)
 
-    return InverterConfig(
-        phases=int(env_phases) if env_phases else detected.phases,
-        has_battery=(env_battery.lower() in ("true", "1", "yes"))
-            if env_battery else detected.has_battery,
-        pv_strings=int(env_pv) if env_pv else detected.pv_strings,
-        has_generator=(env_generator.lower() in ("true", "1", "yes"))
-            if env_generator else detected.has_generator,
-    )
+
+def load_cached_inverter_config():
+    """Last auto-detected config saved by refresh_inverter_config(), or None."""
+    data = load_json(INVERTER_CONFIG_FILE, None)
+    if not isinstance(data, dict):
+        return None
+    try:
+        return InverterConfig(
+            phases=int(data["phases"]), has_battery=bool(data["has_battery"]),
+            pv_strings=int(data["pv_strings"]), has_generator=bool(data["has_generator"]),
+        )
+    except (KeyError, TypeError, ValueError):
+        logger.warning("Ignoring invalid cached inverter config in %s", INVERTER_CONFIG_FILE)
+        return None
+
+
+def initial_inverter_config():
+    """Config to start with immediately: env, else last detected, else defaults."""
+    cached = None if env_config_complete() else load_cached_inverter_config()
+    if cached:
+        logger.info("Using last detected inverter config: %s", cached.to_dict())
+    return apply_env_overrides(cached or InverterConfig())
+
+
+def refresh_inverter_config(inv, config):
+    """Auto-detect capabilities, save them for the next start and update config in place.
+
+    Runs in the background so startup isn't blocked by detection (several
+    seconds of inverter reads and sleeps). Pollers read the shared config
+    object on every poll, so an update takes effect on the next read.
+    """
+    try:
+        detected = inv.detect_config()
+    except Exception as e:
+        logger.warning("Auto-detect failed (%s), keeping %s", e, config.to_dict())
+        return
+    try:
+        atomic_write_json(INVERTER_CONFIG_FILE, detected.to_dict())
+    except OSError:
+        logger.exception("Could not save detected inverter config")
+    updated = apply_env_overrides(detected)
+    if updated != config:
+        logger.info("Inverter config updated by auto-detect: %s -> %s", config.to_dict(), updated.to_dict())
+        for field in ("phases", "has_battery", "pv_strings", "has_generator"):
+            setattr(config, field, getattr(updated, field))
 
 
 # Service variables — initialised by init_services() when configured
@@ -355,8 +438,11 @@ def init_services():
     global update_poller, update_manager
 
     inverter = DeyeInverter(INVERTER_IP, LOGGER_SERIAL)
-    inverter_config = build_inverter_config(inverter)
+    inverter_config = initial_inverter_config()
     inverter.config = inverter_config
+    if not env_config_complete():
+        threading.Thread(target=refresh_inverter_config, args=(inverter, inverter_config),
+                         name="inverter-detect", daemon=True).start()
 
     battery_sampler = BatterySampler(inverter, interval=30)
     battery_sampler.start()
@@ -385,14 +471,15 @@ def init_services():
 
     # OTA update system
     github_repo = os.environ.get("GITHUB_REPO", "ivanursul/deye-dashboard")
-    update_check_interval = int(os.environ.get("UPDATE_CHECK_INTERVAL", "600"))
+    update_check_interval = int(env_float("UPDATE_CHECK_INTERVAL", 600))
     update_poller = UpdatePoller(repo=github_repo, poll_interval=update_check_interval)
     update_manager = UpdateManager()
     update_poller.start()
 
 
-if _configured:
-    init_services()
+# Read-modify-write of the data files happens from the poller thread and from
+# request threads (e.g. "clear"); this lock keeps those updates from interleaving.
+_data_lock = threading.RLock()
 
 # Phase data collection
 last_sample_time = None
@@ -402,19 +489,20 @@ phase_accumulator = {"l1": 0, "l2": 0, "l3": 0}
 
 def load_grid_daily_log():
     """Load grid daily import log from file."""
-    if os.path.exists(GRID_DAILY_LOG_FILE):
-        with open(GRID_DAILY_LOG_FILE, "r") as f:
-            return json.load(f)
-    return {}
+    return load_json(GRID_DAILY_LOG_FILE, {})
 
 
 def save_grid_daily_log(log):
     """Save grid daily import log to file."""
-    with open(GRID_DAILY_LOG_FILE, "w") as f:
-        json.dump(log, f, indent=2)
+    atomic_write_json(GRID_DAILY_LOG_FILE, log, indent=2)
 
 
 def record_grid_daily_import(daily_kwh):
+    with _data_lock:
+        return _record_grid_daily_import(daily_kwh)
+
+
+def _record_grid_daily_import(daily_kwh):
     """Record today's daily grid import value, overwriting previous entry."""
     today = datetime.now().strftime("%Y-%m-%d")
     log = load_grid_daily_log()
@@ -429,16 +517,12 @@ def record_grid_daily_import(daily_kwh):
 
 def load_generator_log():
     """Load generator runtime log from file."""
-    if os.path.exists(GENERATOR_LOG_FILE):
-        with open(GENERATOR_LOG_FILE, "r") as f:
-            return json.load(f)
-    return {}
+    return load_json(GENERATOR_LOG_FILE, {})
 
 
 def save_generator_log(log):
     """Save generator runtime log to file."""
-    with open(GENERATOR_LOG_FILE, "w") as f:
-        json.dump(log, f, indent=2)
+    atomic_write_json(GENERATOR_LOG_FILE, log, indent=2)
 
 
 # Generator runtime tracking state
@@ -446,11 +530,30 @@ generator_last_running = None
 generator_session_start = None
 
 
-def track_generator_runtime(generator_power):
-    """Track generator runtime based on power readings."""
+def track_generator_runtime(generator_power, now=None):
+    with _data_lock:
+        return _track_generator_runtime(generator_power, now)
+
+
+def _find_open_generator_session(log):
+    """(date_key, session) of the last session without an end, or (None, None)."""
+    for day in sorted(log.keys(), reverse=True):
+        sessions = log[day].get("sessions", [])
+        if sessions and sessions[-1].get("end") is None:
+            return day, sessions[-1]
+    return None, None
+
+
+def _track_generator_runtime(generator_power, now=None):
+    """Track generator runtime based on power readings.
+
+    Sessions are stored per day; a session running past midnight is split at
+    midnight so each day gets its own runtime. The open session lives in the log
+    (end=None), so its start is recovered after an app restart.
+    """
     global generator_last_running, generator_session_start
 
-    now = datetime.now()
+    now = now or datetime.now()
     today = now.strftime("%Y-%m-%d")
     running = generator_power > 0
 
@@ -458,6 +561,26 @@ def track_generator_runtime(generator_power):
 
     if today not in log:
         log[today] = {"runtime_seconds": 0, "sessions": []}
+
+    if generator_last_running is None:
+        # First reading since start: resume a session left open by a restart
+        day, session = _find_open_generator_session(log)
+        if session:
+            generator_session_start = datetime.strptime(f"{day} {session['start']}", "%Y-%m-%d %H:%M:%S")
+            generator_last_running = True
+            logger.info("Resuming generator session started %s", generator_session_start)
+
+    # Split a session that crossed midnight: close it at midnight, continue today
+    while generator_last_running and generator_session_start and generator_session_start.date() < now.date():
+        session_day = generator_session_start.strftime("%Y-%m-%d")
+        midnight = datetime.combine(generator_session_start.date() + timedelta(days=1), datetime.min.time())
+        day_log = log.setdefault(session_day, {"runtime_seconds": 0, "sessions": []})
+        day_log["runtime_seconds"] += int((midnight - generator_session_start).total_seconds())
+        if day_log["sessions"] and day_log["sessions"][-1]["end"] is None:
+            day_log["sessions"][-1]["end"] = "24:00:00"
+        next_day = log.setdefault(midnight.strftime("%Y-%m-%d"), {"runtime_seconds": 0, "sessions": []})
+        next_day["sessions"].append({"start": "00:00:00", "end": None})
+        generator_session_start = midnight
 
     if running and not generator_last_running:
         # Transition: off → on — start new session
@@ -489,33 +612,30 @@ def track_generator_runtime(generator_power):
 
 def load_phase_stats():
     """Load phase statistics from file."""
-    if os.path.exists(PHASE_STATS_FILE):
-        with open(PHASE_STATS_FILE, "r") as f:
-            return json.load(f)
-    return {}
+    return load_json(PHASE_STATS_FILE, {})
 
 
 def save_phase_stats(stats):
     """Save phase statistics to file."""
-    with open(PHASE_STATS_FILE, "w") as f:
-        json.dump(stats, f, indent=2)
+    atomic_write_json(PHASE_STATS_FILE, stats, indent=2)
 
 
 def load_phase_history():
     """Load phase time-series history from file."""
-    if os.path.exists(PHASE_HISTORY_FILE):
-        with open(PHASE_HISTORY_FILE, "r") as f:
-            return json.load(f)
-    return {}
+    return load_json(PHASE_HISTORY_FILE, {})
 
 
 def save_phase_history(history):
     """Save phase time-series history to file."""
-    with open(PHASE_HISTORY_FILE, "w") as f:
-        json.dump(history, f, indent=2)
+    atomic_write_json(PHASE_HISTORY_FILE, history, indent=2)
 
 
 def record_phase_sample(load_l1, load_l2, load_l3):
+    with _data_lock:
+        return _record_phase_sample(load_l1, load_l2, load_l3)
+
+
+def _record_phase_sample(load_l1, load_l2, load_l3):
     """Record a phase power sample and accumulate energy."""
     global last_sample_time, last_history_save, phase_accumulator
 
@@ -570,6 +690,11 @@ def record_phase_sample(load_l1, load_l2, load_l3):
 
 
 def save_to_phase_history(timestamp, l1, l2, l3):
+    with _data_lock:
+        return _save_to_phase_history(timestamp, l1, l2, l3)
+
+
+def _save_to_phase_history(timestamp, l1, l2, l3):
     """Save a data point to the time-series history."""
     history = load_phase_history()
     today = timestamp.strftime("%Y-%m-%d")
@@ -672,10 +797,12 @@ def get_phase_history():
 
 
 @app.route("/api/phase-stats/clear", methods=["POST"])
+@require_settings_pin
 def clear_phase_stats():
     """Clear phase statistics."""
-    save_phase_stats({})
-    save_phase_history({})
+    with _data_lock:
+        save_phase_stats({})
+        save_phase_history({})
     return jsonify({"status": "ok"})
 
 
@@ -829,32 +956,31 @@ def check_for_updates():
     return jsonify({"status": "ok"})
 
 
+def _start_update(action):
+    """Start an update/rollback to a tag the update poller has seen on GitHub."""
+    tag = (request.get_json(silent=True) or {}).get("tag")
+    if not tag:
+        return jsonify({"status": "error", "error": "Missing 'tag' parameter"}), 400
+    known_tags = ((update_poller.data if update_poller else None) or {}).get("available_tags", [])
+    if tag not in known_tags:
+        return jsonify({"status": "error", "error": f"Unknown tag: {tag}"}), 400
+    if not update_manager.update_to_tag(tag):
+        return jsonify({"status": "error", "error": f"{action} already in progress"}), 409
+    return jsonify({"status": "ok", "message": f"{action} to {tag} started"})
+
+
 @app.route("/api/update/apply", methods=["POST"])
 @require_settings_pin
 def apply_update():
     """Apply an update to the specified tag."""
-    data = request.json or {}
-    tag = data.get("tag")
-    if not tag:
-        return jsonify({"status": "error", "error": "Missing 'tag' parameter"}), 400
-    ok = update_manager.update_to_tag(tag)
-    if not ok:
-        return jsonify({"status": "error", "error": "Update already in progress"}), 409
-    return jsonify({"status": "ok", "message": f"Update to {tag} started"})
+    return _start_update("Update")
 
 
 @app.route("/api/update/rollback", methods=["POST"])
 @require_settings_pin
 def rollback_update():
     """Rollback to the specified tag (same mechanism as update)."""
-    data = request.json or {}
-    tag = data.get("tag")
-    if not tag:
-        return jsonify({"status": "error", "error": "Missing 'tag' parameter"}), 400
-    ok = update_manager.update_to_tag(tag)
-    if not ok:
-        return jsonify({"status": "error", "error": "Rollback already in progress"}), 409
-    return jsonify({"status": "ok", "message": f"Rollback to {tag} started"})
+    return _start_update("Rollback")
 
 
 @app.route("/api/update/preflight")
@@ -892,14 +1018,39 @@ def get_config():
     return jsonify(values)
 
 
+def _restart_now():
+    """Restart via systemd if possible, otherwise exit for the supervisor to restart us."""
+    try:
+        # -n: fail instead of waiting for a password prompt
+        subprocess.run(["sudo", "-n", "systemctl", "restart", "deye-dashboard"],
+                       check=True, capture_output=True, timeout=15)
+        return  # systemd stops this process
+    except Exception as e:
+        logger.warning("systemctl restart unavailable (%s); exiting for the supervisor to restart", e)
+    # Non-zero so systemd (Restart=always/on-failure) and Docker restart policies both restart
+    os._exit(3)
+
+
+def schedule_restart(delay=2):
+    """Restart shortly, after the HTTP response has been sent."""
+    threading.Timer(delay, _restart_now).start()
+
+
 @app.route("/api/config", methods=["POST"])
 @require_settings_pin
 def save_config():
     """Save configuration values to .env and restart the service."""
-    from setup import load_existing_env, write_env
-    new_values = request.json
+    from setup import load_existing_env, write_env, validate_config
+    new_values = request.get_json(silent=True)
     if not new_values or not isinstance(new_values, dict):
         return jsonify({"status": "error", "error": "Invalid request body"}), 400
+
+    errors = validate_config(new_values)
+    if errors:
+        details = "; ".join(f"{key}: {msg}" for key, msg in sorted(errors.items()))
+        return jsonify({"status": "error", "error": f"Invalid configuration — {details}",
+                        "fields": errors}), 400
+    new_values = {key: value.strip() for key, value in new_values.items()}
 
     # Load existing env to preserve extra lines
     existing, extra_lines = load_existing_env()
@@ -911,18 +1062,13 @@ def save_config():
 
     # Merge — new values override existing
     existing.update(new_values)
+    if not existing.get("INVERTER_IP") or not existing.get("LOGGER_SERIAL"):
+        return jsonify({"status": "error",
+                        "error": "Invalid configuration — INVERTER_IP and LOGGER_SERIAL are required"}), 400
     write_env(existing, extra_lines)
 
     # Schedule a service restart after 2 seconds
-    def _restart():
-        time.sleep(2)
-        try:
-            subprocess.Popen(["sudo", "systemctl", "restart", "deye-dashboard"])
-        except Exception:
-            logger.warning("Could not restart via systemctl, exiting process")
-            os._exit(0)
-
-    threading.Timer(0, _restart).start()
+    schedule_restart()
     return jsonify({"status": "ok", "restarting": True})
 
 
@@ -938,15 +1084,7 @@ def reset_config():
     else:
         logger.info(".env not found — already in first-run mode")
 
-    def _restart():
-        time.sleep(2)
-        try:
-            subprocess.Popen(["sudo", "systemctl", "restart", "deye-dashboard"])
-        except Exception:
-            logger.warning("Could not restart via systemctl, exiting process")
-            os._exit(0)
-
-    threading.Timer(0, _restart).start()
+    schedule_restart()
     return jsonify({"status": "ok", "restarting": True})
 
 
@@ -999,13 +1137,15 @@ def start_telegram_bot():
         grid_daily_log_file=GRID_DAILY_LOG_FILE,
         weather_poller=weather_poller,
         is_public=is_public,
+        inverter_poller=inverter_poller,
     )
     bot.start(inverter_interval=120)
     logging.info("Telegram bot started with %d allowed users (public=%s)", len(user_ids), is_public)
     return bot
 
 
-if __name__ == "__main__":
+def main():
+    """Configure logging, start background services once, then serve the app."""
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
@@ -1017,6 +1157,7 @@ if __name__ == "__main__":
     logger.info("INVERTER_IP=%s  LOGGER_SERIAL=%s", INVERTER_IP, LOGGER_SERIAL)
 
     if _configured:
+        init_services()
         logger.info("Inverter config: %s", inverter_config.to_dict())
         logger.info("Generator: has_generator=%s fuel_rate=%s oil_change=%s",
                     inverter_config.has_generator, GENERATOR_FUEL_RATE, GENERATOR_OIL_CHANGE_DATE or "N/A")
@@ -1028,10 +1169,20 @@ if __name__ == "__main__":
         telegram_token_set = bool(os.environ.get("TELEGRAM_BOT_TOKEN"))
         logger.info("TELEGRAM: enabled=%s token_set=%s", telegram_enabled, telegram_token_set)
 
-        # Flask debug reloader spawns two processes. Only start the bot once.
-        if os.environ.get("WERKZEUG_RUN_MAIN") == "true":
-            start_telegram_bot()
+        start_telegram_bot()
     else:
         logger.info("First-run mode — serving onboarding wizard")
 
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)), debug=True)
+    port = int(os.environ.get("PORT", 8080))
+    if os.environ.get("DASHBOARD_DEV", "").lower() in ("1", "true", "yes"):
+        # Local development only: Flask debugger, no reloader (a reloader would
+        # start a second process and duplicate every background poller).
+        app.run(host="0.0.0.0", port=port, debug=True, use_reloader=False)
+    else:
+        from waitress import serve
+        logger.info("Serving on http://0.0.0.0:%d (waitress)", port)
+        serve(app, host="0.0.0.0", port=port, threads=8)
+
+
+if __name__ == "__main__":
+    main()

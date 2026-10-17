@@ -4,6 +4,13 @@ from unittest.mock import patch, MagicMock
 from inverter import DeyeInverter, InverterConfig
 
 
+@pytest.fixture(autouse=True)
+def no_sleep():
+    """detect_config() sleeps 2s between samples; skip that in tests."""
+    with patch("inverter.time.sleep"):
+        yield
+
+
 @pytest.fixture
 def inverter():
     """Create a DeyeInverter with a mocked PySolarmanV5 connection."""
@@ -326,3 +333,11 @@ class TestDetectConfigGenerator:
         config = inverter.detect_config()
         assert config.phases == 3
         assert config.has_generator is False
+
+
+def test_detect_config_disconnects_afterwards(inverter):
+    inverter.read_register = _mock_read_register({645: 2300, 646: 2300, 587: 5200})
+    conn = inverter.inverter
+    inverter.detect_config()
+    conn.disconnect.assert_called()
+    assert inverter.inverter is None

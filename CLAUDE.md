@@ -14,8 +14,12 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
-# Run dashboard (http://localhost:8080)
+# Run dashboard (http://localhost:8080), served by waitress
 python app.py
+DASHBOARD_DEV=1 python app.py   # Flask debugger, no reloader (dev only)
+
+# Tests (tests/ only, see pytest.ini; ~5s)
+python -m pytest
 
 # Run locally with Telegram disabled
 ./deploy_local.sh
@@ -63,14 +67,21 @@ Providers implement `fetch_days()` (today, plus tomorrow once published) and rai
 
 ### Threading Model
 
+Background services start once in `main()` (`init_services()`), not at import — importing `app` (tests, WSGI) starts nothing. Do not reintroduce a reloader/multi-process server: every poller would run in each process.
+
 The app runs several daemon threads:
 - `InverterPoller` — polls inverter every 60s, caches to JSON file
-- `BatterySampler` — reads battery voltage/SOC every 10s for smoothing
+- `inverter-detect` — one-off background auto-detect; updates the shared `InverterConfig` in place and saves it to `inverter_config.json` for the next start
+- `BatterySampler` — reads battery voltage/SOC every 30s for smoothing (idle when no battery)
 - `WeatherPoller` — fetches Open-Meteo weather every 15 min
 - `OutageSchedulePoller` — fetches outage schedule every 60s
 - `TelegramBot` — runs Telegram polling loop
 
-All pollers use thread locks for safe cache access. The inverter connection (`DeyeInverter.lock`) is shared between `InverterPoller` and `BatterySampler`.
+All pollers use thread locks for safe cache access. The inverter connection (`DeyeInverter.lock`) is shared between `InverterPoller`, `BatterySampler` and auto-detect. The Telegram bot reads `InverterPoller.data` (no direct inverter reads).
+
+Data files (stats, logs, caches, bot state) go through `storage.py`: `atomic_write_json()` (temp file + fsync + rename, safe across power cuts) and `load_json()` (missing/corrupt file → default; corrupt files are moved to `*.corrupt`). Read-modify-write updates in `app.py` hold `_data_lock`.
+
+Config saved from the UI is validated by `setup.validate_config()` (types, ranges, no line breaks, no unknown keys) before `.env` is written.
 
 ## Inverter Connection
 

@@ -175,7 +175,13 @@ var outageInfoIntervalId = null;
 var gridProgressBarIntervalId = null;
 
 function applyInverterConfig(config) {
-    if (!config || inverterConfig) return; // apply once
+    if (!config) return;
+    if (inverterConfig) {
+        // Applied once; if the server's config changed (e.g. background
+        // auto-detect finished after the page loaded), reload to rebuild the UI.
+        if (JSON.stringify(config) !== JSON.stringify(inverterConfig)) location.reload();
+        return;
+    }
     inverterConfig = config;
 
     // Single-phase: hide per-phase load and phase analytics
@@ -341,7 +347,15 @@ function settingsFetch(url, options) {
     return fetch(url, options);
 }
 
-function showPinPrompt() {
+// What to do after a correct PIN; defaults to opening the settings panel
+var pinSuccessAction = null;
+
+function openSettingsPanel() {
+    document.getElementById('settings-panel').classList.add('open');
+}
+
+function showPinPrompt(onSuccess) {
+    pinSuccessAction = onSuccess || openSettingsPanel;
     var input = document.getElementById('pin-input');
     input.value = '';
     document.getElementById('pin-error').textContent = '';
@@ -373,7 +387,9 @@ function submitSettingsPin() {
             if (res.status === 200) {
                 settingsPin = pin;
                 closePinPrompt();
-                document.getElementById('settings-panel').classList.add('open');
+                var action = pinSuccessAction || openSettingsPanel;
+                pinSuccessAction = null;
+                action();
                 return;
             }
             errorEl.textContent = res.status === 429
@@ -491,7 +507,7 @@ function renderPhaseStats(stats) {
 
         return `
             <tr>
-                <td>${day.date}</td>
+                <td>${escapeHtml(day.date)}</td>
                 <td>
                     <span class="phase-pct l1 ${l1Highest}">${day.l1_pct}%</span>
                     <br><small style="color:#64748b">${day.l1_kwh} ${t('units.kwh')}</small>
@@ -510,11 +526,17 @@ function renderPhaseStats(stats) {
     }).join('');
 }
 
-async function clearPhaseStats() {
-    if (confirm(t('phase_stats.confirm_clear'))) {
-        await fetch('/api/phase-stats/clear', { method: 'POST' });
-        loadPhaseStats();
-    }
+// Clearing stats needs the settings PIN (same as the settings panel)
+function clearPhaseStats() {
+    if (!confirm(t('phase_stats.confirm_clear'))) return;
+    showPinPrompt(function() {
+        settingsFetch('/api/phase-stats/clear', { method: 'POST' })
+            .then(function(r) {
+                if (!r.ok) return r.json().then(function(d) { alert(t('common.error', { message: d.error })); });
+                loadPhaseStats();
+            })
+            .catch(function(e) { alert(t('common.error', { message: e })); });
+    });
 }
 
 function updatePhaseDisplay(data) {
@@ -732,8 +754,23 @@ function handleGridStateChange(isOnline, voltage) {
     lastGridOnline = isOnline;
 }
 
+// Number for display; '--' when the inverter didn't report the value, so one
+// missing field can't abort the rest of the dashboard update
+function fmt(value, digits) {
+    return (typeof value === 'number' && isFinite(value)) ? value.toFixed(digits) : '--';
+}
+
+// One /api/data request at a time: with a slow server, overlapping requests could
+// resolve out of order and replay a stale grid state (false outage/restore alerts)
+var dashboardRequestInFlight = false;
+var DASHBOARD_REQUEST_TIMEOUT_MS = 15000;
+
 function updateDashboard() {
-    fetch('/api/data')
+    if (dashboardRequestInFlight) return;
+    dashboardRequestInFlight = true;
+    var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    var timeoutId = controller ? setTimeout(function() { controller.abort(); }, DASHBOARD_REQUEST_TIMEOUT_MS) : null;
+    fetch('/api/data', controller ? { signal: controller.signal } : {})
         .then(response => response.json())
         .then(data => {
             if (data.error) {
@@ -767,14 +804,14 @@ function updateDashboard() {
             if (!inverterConfig || inverterConfig.pv_strings >= 2) {
                 document.getElementById('pv2-power').textContent = data.pv2_power;
             }
-            document.getElementById('daily-pv').textContent = data.daily_pv.toFixed(1);
+            document.getElementById('daily-pv').textContent = fmt(data.daily_pv, 1);
 
             // Battery
             if (!inverterConfig || inverterConfig.has_battery !== false) {
                 document.getElementById('battery-soc').textContent = data.battery_soc + '%';
                 document.getElementById('battery-fill').style.width = data.battery_soc + '%';
-                document.getElementById('battery-voltage').textContent = data.battery_voltage.toFixed(1);
-                document.getElementById('battery-current').textContent = data.battery_current.toFixed(1);
+                document.getElementById('battery-voltage').textContent = fmt(data.battery_voltage, 1);
+                document.getElementById('battery-current').textContent = fmt(data.battery_current, 1);
                 document.getElementById('battery-power').textContent = Math.abs(data.battery_power);
                 setI18nText(document.getElementById('battery-status'), 'battery.status_power', { status: batteryStatusText(data.battery_status) });
             }
@@ -783,13 +820,13 @@ function updateDashboard() {
             const gridPowerEl = document.getElementById('grid-power');
             gridPowerEl.innerHTML = Math.abs(data.grid_power) + '<span class="unit">' + t('units.w') + '</span>';
             gridPowerEl.className = 'metric-value ' + (data.grid_power > 0 ? 'negative' : data.grid_power < 0 ? 'positive' : 'neutral');
-            document.getElementById('grid-voltage').textContent = data.grid_voltage.toFixed(1);
-            document.getElementById('daily-import').textContent = data.daily_grid_import.toFixed(1);
-            document.getElementById('daily-export').textContent = data.daily_grid_export.toFixed(1);
+            document.getElementById('grid-voltage').textContent = fmt(data.grid_voltage, 1);
+            document.getElementById('daily-import').textContent = fmt(data.daily_grid_import, 1);
+            document.getElementById('daily-export').textContent = fmt(data.daily_grid_export, 1);
 
             // Load
             document.getElementById('load-power').innerHTML = data.load_power + '<span class="unit">' + t('units.w') + '</span>';
-            document.getElementById('daily-load').textContent = data.daily_load.toFixed(1);
+            document.getElementById('daily-load').textContent = fmt(data.daily_load, 1);
 
             // ===== ANIMATIONS =====
 
@@ -844,7 +881,7 @@ function updateDashboard() {
                 gridBanner.classList.remove('offline');
                 gridBanner.classList.add('online');
                 setI18nText(gridStatusValue, 'grid_banner.online');
-                setPlainText(gridStatusLabel, t('units.voltage_v', { value: data.grid_voltage.toFixed(0) }));
+                setPlainText(gridStatusLabel, t('units.voltage_v', { value: fmt(data.grid_voltage, 0) }));
             } else {
                 gridBanner.classList.remove('online');
                 gridBanner.classList.add('offline');
@@ -889,6 +926,10 @@ function updateDashboard() {
             setI18nText(document.getElementById('status'), 'status.connection_failed');
             document.getElementById('status').className = 'status error';
             console.error('Error:', error);
+        })
+        .finally(function() {
+            if (timeoutId) clearTimeout(timeoutId);
+            dashboardRequestInFlight = false;
         });
 }
 
@@ -1782,8 +1823,15 @@ function discoverInverters() {
             devices.forEach(function(dev) {
                 var div = document.createElement('div');
                 div.className = 'discover-device';
-                div.innerHTML = '<div class="device-ip">' + dev.ip + '</div>' +
-                    '<div class="device-model">' + (dev.model || t('onboarding.unknown_model')) + '</div>';
+                // textContent, not innerHTML: the model string comes from any
+                // device on the LAN answering the discovery broadcast
+                var ipEl = document.createElement('div');
+                ipEl.className = 'device-ip';
+                ipEl.textContent = dev.ip;
+                var modelEl = document.createElement('div');
+                modelEl.className = 'device-model';
+                modelEl.textContent = dev.model || t('onboarding.unknown_model');
+                div.append(ipEl, modelEl);
                 div.onclick = function() {
                     document.querySelectorAll('.discover-device').forEach(function(d) { d.classList.remove('selected'); });
                     div.classList.add('selected');

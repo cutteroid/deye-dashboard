@@ -104,3 +104,53 @@ class TestBuildInverterConfig:
             config, _ = self._build(env)
             assert config.has_battery is True, f"Failed for {val}"
             assert config.has_generator is True, f"Failed for {val}"
+
+
+class TestNonBlockingConfig:
+    """initial_inverter_config() / refresh_inverter_config(): startup without blocking detection."""
+
+    @pytest.fixture(autouse=True)
+    def env(self, monkeypatch, tmp_path):
+        for key in ["INVERTER_PHASES", "INVERTER_HAS_BATTERY", "INVERTER_PV_STRINGS", "INVERTER_HAS_GENERATOR"]:
+            monkeypatch.delenv(key, raising=False)
+        import app as app_module
+        monkeypatch.setattr(app_module, "INVERTER_CONFIG_FILE", str(tmp_path / "inverter_config.json"))
+        return app_module
+
+    def test_defaults_without_cache(self, env):
+        assert env.initial_inverter_config() == InverterConfig()
+
+    def test_uses_cached_detection(self, env):
+        env.atomic_write_json(env.INVERTER_CONFIG_FILE,
+                              {"phases": 1, "has_battery": False, "pv_strings": 1, "has_generator": True})
+        assert env.initial_inverter_config() == InverterConfig(phases=1, has_battery=False,
+                                                               pv_strings=1, has_generator=True)
+
+    def test_env_overrides_cache(self, env, monkeypatch):
+        env.atomic_write_json(env.INVERTER_CONFIG_FILE,
+                              {"phases": 1, "has_battery": False, "pv_strings": 1, "has_generator": False})
+        monkeypatch.setenv("INVERTER_HAS_BATTERY", "true")
+        assert env.initial_inverter_config().has_battery is True
+
+    def test_refresh_updates_in_place_and_saves(self, env):
+        config = InverterConfig()  # defaults: 3-phase
+        inv = MagicMock()
+        inv.detect_config.return_value = InverterConfig(phases=1, has_battery=True, pv_strings=1)
+        env.refresh_inverter_config(inv, config)
+        assert config.phases == 1 and config.pv_strings == 1  # same object, updated
+        assert env.load_cached_inverter_config() == InverterConfig(phases=1, has_battery=True, pv_strings=1)
+
+    def test_failed_detection_keeps_config_and_cache(self, env):
+        env.atomic_write_json(env.INVERTER_CONFIG_FILE,
+                              {"phases": 1, "has_battery": True, "pv_strings": 2, "has_generator": False})
+        config = env.initial_inverter_config()
+        inv = MagicMock()
+        inv.detect_config.side_effect = Exception("No socket available")
+        env.refresh_inverter_config(inv, config)
+        assert config.phases == 1
+        assert env.load_cached_inverter_config().phases == 1
+
+    def test_invalid_cache_ignored(self, env):
+        with open(env.INVERTER_CONFIG_FILE, "w") as f:
+            f.write('{"phases": "three"}')
+        assert env.initial_inverter_config() == InverterConfig()

@@ -230,3 +230,41 @@ class TestSaveToPhaseHistory:
         with open(history_file) as f:
             history = json.load(f)
         assert len(history) <= 7
+
+
+class TestGeneratorMidnightAndRestart:
+    def _reset(self):
+        import app
+        app.generator_last_running = None
+        app.generator_session_start = None
+
+    def test_session_split_at_midnight(self, tmp_path):
+        self._reset()
+        log_file = str(tmp_path / "gen_log.json")
+        with patch("app.GENERATOR_LOG_FILE", log_file):
+            import app
+            app.track_generator_runtime(1000, now=datetime(2026, 10, 16, 23, 0, 0))
+            app.track_generator_runtime(1000, now=datetime(2026, 10, 17, 0, 30, 0))
+            app.track_generator_runtime(0, now=datetime(2026, 10, 17, 1, 0, 0))
+        with open(log_file) as f:
+            log = json.load(f)
+        assert log["2026-10-16"]["runtime_seconds"] == 3600
+        assert log["2026-10-16"]["sessions"] == [{"start": "23:00:00", "end": "24:00:00"}]
+        assert log["2026-10-17"]["runtime_seconds"] == 3600
+        assert log["2026-10-17"]["sessions"] == [{"start": "00:00:00", "end": "01:00:00"}]
+
+    def test_open_session_resumed_after_restart(self, tmp_path):
+        self._reset()
+        log_file = str(tmp_path / "gen_log.json")
+        with open(log_file, "w") as f:
+            json.dump({"2026-10-17": {"runtime_seconds": 0,
+                                      "sessions": [{"start": "10:00:00", "end": None}]}}, f)
+        with patch("app.GENERATOR_LOG_FILE", log_file):
+            import app
+            # App restarted; generator still running, then stops at 11:00
+            app.track_generator_runtime(1000, now=datetime(2026, 10, 17, 10, 30, 0))
+            app.track_generator_runtime(0, now=datetime(2026, 10, 17, 11, 0, 0))
+        with open(log_file) as f:
+            log = json.load(f)
+        assert log["2026-10-17"]["sessions"] == [{"start": "10:00:00", "end": "11:00:00"}]
+        assert log["2026-10-17"]["runtime_seconds"] == 3600
