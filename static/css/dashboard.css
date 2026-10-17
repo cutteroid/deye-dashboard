@@ -1608,6 +1608,12 @@ body.fullscreen-mode .alerts-banner .alerts-map svg {
     background: #d97706;
 }
 
+.alerts-district.status-threat,
+.alerts-swatch.status-threat {
+    fill: #eab308;
+    background: #eab308;
+}
+
 .alerts-district.status-unknown {
     fill: #1e293b;
 }
@@ -1639,6 +1645,23 @@ body.fullscreen-mode .alerts-banner .alerts-map svg {
     width: 10px;
     height: 10px;
     border-radius: 2px;
+}
+
+/* Required by NEPTUN's terms: visible data link + "not an official alert system" */
+.alerts-credit {
+    margin-top: 6px;
+    font-size: 0.65rem;
+    line-height: 1.4;
+    color: #64748b;
+}
+
+.alerts-credit[hidden] {
+    display: none;
+}
+
+.alerts-credit a {
+    color: #94a3b8;
+    margin-right: 6px;
 }
 
 .scroll-hint {

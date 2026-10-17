@@ -468,9 +468,8 @@ def init_services():
     else:
         logger.info("Outage schedule disabled (OUTAGE_PROVIDER=none)")
 
-    # Air raid alerts: alerts.in.ua when a token is configured, otherwise mock (demo)
-    alerts_provider = create_alerts_provider(os.environ.get("AIR_ALERTS_PROVIDER"),
-                                             token=os.environ.get("ALERTS_IN_UA_TOKEN"))
+    # Air raid alerts from NEPTUN (no key needed); "mock" for demo data, "none" to hide
+    alerts_provider = create_alerts_provider(os.environ.get("AIR_ALERTS_PROVIDER"))
     if alerts_provider is not None:
         alerts_poller = AlertsPoller(alerts_provider)
         alerts_poller.start()

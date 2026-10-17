@@ -7,11 +7,36 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from air_alerts import (
-    DISTRICTS, REGION_CODES, REGION_UIDS, STATUS_MAX_AGE, AlertsFetchError, AlertsInUaProvider,
-    AlertsPoller, AlertsProvider, MockAlertsProvider, create_alerts_provider,
+    DISTRICTS, REGION_CODES, STATUS_MAX_AGE, AlertsFetchError, AlertsPoller, AlertsProvider,
+    MockAlertsProvider, NeptunProvider, create_alerts_provider, normalize_name,
 )
 
 MAP_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "data", "ukraine-regions.json")
+
+# Trimmed from a live https://neptun.in.ua/api/v1/alerts response
+NEPTUN_SAMPLE = {
+    "version": 1792246376,
+    "updatedAt": "2026-10-17T14:12:56.860825444Z",
+    "oblasts": [
+        {"key": "автономна республіка крим", "name": "Автономна Республіка Крим",
+         "oblast": "Автономна Республіка Крим", "since": "2022-12-10T22:22:00Z", "level": "red"},
+        {"key": "луганська", "name": "Луганська область", "oblast": "Луганська область",
+         "since": "2022-04-04T16:45:00Z", "level": "red"},
+        {"key": "севастополь", "name": "Севастополь", "oblast": "Автономна Республіка Крим",
+         "since": "2022-12-10T22:22:00Z", "level": "red"},
+        {"key": "київ", "name": "м. Київ", "oblast": "м. Київ", "since": "2026-10-17T13:00:00Z", "level": "yellow"},
+    ],
+    "raions": [
+        {"key": "бахмутський", "name": "Бахмутський район", "oblast": "Донецька область",
+         "since": "2026-10-17T10:59:39.322937Z", "level": "yellow", "reasons": ["Дронова загроза (жовтий рівень)"]},
+        {"key": "харківський", "name": "Харківський район", "oblast": "Харківська область",
+         "since": "2026-10-17T12:00:00Z", "level": "red"},
+        {"key": "куп'янський", "name": "Куп’янський район", "oblast": "Харківська область",
+         "since": "2026-10-17T12:05:00Z", "level": "yellow"},
+        {"key": "червоноградський", "name": "Червоноградський район", "oblast": "Львівська область",
+         "since": "2026-10-17T12:10:00Z", "level": "red"},  # pre-2024 name of Sheptytskyi raion
+    ],
+}
 
 
 class StaticProvider(AlertsProvider):
@@ -26,30 +51,32 @@ class StaticProvider(AlertsProvider):
         return self.data
 
 
-class TestMapData:
-    def test_regions_and_districts(self):
-        with open(MAP_PATH, encoding="utf-8") as f:
-            data = json.load(f)
-        assert len(data["regions"]) == 27
-        assert len(data["districts"]) >= 130  # post-2020 raions + Kyiv + Sevastopol
-        assert all(d["region"] in REGION_CODES for d in data["districts"])
-        assert all(x["d"].startswith("M") for x in data["regions"] + data["districts"])
-        assert all(d["name"]["uk"] and d["name"]["en"] for d in data["districts"])
+def _district(name_uk):
+    return next(code for code, d in DISTRICTS.items() if d["name"] == name_uk)
 
-    def test_alerts_in_ua_uids(self):
-        assert REGION_UIDS["UA-30"] == 31 and REGION_UIDS["UA-63"] == 22 and REGION_UIDS["UA-43"] == 29
-        assert all(uid is not None for uid in REGION_UIDS.values())
-        # Every district outside Crimea has a UID, except the Chornobyl exclusion zone
-        missing = [c for c, d in DISTRICTS.items() if d["alerts_uid"] is None and d["region"] != "UA-43"]
-        assert missing == ["UA3200"]
+
+def test_map_data():
+    with open(MAP_PATH, encoding="utf-8") as f:
+        data = json.load(f)
+    assert len(data["regions"]) == 27
+    assert len(data["districts"]) >= 130  # post-2020 raions + Kyiv + Sevastopol
+    assert all(d["region"] in REGION_CODES for d in data["districts"])
+    assert all(x["d"].startswith("M") for x in data["regions"] + data["districts"])
+    assert all(d["name"]["uk"] and d["name"]["en"] for d in data["districts"])
 
 
 def test_factory():
+    assert isinstance(create_alerts_provider(None), NeptunProvider)  # default
+    assert isinstance(create_alerts_provider("neptun"), NeptunProvider)
     assert isinstance(create_alerts_provider("mock"), MockAlertsProvider)
-    assert isinstance(create_alerts_provider(None), MockAlertsProvider)          # no token: demo
-    assert isinstance(create_alerts_provider(None, token="t"), AlertsInUaProvider)  # token: real API
-    assert create_alerts_provider("none", token="t") is None
+    assert create_alerts_provider("none") is None
     assert create_alerts_provider("acme") is None  # unknown: disabled, not a crash
+
+
+def test_normalize_name():
+    assert normalize_name("м. Київ") == "київ"
+    assert normalize_name("Куп’янський район") == "куп'янський"
+    assert normalize_name("Луганська область") == "луганська"
 
 
 def test_mock_is_valid_and_stable_within_slot():
@@ -75,11 +102,13 @@ class TestPoller:
         assert status["regions"]["UA-05"]["status"] == "none"
         assert "UA-99" not in status["regions"]
 
-    def test_district_alert_makes_region_partial(self):
+    def test_region_status_derived_from_districts(self):
         poller = AlertsPoller(StaticProvider({
             "regions": {"UA-32": {"status": "alert"}},
             "districts": {
-                "UA6312": {"status": "alert"},      # Kharkivskyi raion -> Kharkiv oblast partial
+                "UA6312": {"status": "threat"},     # Kharkiv oblast: threat ...
+                "UA6308": {"status": "alert"},      # ... and an alert -> partial wins
+                "UA1402": {"status": "threat"},     # Donetsk oblast: threat only
                 "UA3202": {"status": "alert"},      # inside a region already under alert
                 "UA0502": {"status": "none"},       # "none" entries are not returned
                 "UA9999": {"status": "alert"},      # unknown district
@@ -88,8 +117,9 @@ class TestPoller:
         poller._fetch()
         status = poller.get_status()
         assert status["regions"]["UA-63"]["status"] == "partial"
+        assert status["regions"]["UA-14"]["status"] == "threat"
         assert status["regions"]["UA-32"]["status"] == "alert"  # not downgraded
-        assert set(status["districts"]) == {"UA6312", "UA3202"}
+        assert set(status["districts"]) == {"UA6312", "UA6308", "UA1402", "UA3202"}
 
     def test_unknown_before_first_fetch(self):
         assert AlertsPoller(StaticProvider({})).get_status()["status"] == "unknown"
@@ -109,61 +139,63 @@ class TestPoller:
         assert poller.get_status()["status"] == "error"
 
 
-class TestAlertsInUaProvider:
-    @staticmethod
-    def _status_string(**chars):
-        """Status string with 'N' everywhere except the given {uid: char}."""
-        size = max(max(REGION_UIDS.values()), max(d["alerts_uid"] or 0 for d in DISTRICTS.values())) + 1
-        s = ["N"] * size
-        s[0] = s[1] = s[2] = " "
-        for uid, ch in chars.items():
-            s[int(uid.lstrip("u"))] = ch
-        return "".join(s)
-
+class TestNeptunProvider:
     @staticmethod
     def _response(status_code=200, body=None, headers=None):
         resp = MagicMock(status_code=status_code, ok=status_code < 400, headers=headers or {})
         resp.json.return_value = body
         return resp
 
-    def test_parses_regions_and_districts(self):
-        provider = AlertsInUaProvider("secret-token")
-        kharkivskyi_uid = DISTRICTS["UA6312"]["alerts_uid"]
-        body = self._status_string(u31="A", u22="P", **{f"u{kharkivskyi_uid}": "A"})
-        with patch.object(provider._session, "get", return_value=self._response(body=body)) as get:
+    def test_parses_live_format(self):
+        provider = NeptunProvider()
+        with patch.object(provider._session, "get", return_value=self._response(body=NEPTUN_SAMPLE)):
             result = provider.fetch()
-        assert result["regions"]["UA-30"]["status"] == "alert"
-        assert result["regions"]["UA-63"]["status"] == "partial"
-        assert result["regions"]["UA-05"]["status"] == "none"
-        assert result["districts"]["UA6312"]["status"] == "alert"
-        url = get.call_args[0][0]
-        headers = get.call_args[1]["headers"]
-        assert "secret-token" not in url  # token only in the header
-        assert headers["Authorization"] == "Bearer secret-token"
+        assert result["regions"] == {
+            "UA-43": {"status": "alert", "since": "2022-12-10T22:22:00Z"},
+            "UA-09": {"status": "alert", "since": "2022-04-04T16:45:00Z"},
+            "UA-40": {"status": "alert", "since": "2022-12-10T22:22:00Z"},
+            "UA-30": {"status": "threat", "since": "2026-10-17T13:00:00Z"},
+        }
+        districts = result["districts"]
+        assert districts[_district("Бахмутський")]["status"] == "threat"
+        assert districts[_district("Харківський")]["status"] == "alert"
+        assert districts[_district("Куп'янський")]["status"] == "threat"   # apostrophe variants
+        assert districts[_district("Шептицький")]["status"] == "alert"     # old name alias
+        assert len(districts) == 4
+
+    def test_every_neptun_raion_alias_exists_on_map(self):
+        names = {normalize_name(d["name"]) for d in DISTRICTS.values()}
+        assert set(NeptunProvider.RAION_ALIASES.values()) <= names
+
+    def test_unknown_names_ignored(self, caplog):
+        provider = NeptunProvider()
+        body = {"oblasts": [{"key": "атлантида", "name": "Атлантида", "level": "red"}],
+                "raions": [{"key": "невідомий", "name": "Невідомий район", "level": "red"}]}
+        with patch.object(provider._session, "get", return_value=self._response(body=body)):
+            assert provider.fetch() == {"regions": {}, "districts": {}}
+            provider.fetch()
+        assert sum("unknown" in r.message for r in caplog.records) == 2  # warned once per name
 
     def test_not_modified_reuses_last_result(self):
-        provider = AlertsInUaProvider("t")
-        first = self._response(body=self._status_string(u31="A"), headers={"Last-Modified": "Sat, 17 Oct 2026 06:00:00 GMT"})
+        provider = NeptunProvider()
+        first = self._response(body=NEPTUN_SAMPLE, headers={"ETag": 'W/"abc"'})
         with patch.object(provider._session, "get", side_effect=[first, self._response(304)]) as get:
             a = provider.fetch()
             b = provider.fetch()
         assert a == b
-        assert get.call_args[1]["headers"]["If-Modified-Since"] == "Sat, 17 Oct 2026 06:00:00 GMT"
+        assert get.call_args[1]["headers"]["If-None-Match"] == 'W/"abc"'
 
-    @pytest.mark.parametrize("code,fragment", [(401, "token"), (403, "forbidden"), (429, "rate limit"), (500, "HTTP 500")])
+    @pytest.mark.parametrize("code,fragment", [(429, "rate limited"), (500, "HTTP 500"), (503, "HTTP 503")])
     def test_http_errors(self, code, fragment):
-        provider = AlertsInUaProvider("t")
+        provider = NeptunProvider()
         with patch.object(provider._session, "get", return_value=self._response(code)):
             with pytest.raises(AlertsFetchError, match=fragment):
                 provider.fetch()
 
-    def test_missing_token(self):
-        with pytest.raises(AlertsFetchError, match="ALERTS_IN_UA_TOKEN"):
-            AlertsInUaProvider("").fetch()
-
-    def test_unexpected_format(self):
-        provider = AlertsInUaProvider("t")
-        with patch.object(provider._session, "get", return_value=self._response(body={"alerts": []})):
+    @pytest.mark.parametrize("body", ["oops", {"alerts": []}, {"oblasts": None, "raions": []}])
+    def test_unexpected_format(self, body):
+        provider = NeptunProvider()
+        with patch.object(provider._session, "get", return_value=self._response(body=body)):
             with pytest.raises(AlertsFetchError, match="unexpected"):
                 provider.fetch()
 
@@ -193,8 +225,22 @@ class TestAlertsEndpoint:
         assert len(data["regions"]) == len(REGION_CODES)
         assert data["districts"]
 
+    def test_neptun_data_not_demo(self, client):
+        c, app_module = client
+        provider = NeptunProvider()
+        resp = MagicMock(status_code=200, ok=True, headers={})
+        resp.json.return_value = NEPTUN_SAMPLE
+        with patch.object(provider._session, "get", return_value=resp):
+            poller = AlertsPoller(provider)
+            poller._fetch()
+        app_module.alerts_poller = poller
+        data = c.get("/api/alerts").get_json()
+        assert data["provider"] == "NEPTUN" and data["demo"] is False
+        assert data["regions"]["UA-63"]["status"] == "partial"
+
     def test_page_passes_map_url(self, client):
         c, _ = client
         html = c.get("/").get_data(as_text=True)
         assert "alertsMapUrl: \"/static/data/ukraine-regions.json?v=" in html
         assert 'id="alerts-card"' in html and 'id="alerts-banner"' in html
+        assert html.count('href="https://neptun.in.ua/"') == 2  # attribution in card + fullscreen banner

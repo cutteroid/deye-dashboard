@@ -1494,7 +1494,9 @@ function alertsDistrictStatus(d, districtId, regionId, regionsWithDistrictInfo) 
     var own = ((d.districts || {})[districtId] || {}).status || 'none';
     if (own === 'alert' || region === 'alert') return 'alert';
     if (own === 'partial') return 'partial';
-    if (region === 'partial' && !regionsWithDistrictInfo[regionId]) return 'partial';
+    if (own === 'threat') return 'threat';
+    // Region-level status without district details covers the whole region
+    if (!regionsWithDistrictInfo[regionId] && (region === 'partial' || region === 'threat')) return region;
     return 'none';
 }
 
@@ -1541,11 +1543,13 @@ function renderAlerts() {
         path.firstChild.textContent = title;
     });
 
-    var active = 0, total = 0;
+    var active = 0, threats = 0, total = 0;
     if (ok) {
         Object.keys(d.regions).forEach(function(id) {
+            var status = d.regions[id].status;
             total++;
-            if (d.regions[id].status !== 'none') active++;
+            if (status === 'alert' || status === 'partial') active++;
+            else if (status === 'threat') threats++;
         });
     }
 
@@ -1553,11 +1557,20 @@ function renderAlerts() {
     if (!d || d.status === 'unknown') summary = t('alerts.loading');
     else if (!ok) summary = t('alerts.unavailable');
     else {
-        summary = active ? t('alerts.active_count', { count: active, total: total }) : t('alerts.none_active');
+        if (active || threats) {
+            var parts = [];
+            if (active) parts.push(t('alerts.active_count', { count: active, total: total }));
+            if (threats) parts.push(t('alerts.threat_count', { count: threats }));
+            summary = parts.join(', ');
+        } else {
+            summary = t('alerts.none_active');
+        }
         summary += ' · ' + t('alerts.updated', { time: new Date(d.updated).toLocaleTimeString(i18nLocale(), { hour: '2-digit', minute: '2-digit' }) });
     }
     document.querySelectorAll('[data-alerts-summary]').forEach(function(el) { el.textContent = summary; });
     document.querySelectorAll('.alerts-demo-badge').forEach(function(el) { el.hidden = !(d && d.demo); });
+    // NEPTUN data link + disclaimer (their terms of use), whenever real data is shown
+    document.querySelectorAll('[data-alerts-credit]').forEach(function(el) { el.hidden = !(d && d.provider === 'NEPTUN'); });
 }
 
 loadAlertsMap();
