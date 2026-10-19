@@ -43,7 +43,8 @@ done
 rm -rf "$OUT"
 mkdir -p "$OUT/mosquitto"
 echo "==> Saving images"
-docker save "$APP_IMAGE:$TAG" "$MOSQUITTO_IMAGE" | gzip > "$OUT/images.tar.gz"
+# Plain .tar: Synology Container Manager's Image → Import takes it; the bundle itself is compressed
+docker save -o "$OUT/images.tar" "$APP_IMAGE:$TAG" "$MOSQUITTO_IMAGE"
 
 if [ "$ARCH" != "$HOST_ARCH" ]; then
     docker pull -q --platform "linux/$HOST_ARCH" "$MOSQUITTO_IMAGE" >/dev/null  # restore the native one
@@ -68,30 +69,41 @@ Built $(date '+%Y-%m-%d %H:%M') from commit $(git rev-parse --short HEAD 2>/dev/
 
 ## Synology (DSM 7.2+, Container Manager installed from Package Center)
 
-1. Copy this archive to the NAS, e.g. into the \`docker\` shared folder with File Station.
-2. Enable SSH (Control Panel → Terminal & SNMP), connect (\`ssh admin-user@NAS-IP\`) and run:
+$NAME.tar.gz is a bundle, not an image: don't import it in Container Manager.
+Unpack it first, then import \`images.tar\` from inside and start a **Project**
+(launching an image directly would skip ports, the data folder and the broker).
 
-   \`\`\`bash
-   cd /volume1/docker
-   tar xzf $NAME.tar.gz
-   cd $NAME
-   sudo docker load -i images.tar.gz
-   # optional: put your existing config at data/.env (see .env.example)
-   sudo chown -R 1000:1000 data          # the dashboard runs as user 1000
-   sudo docker compose up -d             # older DSM: sudo docker-compose up -d
-   \`\`\`
+### With File Station / Container Manager (no SSH)
 
-3. Open \`http://NAS-IP:8080\`. Without data/.env the dashboard starts the setup wizard.
+1. File Station: upload $NAME.tar.gz to the \`docker\` shared folder, right-click → Extract → Extract here.
+   You get the folder \`$NAME\`.
+2. Right-click the \`$NAME/data\` folder → Properties → Permission → Create:
+   user "Everyone", Read & Write, apply to this folder, sub-folders and files.
+   (The dashboard runs as user 1000 inside the container and must be able to write there.)
+   Optional: put your existing config at \`data/.env\` (see .env.example).
+3. Container Manager → Image → Import → Add from file → \`$NAME/images.tar\`.
+   Two images appear: extended-dashboard and eclipse-mosquitto.
+4. Container Manager → Project → Create: any name (e.g. extended-dashboard),
+   Path = the \`$NAME\` folder, Source = "Use existing docker-compose.yml" → Next → Done.
+5. Open \`http://NAS-IP:8080\`. Without data/.env the dashboard starts the setup wizard.
 
-Without SSH: Container Manager → Image → Import → Add from file → \`images.tar.gz\`;
-give "Everyone" read/write on the \`data\` folder (File Station → Properties → Permission);
-then Container Manager → Project → Create, path = this folder, use the existing docker-compose.yml.
+### With SSH (Control Panel → Terminal & SNMP → Enable SSH)
+
+\`\`\`bash
+cd /volume1/docker
+tar xzf $NAME.tar.gz
+cd $NAME
+sudo docker load -i images.tar
+# optional: put your existing config at data/.env (see .env.example)
+sudo chown -R 1000:1000 data          # the dashboard runs as user 1000
+sudo docker compose up -d             # older DSM: sudo docker-compose up -d
+\`\`\`
 
 ## Any other Linux machine with Docker
 
 \`\`\`bash
 tar xzf $NAME.tar.gz && cd $NAME
-docker load -i images.tar.gz
+docker load -i images.tar
 sudo chown -R 1000:1000 data
 docker compose up -d
 \`\`\`
