@@ -24,7 +24,7 @@ NC = "\033[0m"  # No Color
 
 # Keys managed by this script (order matters for output)
 MANAGED_KEYS = [
-    "INVERTER_IP", "LOGGER_SERIAL",
+    "INVERTER_IP", "LOGGER_SERIAL", "INVERTER_PHASES",
     "WEATHER_LATITUDE", "WEATHER_LONGITUDE",
     "OUTAGE_PROVIDER", "OUTAGE_GROUP", "OUTAGE_REGION_ID", "OUTAGE_DSO_ID",
     "OUTAGE_DTEK_REGION",
@@ -35,6 +35,7 @@ MANAGED_KEYS = [
 
 MAX_LOGGER_SERIAL = 0xFFFFFFFF  # Solarman V5 packs the serial as an unsigned 32-bit int
 OUTAGE_PROVIDERS = ("lvivoblenergo", "yasno", "dtek", "none")
+INVERTER_PHASE_CHOICES = ("1", "3")
 DTEK_REGIONS = ("kyiv-region", "kyiv", "dnipro", "odesa")
 _BOOL_VALUES = ("true", "false", "1", "0", "yes", "no")
 _HOSTNAME_RE = re.compile(
@@ -95,6 +96,7 @@ def _check_token(v):
 _VALIDATORS = {
     "INVERTER_IP": _check_host,
     "LOGGER_SERIAL": _check_int_range(1, MAX_LOGGER_SERIAL),
+    "INVERTER_PHASES": _check_choice(INVERTER_PHASE_CHOICES),  # empty = auto-detect
     "WEATHER_LATITUDE": _check_float_range(-90, 90),
     "WEATHER_LONGITUDE": _check_float_range(-180, 180),
     "OUTAGE_PROVIDER": _check_choice(OUTAGE_PROVIDERS),
@@ -251,8 +253,12 @@ def section_inverter(defaults):
         ip = ask("Inverter IP address", defaults.get("INVERTER_IP", ""))
         serial = ask("Logger serial number", defaults.get("LOGGER_SERIAL", ""))
 
+    phases = ask("Phases: 1, 3, or empty to auto-detect", defaults.get("INVERTER_PHASES", ""))
+    while phases not in ("",) + INVERTER_PHASE_CHOICES:
+        phases = ask("Phases: 1, 3, or empty to auto-detect", "")
+
     print()
-    return {"INVERTER_IP": ip, "LOGGER_SERIAL": serial}
+    return {"INVERTER_IP": ip, "LOGGER_SERIAL": serial, "INVERTER_PHASES": phases}
 
 
 def section_weather(defaults):
@@ -371,6 +377,9 @@ def write_env(values, extra_lines, path=".env"):
     lines.append("# Deye Inverter Configuration")
     lines.append(f"INVERTER_IP={values.get('INVERTER_IP', '')}")
     lines.append(f"LOGGER_SERIAL={values.get('LOGGER_SERIAL', '')}")
+    # Not written = auto-detected at startup
+    if values.get("INVERTER_PHASES") in INVERTER_PHASE_CHOICES:
+        lines.append(f"INVERTER_PHASES={values['INVERTER_PHASES']}")
     lines.append("")
 
     lines.append("# Weather (coordinates for Open-Meteo API)")

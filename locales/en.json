@@ -42,6 +42,11 @@
     "online": "Online - Updated {time}",
     "connection_failed": "Connection failed"
   },
+  "inverter": {
+    "unsupported": "This inverter reports itself as a {type} (device type {code}). The dashboard only supports Deye hybrid inverters, so the readings below are probably wrong.",
+    "family_string": "string (grid-tie) inverter",
+    "family_micro": "microinverter"
+  },
   "notifications": {
     "banner": "Enable notifications to get alerts during power outages",
     "enable": "Enable Alerts",
@@ -107,8 +112,7 @@
     "back_soon": "Should be back soon",
     "outage_unavailable": "Outage (schedule unavailable)",
     "unscheduled": "Unscheduled outage",
-    "remaining": "~{time} remaining",
-    "battery": "Battery: {soc}%"
+    "remaining": "~{time} remaining"
   },
   "battery_banner": {
     "label": "Battery Level",
@@ -303,6 +307,10 @@
     "scan_failed": "Scan failed. Enter details manually.",
     "inverter_ip": "Inverter IP Address *",
     "logger_serial": "Logger Serial Number *",
+    "phases": "Inverter phases",
+    "phases_auto": "Auto-detect",
+    "phases_1": "1 phase",
+    "phases_3": "3 phases",
     "step2_title": "Weather & Location",
     "step2_subtitle": "Set your coordinates for weather forecasts. You can skip this step.",
     "use_location": "Use My Location",

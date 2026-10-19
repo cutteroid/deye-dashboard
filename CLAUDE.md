@@ -111,21 +111,25 @@ Config saved from the UI is validated by `setup.validate_config()` (types, range
 - 50ms sleep between register reads to reduce logger connection pressure
 - Configuration via environment variables: `INVERTER_IP`, `LOGGER_SERIAL`
 - Inverter capabilities (phases, battery, PV strings) auto-detected at startup via `detect_config()`
+- Register 0 = device type → family (`DEVICE_FAMILIES` in `inverter.py`, codes from ha-solarman's Deye autodetection): `hybrid_1p` (Sunsynk-style map), `hybrid_3p_lv`, `hybrid_3p_hv` (same map as LV, but battery voltage ×0.1 V and battery/PV power ×10 W — `InverterConfig.high_voltage`), `string` / `micro` (other maps, not implemented: `supported: false` → warning on the dashboard). A known family sets the phase count without L2/L3 voltage sampling; unknown codes fall back to it. Read even when all `INVERTER_*` capabilities are set in env (`refresh_device_type`)
 
 ## Key Registers (Holding) — 3-Phase Hybrid
 
 | Register | Description | Scale |
 |----------|-------------|-------|
-| 514, 515 | PV1/PV2 Power | W |
-| 586 | Battery Current (signed) | /100 A |
+| 672, 673 | PV1/PV2 Power (514/515 are day battery charge/discharge, not PV!) | W |
+| 586 | Battery Temperature (not current!) | (x−1000)/10 °C |
 | 587 | Battery Voltage | /100 V |
 | 588 | Battery SOC | % |
-| 598 | Grid Voltage | /10 V |
+| 590 | Battery Power (signed, discharge > 0; negated in code) | W |
+| 591 | Battery Current (signed, discharge > 0; negated in code) | /100 A |
+| 598-600 | Grid Voltage L1-L3 (598 drives online/outage detection) | /10 V |
 | 607 | Grid Power (signed) | W |
 | 644-646 | Phase Voltages L1-L3 | /10 V |
 | 650-653 | Phase Loads L1-L3, Total Load | W |
 | 667 | Generator Power (GEN/GRID2 port) | W |
-| 502, 520, 521, 526 | Daily PV/Import/Export/Load | /10 kWh |
+| 529, 520, 521, 526 | Daily PV/Import/Export/Load (502 = inverter output, not PV) | /10 kWh |
+| 514, 515 | Daily Battery Charge/Discharge | /10 kWh |
 
 ## Key Registers (Holding) — 1-Phase Hybrid (Sunsynk)
 

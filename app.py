@@ -325,6 +325,8 @@ def apply_env_overrides(base):
         has_battery=_env_bool(env_battery) if env_battery else base.has_battery,
         pv_strings=int(env_pv) if env_pv else base.pv_strings,
         has_generator=_env_bool(env_generator) if env_generator else base.has_generator,
+        device_type=base.device_type,
+        family=base.family,
     )
 
 
@@ -348,9 +350,12 @@ def load_cached_inverter_config():
     if not isinstance(data, dict):
         return None
     try:
+        device_type = data.get("device_type")
         return InverterConfig(
             phases=int(data["phases"]), has_battery=bool(data["has_battery"]),
             pv_strings=int(data["pv_strings"]), has_generator=bool(data["has_generator"]),
+            device_type=int(device_type) if device_type is not None else None,
+            family=str(data.get("family") or "unknown"),
         )
     except (KeyError, TypeError, ValueError):
         logger.warning("Ignoring invalid cached inverter config in %s", INVERTER_CONFIG_FILE)
@@ -384,8 +389,15 @@ def refresh_inverter_config(inv, config):
     updated = apply_env_overrides(detected)
     if updated != config:
         logger.info("Inverter config updated by auto-detect: %s -> %s", config.to_dict(), updated.to_dict())
-        for field in ("phases", "has_battery", "pv_strings", "has_generator"):
+        for field in ("phases", "has_battery", "pv_strings", "has_generator", "device_type", "family"):
             setattr(config, field, getattr(updated, field))
+
+
+def refresh_device_type(inv, config):
+    """Read only the device type (capabilities all set in env, so no full detection)."""
+    device_type, family = inv.read_device_type()
+    if family != "unknown" or device_type is not None:
+        config.device_type, config.family = device_type, family
 
 
 # Service variables — initialised by init_services() when configured
@@ -466,9 +478,11 @@ def init_services():
     inverter = DeyeInverter(INVERTER_IP, LOGGER_SERIAL)
     inverter_config = initial_inverter_config()
     inverter.config = inverter_config
-    if not env_config_complete():
-        threading.Thread(target=refresh_inverter_config, args=(inverter, inverter_config),
-                         name="inverter-detect", daemon=True).start()
+    # Background: full auto-detect, or (all capabilities set in env) just the
+    # device type, which selects HV scaling and flags unsupported inverters
+    detect = refresh_device_type if env_config_complete() else refresh_inverter_config
+    threading.Thread(target=detect, args=(inverter, inverter_config),
+                     name="inverter-detect", daemon=True).start()
 
     battery_sampler = BatterySampler(inverter, interval=30)
     battery_sampler.start()

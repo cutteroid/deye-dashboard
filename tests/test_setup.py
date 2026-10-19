@@ -107,3 +107,26 @@ class TestWriteEnv:
         assert "# Additional settings" in content
         assert "DEPLOY_HOST=server.example.com" in content
         assert "DEPLOY_USER=admin" in content
+
+
+class TestInverterPhases:
+    def test_written_when_chosen_omitted_for_auto(self, tmp_path):
+        from setup import write_env
+        path = tmp_path / ".env"
+        write_env({"INVERTER_IP": "1.2.3.4", "LOGGER_SERIAL": "1", "INVERTER_PHASES": "3"}, [], str(path))
+        assert "INVERTER_PHASES=3" in path.read_text()
+        write_env({"INVERTER_IP": "1.2.3.4", "LOGGER_SERIAL": "1", "INVERTER_PHASES": ""}, [], str(path))
+        assert "INVERTER_PHASES" not in path.read_text()  # auto-detect
+
+    def test_validation(self):
+        from setup import validate_config
+        assert validate_config({"INVERTER_PHASES": "1"}) == {}
+        assert validate_config({"INVERTER_PHASES": ""}) == {}
+        assert "INVERTER_PHASES" in validate_config({"INVERTER_PHASES": "2"})
+
+    def test_existing_manual_value_is_managed(self, tmp_path):
+        from setup import load_existing_env
+        path = tmp_path / ".env"
+        path.write_text("INVERTER_IP=1.2.3.4\nINVERTER_PHASES=3\n")
+        values, extra = load_existing_env(str(path))
+        assert values["INVERTER_PHASES"] == "3" and extra == []

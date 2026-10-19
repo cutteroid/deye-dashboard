@@ -12,23 +12,24 @@ KNOWN_REGISTERS = {
     3: "Device Type",
 
     # PV Input
-    672: "PV1 Voltage (0.1V)",
-    673: "PV1 Current (0.1A)",
-    674: "PV2 Voltage (0.1V)",
-    675: "PV2 Current (0.1A)",
-    514: "PV1 Power (W)",
-    515: "PV2 Power (W)",
+    672: "PV1 Power (W)",
+    673: "PV2 Power (W)",
+    676: "PV1 Voltage (0.1V)",
+    677: "PV1 Current (0.1A)",
+    678: "PV2 Voltage (0.1V)",
+    679: "PV2 Current (0.1A)",
 
     # Battery
-    586: "Battery Voltage (0.01V)",
-    587: "Battery Current (0.01A, signed)",
+    586: "Battery Temperature (0.1°C offset 1000)",
+    587: "Battery Voltage (0.01V)",
     588: "Battery SOC (%)",
-    590: "Battery Temperature (0.1°C offset 1000)",
-    591: "Battery Capacity (Ah)",
+    590: "Battery Power (W, signed, discharge > 0)",
+    591: "Battery Current (0.01A, signed, discharge > 0)",
 
     # Grid
-    598: "Grid Voltage (0.1V)",
-    599: "Grid Current (0.1A)",
+    598: "Grid Voltage L1 (0.1V)",
+    599: "Grid Voltage L2 (0.1V)",
+    600: "Grid Voltage L3 (0.1V)",
     604: "Grid Frequency (0.01Hz)",
     607: "Grid Power (W, signed)",
 
@@ -42,9 +43,10 @@ KNOWN_REGISTERS = {
     541: "Heat Sink Temp (0.1°C offset 1000)",
 
     # Daily stats
-    502: "Daily PV Generation (0.1kWh)",
-    504: "Daily Battery Charge (0.1kWh)",
-    505: "Daily Battery Discharge (0.1kWh)",
+    502: "Daily Inverter Output (0.1kWh)",
+    514: "Daily Battery Charge (0.1kWh)",
+    515: "Daily Battery Discharge (0.1kWh)",
+    529: "Daily PV Generation (0.1kWh)",
     520: "Daily Grid Import (0.1kWh)",
     521: "Daily Grid Export (0.1kWh)",
     526: "Daily Load (0.1kWh)",

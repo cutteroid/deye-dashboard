@@ -186,6 +186,17 @@ function applyInverterConfig(config) {
     }
     inverterConfig = config;
 
+    // String / micro inverters use other register maps: say so instead of
+    // letting wrong numbers pass for real ones
+    var warning = document.getElementById('inverter-warning');
+    if (warning && config.supported === false) {
+        setI18nText(warning, 'inverter.unsupported', {
+            type: t('inverter.family_' + config.family),
+            code: '0x' + ('000' + (config.device_type || 0).toString(16).toUpperCase()).slice(-4),
+        });
+        warning.hidden = false;
+    }
+
     // Single-phase: hide per-phase load and phase analytics
     if (config.phases === 1) {
         var consumptionPhases = document.getElementById('consumption-phases');
@@ -605,16 +616,15 @@ function updateBatteryBanner(data) {
     valueEl.textContent = soc + '%';
     fillEl.style.width = soc + '%';
 
-    // Update status text
-    let statusText = '';
-    if (current > 0.5) {
-        statusText = t('battery_banner.charging', { power: power });
-    } else if (current < -0.5) {
-        statusText = t('battery_banner.discharging', { power: power });
-    } else {
-        statusText = t('battery_banner.idle');
-    }
-    statusEl.textContent = statusText;
+    // Update status text; the power number gets its own span so fullscreen
+    // mode can make it stand out (it's a number, safe as HTML)
+    var powerHtml = '<span class="battery-flow-power">' + Math.round(power) + '</span>';
+    var flow = current > 0.5 ? 'charging' : current < -0.5 ? 'discharging' : null;
+    statusEl.innerHTML = flow
+        ? t('battery_banner.' + flow, { power: powerHtml })
+        : escapeHtml(t('battery_banner.idle'));
+    statusEl.classList.toggle('battery-flow-charging', flow === 'charging');
+    statusEl.classList.toggle('battery-flow-discharging', flow === 'discharging');
 
     // Update banner color class
     banner.classList.remove('battery-high', 'battery-medium', 'battery-low');
@@ -839,6 +849,15 @@ function updateDashboard() {
             gridPowerEl.innerHTML = Math.abs(data.grid_power) + '<span class="unit">' + t('units.w') + '</span>';
             gridPowerEl.className = 'metric-value ' + (data.grid_power > 0 ? 'negative' : data.grid_power < 0 ? 'positive' : 'neutral');
             document.getElementById('grid-voltage').textContent = fmt(data.grid_voltage, 1);
+            // 3-phase: one value per phase instead of L1 only
+            var gridPhases = data.grid_voltage_l2 != null;
+            document.getElementById('grid-voltage-single').hidden = gridPhases;
+            document.getElementById('grid-voltage-phases').hidden = !gridPhases;
+            if (gridPhases) {
+                ['l1', 'l2', 'l3'].forEach(function(p) {
+                    document.getElementById('grid-voltage-' + p).textContent = fmt(data['grid_voltage_' + p], 0);
+                });
+            }
             document.getElementById('daily-import').textContent = fmt(data.daily_grid_import, 1);
             document.getElementById('daily-export').textContent = fmt(data.daily_grid_export, 1);
 
@@ -899,7 +918,7 @@ function updateDashboard() {
                 gridBanner.classList.remove('offline');
                 gridBanner.classList.add('online');
                 setI18nText(gridStatusValue, 'grid_banner.online');
-                setPlainText(gridStatusLabel, t('units.voltage_v', { value: fmt(data.grid_voltage, 0) }));
+                setI18nText(gridStatusLabel, 'grid_banner.label');
             } else {
                 gridBanner.classList.remove('online');
                 gridBanner.classList.add('offline');
@@ -1157,12 +1176,11 @@ function updateOutageInfo() {
                 var soc = latestInverterData.battery_soc || 0;
                 var capacityWh = latestInverterData.battery_max_available_capacity_wh || 0;
                 var loadW = Math.abs(latestInverterData.battery_power || 0);
+                // Battery level itself is in the battery banner, so no SOC here
                 if (loadW > 0 && capacityWh > 0) {
                     var remainingWh = (soc / 100) * capacityWh;
                     var remainingMs = (remainingWh / loadW) * 3600 * 1000;
                     remaining = t('outage_info.remaining', { time: formatCountdown(remainingMs) });
-                } else {
-                    remaining = t('outage_info.battery', { soc: soc });
                 }
             }
             el.textContent = remaining || (d.status === 'error' ? t('outage_info.outage_unavailable') : t('outage_info.unscheduled'));
@@ -1264,41 +1282,43 @@ gridProgressBarIntervalId = setInterval(updateGridProgressBar, 1000);
 
 var cachedWeatherData = null;
 
-// WMO weather code -> icon; descriptions are in locales (weather.codes.<code>)
+// WMO weather code -> icon; descriptions are in locales (weather.codes.<code>).
+// Only emoji from the original (Unicode 6) set: older tablets used as kiosks
+// (Android 5.x) show newer ones such as 🌧️ 🌦️ 🌫️ as empty boxes.
 var WMO_ICONS = {
     0: '☀️',
-    1: '🌤️',
+    1: '☀️',
     2: '⛅',
     3: '☁️',
-    45: '🌫️',
-    48: '🌫️',
-    51: '🌦️',
-    53: '🌦️',
-    55: '🌧️',
-    56: '🌧️',
-    57: '🌧️',
-    61: '🌦️',
-    63: '🌧️',
-    65: '🌧️',
-    66: '🌧️',
-    67: '🌧️',
-    71: '🌨️',
-    73: '🌨️',
+    45: '🌁',
+    48: '🌁',
+    51: '💧',
+    53: '💧',
+    55: '💧',
+    56: '💧',
+    57: '💧',
+    61: '☔',
+    63: '☔',
+    65: '☔',
+    66: '☔',
+    67: '☔',
+    71: '❄️',
+    73: '❄️',
     75: '❄️',
-    77: '🌨️',
-    80: '🌦️',
-    81: '🌧️',
-    82: '🌧️',
-    85: '🌨️',
+    77: '❄️',
+    80: '☔',
+    81: '☔',
+    82: '☔',
+    85: '❄️',
     86: '❄️',
-    95: '⛈️',
-    96: '⛈️',
-    99: '⛈️'
+    95: '⚡',
+    96: '⚡',
+    99: '⚡'
 };
 
 function getWeatherDescription(code) {
     if (WMO_ICONS[code]) return { text: t('weather.codes.' + code), icon: WMO_ICONS[code] };
-    return { text: t('weather.unknown'), icon: '🌡️' };
+    return { text: t('weather.unknown'), icon: '❔' };
 }
 
 function formatTimeFromISO(isoStr) {
@@ -1850,6 +1870,8 @@ function showOnboarding(editMode) {
             .then(function(cfg) {
                 if (cfg.INVERTER_IP) document.getElementById('onb-ip').value = cfg.INVERTER_IP;
                 if (cfg.LOGGER_SERIAL) document.getElementById('onb-serial').value = cfg.LOGGER_SERIAL;
+                document.getElementById('onb-phases').value =
+                    cfg.INVERTER_PHASES === '1' || cfg.INVERTER_PHASES === '3' ? cfg.INVERTER_PHASES : '';
                 if (cfg.WEATHER_LATITUDE) document.getElementById('onb-lat').value = cfg.WEATHER_LATITUDE;
                 if (cfg.WEATHER_LONGITUDE) document.getElementById('onb-lon').value = cfg.WEATHER_LONGITUDE;
 
@@ -2068,6 +2090,7 @@ function saveConfig() {
     // Step 1
     config.INVERTER_IP = document.getElementById('onb-ip').value.trim();
     config.LOGGER_SERIAL = document.getElementById('onb-serial').value.trim();
+    config.INVERTER_PHASES = document.getElementById('onb-phases').value;  // '' = auto-detect
 
     // Step 2
     config.WEATHER_LATITUDE = document.getElementById('onb-lat').value.trim() || '50.4501';

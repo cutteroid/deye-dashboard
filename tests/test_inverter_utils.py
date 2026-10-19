@@ -62,6 +62,9 @@ class TestInverterConfigToDict:
             "has_battery": True,
             "pv_strings": 2,
             "has_generator": False,
+            "device_type": None,
+            "family": "unknown",
+            "supported": True,
         }
 
     def test_with_generator(self):

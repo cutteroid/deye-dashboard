@@ -52,6 +52,22 @@ body {
     50% { opacity: 0.4; }
 }
 
+/* Unsupported inverter type (see applyInverterConfig) */
+.inverter-warning {
+    max-width: 640px;
+    margin: 10px auto 0;
+    padding: 8px 14px;
+    font-size: 0.85rem;
+    color: #fca5a5;
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    border-radius: 10px;
+}
+
+.inverter-warning[hidden] {
+    display: none;
+}
+
 /* Fullscreen button */
 .fullscreen-btn {
     position: fixed;
@@ -507,6 +523,16 @@ body {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 16px;
+}
+
+.stats-row.stats-row-3 {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+}
+
+.stats-row[hidden],
+.stat[hidden] {
+    display: none;
 }
 
 .stat {
@@ -1324,6 +1350,36 @@ body.fullscreen-mode .battery-banner-bar {
     border-radius: 10px;
     order: 2;
     margin-top: auto;
+}
+
+/* Battery banner: charge / discharge power stands out (green in, amber out) */
+body.fullscreen-mode .battery-banner-status.battery-flow-charging,
+body.fullscreen-mode .battery-banner-status.battery-flow-discharging {
+    font-weight: 600;
+    opacity: 1;
+}
+
+body.fullscreen-mode .battery-banner-status.battery-flow-charging {
+    color: #4ade80;
+}
+
+body.fullscreen-mode .battery-banner-status.battery-flow-discharging {
+    color: #fbbf24;
+}
+
+body.fullscreen-mode .battery-banner-status.battery-flow-charging::before {
+    content: "\25B2\00A0";   /* ▲ — a basic shape, renders on old Android too */
+}
+
+body.fullscreen-mode .battery-banner-status.battery-flow-discharging::before {
+    content: "\25BC\00A0";   /* ▼ */
+}
+
+body.fullscreen-mode .battery-flow-power {
+    font-size: 1.6em;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
 }
 
 /* Weather Forecast Banner */

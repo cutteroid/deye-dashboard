@@ -122,7 +122,7 @@ python app.py
 
 Open http://localhost:8080 in your browser. The app is served by [waitress](https://docs.pylonsproject.org/projects/waitress/) (a production WSGI server). For local development with the Flask debugger, run `DASHBOARD_DEV=1 python app.py` — never on a device reachable from the network.
 
-Inverter capabilities (phases, battery, PV strings, generator) are auto-detected in the background after startup and saved to `inverter_config.json` (override the path with `INVERTER_CONFIG_FILE`); the next start uses the saved result immediately. Set `INVERTER_PHASES`, `INVERTER_HAS_BATTERY`, `INVERTER_PV_STRINGS` and `INVERTER_HAS_GENERATOR` to skip detection.
+Inverter capabilities (phases, battery, PV strings, generator) are auto-detected in the background after startup. The inverter's device type (register 0) tells its family: Deye single-phase hybrid, three-phase low-voltage hybrid and three-phase high-voltage hybrid inverters are supported (HV models scale some values differently, handled automatically); string and micro inverters use other register maps and get a warning on the dashboard. Detection results are saved to `inverter_config.json` (override the path with `INVERTER_CONFIG_FILE`); the next start uses the saved result immediately. Set `INVERTER_PHASES`, `INVERTER_HAS_BATTERY`, `INVERTER_PV_STRINGS` and `INVERTER_HAS_GENERATOR` to skip detection.
 
 Run the tests:
 
@@ -215,7 +215,7 @@ These are auto-detected at startup. Set them only if auto-detection doesn't work
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `INVERTER_PHASES` | Number of phases (`1` or `3`) | auto-detected |
+| `INVERTER_PHASES` | Number of phases (`1` or `3`); also in Settings → Edit configuration (step 1) | auto-detected |
 | `INVERTER_HAS_BATTERY` | Whether a battery is connected (`true` / `false`) | auto-detected |
 | `INVERTER_PV_STRINGS` | Number of PV strings (`1` or `2`) | auto-detected |
 

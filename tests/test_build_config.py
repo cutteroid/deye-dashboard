@@ -154,3 +154,38 @@ class TestNonBlockingConfig:
         with open(env.INVERTER_CONFIG_FILE, "w") as f:
             f.write('{"phases": "three"}')
         assert env.initial_inverter_config() == InverterConfig()
+
+
+class TestDeviceTypePlumbing:
+    def test_env_overrides_keep_detected_family(self, monkeypatch):
+        import app
+        from inverter import InverterConfig
+        monkeypatch.setenv("INVERTER_PHASES", "3")
+        result = app.apply_env_overrides(InverterConfig(phases=1, device_type=0x0006, family="hybrid_3p_hv"))
+        assert result.phases == 3 and result.family == "hybrid_3p_hv" and result.device_type == 6
+
+    def test_cached_config_roundtrip(self, tmp_path, monkeypatch):
+        import app
+        from inverter import InverterConfig
+        monkeypatch.setattr(app, "INVERTER_CONFIG_FILE", str(tmp_path / "c.json"))
+        app.atomic_write_json(app.INVERTER_CONFIG_FILE, InverterConfig(device_type=5, family="hybrid_3p_lv").to_dict())
+        cached = app.load_cached_inverter_config()
+        assert (cached.device_type, cached.family) == (5, "hybrid_3p_lv")
+
+    def test_old_cache_without_family_still_loads(self, tmp_path, monkeypatch):
+        import app
+        monkeypatch.setattr(app, "INVERTER_CONFIG_FILE", str(tmp_path / "c.json"))
+        app.atomic_write_json(app.INVERTER_CONFIG_FILE,
+                              {"phases": 3, "has_battery": True, "pv_strings": 2, "has_generator": False})
+        cached = app.load_cached_inverter_config()
+        assert cached.family == "unknown" and cached.device_type is None
+
+    def test_refresh_device_type_updates_config_in_place(self):
+        import app
+        from unittest.mock import MagicMock
+        from inverter import InverterConfig
+        config = InverterConfig()
+        inv = MagicMock()
+        inv.read_device_type.return_value = (0x0005, "hybrid_3p_lv")
+        app.refresh_device_type(inv, config)
+        assert (config.device_type, config.family) == (5, "hybrid_3p_lv")

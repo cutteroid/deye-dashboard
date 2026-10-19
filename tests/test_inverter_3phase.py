@@ -1,0 +1,81 @@
+"""Register mapping of the 3-phase read path (_read_3p_data_unlocked)."""
+from unittest.mock import patch
+
+import pytest
+
+from inverter import DeyeInverter, InverterConfig
+
+
+def u16(value):
+    """Signed value as the unsigned 16-bit word the inverter returns."""
+    return value & 0xFFFF
+
+
+# Live readings from a SG04LP3-style inverter (no PV connected) while the battery charged at ~3.3 kW
+REGISTERS = {
+    514: 24, 515: 4,       # today's battery charge / discharge (0.1 kWh), NOT PV power
+    529: 0,                # PV energy today
+    672: 0, 673: 0,        # PV1 / PV2 power: no panels connected
+    676: 5, 678: 21,       # residual PV voltages on unconnected inputs
+    586: 1270,             # battery temperature: (1270 - 1000) / 10 = 27.0 °C
+    587: 5473,             # 54.73 V
+    588: 96,
+    590: u16(-3300),       # battery power, Deye sign: negative = charging
+    591: u16(-6030),       # battery current, -60.30 A
+    598: 2276, 599: 2251, 600: 2154,
+    607: 5454, 653: 2171,
+    650: 252, 651: 113, 652: 1806,
+    644: 2275, 645: 2251, 646: 2154,
+}
+
+
+@pytest.fixture
+def inverter():
+    with patch("inverter.PySolarmanV5"), patch("inverter.time.sleep"):
+        inv = DeyeInverter(ip="192.168.1.1", serial=123456, config=InverterConfig(phases=3))
+        with patch.object(inv, "read_register", side_effect=lambda addr: REGISTERS.get(addr, 0)):
+            yield inv
+
+
+def test_battery_charging_from_power_and_current_registers(inverter):
+    data = inverter._read_3p_data_unlocked()
+    assert data["battery_power"] == 3300           # charging is positive in the API
+    assert data["battery_current"] == pytest.approx(60.3)
+    assert data["battery_status"] == "Charging"
+    assert data["battery_voltage"] == pytest.approx(54.73)
+
+
+def test_battery_discharging(inverter):
+    REGISTERS_DIS = {**REGISTERS, 590: 1200, 591: 2200}
+    with patch.object(inverter, "read_register", side_effect=lambda addr: REGISTERS_DIS.get(addr, 0)):
+        data = inverter._read_3p_data_unlocked()
+    assert data["battery_power"] == -1200 and data["battery_status"] == "Discharging"
+
+
+def test_pv_from_power_registers_not_battery_counters(inverter):
+    data = inverter._read_3p_data_unlocked()
+    assert (data["pv1_power"], data["pv2_power"], data["pv_total_power"]) == (0, 0, 0)
+    assert data["daily_pv"] == 0
+    REGISTERS_SUN = {**REGISTERS, 672: 2100, 673: 1850, 529: 123}
+    with patch.object(inverter, "read_register", side_effect=lambda addr: REGISTERS_SUN.get(addr, 0)):
+        data = inverter._read_3p_data_unlocked()
+    assert data["pv_total_power"] == 3950 and data["daily_pv"] == pytest.approx(12.3)
+
+
+def test_grid_voltage_per_phase(inverter):
+    data = inverter._read_3p_data_unlocked()
+    assert data["grid_voltage"] == pytest.approx(227.6)
+    assert (data["grid_voltage_l1"], data["grid_voltage_l2"], data["grid_voltage_l3"]) == \
+        pytest.approx((227.6, 225.1, 215.4))
+
+
+def test_high_voltage_model_scaling():
+    """HV 3-phase: battery voltage in 0.1 V, battery and PV power in 10 W."""
+    regs = {**REGISTERS, 587: 3125, 590: u16(-330), 672: 210, 673: 185}
+    with patch("inverter.PySolarmanV5"), patch("inverter.time.sleep"):
+        inv = DeyeInverter(ip="192.168.1.1", serial=1, config=InverterConfig(phases=3, family="hybrid_3p_hv"))
+        with patch.object(inv, "read_register", side_effect=lambda addr: regs.get(addr, 0)):
+            data = inv._read_3p_data_unlocked()
+    assert data["battery_voltage"] == pytest.approx(312.5)
+    assert data["battery_power"] == 3300 and data["battery_status"] == "Charging"
+    assert (data["pv1_power"], data["pv2_power"]) == (2100, 1850)
