@@ -30,6 +30,9 @@ python -m pytest
 # Image bundle for machines without the source (e.g. Synology): dist/extended-dashboard-<arch>.tar.gz
 tools/export_images.sh [arm64|amd64]
 
+# Update a Docker host (e.g. the Synology NAS): send build files over SSH, rebuild there
+tools/deploy_nas.sh [--setup]
+
 # Test inverter connection
 python test_connection.py
 

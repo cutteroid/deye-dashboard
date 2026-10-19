@@ -177,6 +177,8 @@ tools/export_images.sh          # this machine's architecture
 tools/export_images.sh amd64    # cross-build for an Intel/AMD machine
 ```
 
+**Updates:** `tools/deploy_nas.sh` sends only the files the image is built from (~0.2 MB) to the NAS over SSH and rebuilds there (`docker compose up -d --build`); Docker reuses its cached layers, so a code-only update takes seconds. The first run asks for the SSH login and the dashboard folder on the NAS (saved to `tools/.deploy_nas.env`, not committed) and is slow once, because the NAS downloads the Python base image and installs the packages. `data/` on the NAS is never touched. `sudo` asks for the NAS password on each run; set up an SSH key (`ssh-copy-id user@nas`) to skip the login prompt. `tools/deploy_nas.sh --setup` changes the saved address.
+
 ### Data Persistence
 
 The container mounts a `data` volume at `/app/data` for persistent storage of:

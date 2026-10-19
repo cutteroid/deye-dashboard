@@ -38,3 +38,6 @@ data/
 
 # Exported image bundles (tools/export_images.sh)
 dist/
+
+# NAS address for tools/deploy_nas.sh
+tools/.deploy_nas.env
