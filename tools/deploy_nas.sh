@@ -56,7 +56,13 @@ echo "==> Rebuilding and restarting on the NAS (sudo may ask for your NAS passwo
     DOCKER=\$(command -v docker || echo /usr/local/bin/docker)
     if sudo \"\$DOCKER\" compose version >/dev/null 2>&1; then DC=\"\$DOCKER compose\"
     else DC=\$(command -v docker-compose || echo /usr/local/bin/docker-compose); fi
-    sudo \$DC up -d --build
+    # Reuse the compose project of the running containers (Container Manager names
+    # it after the Project, not the folder); otherwise compose would try to create
+    # a second set with the same container names
+    PROJECT=\$(sudo \"\$DOCKER\" inspect -f '{{index .Config.Labels \"com.docker.compose.project\"}}' deye-dashboard 2>/dev/null || true)
+    case \"\$PROJECT\" in ''|'<no value>') PROJECT=\$(basename \"\$PWD\") ;; esac
+    echo \"Compose project: \$PROJECT\"
+    sudo \$DC -p \"\$PROJECT\" up -d --build
     sudo \"\$DOCKER\" image prune -f >/dev/null   # drop the replaced image
-    sudo \$DC ps"
+    sudo \$DC -p \"\$PROJECT\" ps"
 echo "==> Done: http://${NAS_SSH#*@}:8080"
