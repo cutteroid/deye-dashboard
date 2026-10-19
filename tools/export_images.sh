@@ -60,7 +60,8 @@ awk -v image="$APP_IMAGE:$TAG" '
 ' docker-compose.yml > "$OUT/docker-compose.yml"
 cp mosquitto/entrypoint.sh "$OUT/mosquitto/"
 cp .env.example "$OUT/"
-mkdir -p "$OUT/data"
+# Synology's Docker doesn't create missing bind-mount folders: ship them
+mkdir -p "$OUT/data/mosquitto"
 
 cat > "$OUT/INSTALL.md" <<EOF
 # Extended Dashboard — install from images ($ARCH)
