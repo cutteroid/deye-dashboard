@@ -168,6 +168,15 @@ docker run -d \
   deye-dashboard:latest
 ```
 
+### Running on Another Machine Without Building (e.g. Synology NAS)
+
+`tools/export_images.sh` packs the dashboard and Mosquitto images with a ready-to-run `docker-compose.yml` into `dist/extended-dashboard-<arch>.tar.gz`; the target machine needs only Docker, no source code or build. Pass the target CPU: `arm64` (default on Apple Silicon; Raspberry Pi 4/5, Synology j/value models such as DS223j) or `amd64` (Intel/AMD PCs, Synology "+" models). Install steps for Synology and plain Linux are in `INSTALL.md` inside the archive. Your `data/.env` is not included (it holds secrets) — copy it over yourself if you want the same settings.
+
+```bash
+tools/export_images.sh          # this machine's architecture
+tools/export_images.sh amd64    # cross-build for an Intel/AMD machine
+```
+
 ### Data Persistence
 
 The container mounts a `data` volume at `/app/data` for persistent storage of:
@@ -278,7 +287,7 @@ The meter talks MQTT: it connects to a broker and publishes its readings there (
 
 The card appears with "Waiting for data" and fills in after the meter's first message. The dashboard asks the meter to send readings every `SMART_METER_INTERVAL` seconds; the full summary (frequency, relay) arrives once a minute.
 
-Without `SMART_METER_MQTT_USER` / `SMART_METER_MQTT_PASSWORD` the broker accepts no connections from the network, so it is never open without a password. Avoid `$` in the password (Docker Compose treats it as a variable).
+Without `SMART_METER_MQTT_USER` / `SMART_METER_MQTT_PASSWORD` the broker accepts no connections from the network, so it is never open without a password.
 
 | Variable | Description | Default |
 |----------|-------------|---------|

@@ -27,6 +27,9 @@ python -m pytest
 # Deploy to remote server (interactive setup on first run)
 ./deploy.sh
 
+# Image bundle for machines without the source (e.g. Synology): dist/extended-dashboard-<arch>.tar.gz
+tools/export_images.sh [arm64|amd64]
+
 # Test inverter connection
 python test_connection.py
 
@@ -73,7 +76,7 @@ Map: `static/data/ukraine-regions.json` (regions by ISO 3166-2 code, districts b
 
 ### Smart Meter
 
-`smart_meter.py` reads a Bakler Wi-Fi electricity meter over MQTT (paho-mqtt). The meter publishes to a broker — docker-compose runs `mosquitto` (`mosquitto/entrypoint.sh` builds its config from `SMART_METER_MQTT_USER`/`PASSWORD` in `data/.env`; without them it listens on 127.0.0.1 only). Topics: `buckler/<serial>/status`, `dataJson` (every minute; three-phase meters send `[L1, L2, L3]` arrays), `data/<field>` (single values, incl. instantaneous `P`; three-phase `V1..V3` etc.), `relay/rN`. `SmartMeter` keeps the latest values and today's starting energy counter (`smart_meter_daily.json`, updated on every reading); `SmartMeterClient` subscribes and publishes only `data/set` (update interval). **Never publish to `relay/*`** — the relay is display-only. Served at `/api/smart-meter` (`status`: disabled/waiting/error/ok/offline/stale); the card is hidden when disabled (`SMART_METER_ENABLED`). `phases_on` is derived from per-phase voltage (`PHASE_ON_MIN_VOLTAGE`, 100 V); the meter has no per-phase flag, and relays `r1..r6` are not phases. `SMART_METER_DEMO=1|3` swaps the MQTT client for `DemoMeterFeed` (simulated readings through `handle_message`; the three-phase demo drops L3 for one minute in five, `demo: true` in the API, "Demo data" badge, no daily file).
+`smart_meter.py` reads a Bakler Wi-Fi electricity meter over MQTT (paho-mqtt). The meter publishes to a broker — docker-compose runs `mosquitto` (`mosquitto/entrypoint.sh` builds its config from `SMART_METER_MQTT_USER`/`PASSWORD`, read from `data/.env` mounted read-only — no `env_file`, to stay compatible with older Compose on Synology; without them it listens on 127.0.0.1 only). Topics: `buckler/<serial>/status`, `dataJson` (every minute; three-phase meters send `[L1, L2, L3]` arrays), `data/<field>` (single values, incl. instantaneous `P`; three-phase `V1..V3` etc.), `relay/rN`. `SmartMeter` keeps the latest values and today's starting energy counter (`smart_meter_daily.json`, updated on every reading); `SmartMeterClient` subscribes and publishes only `data/set` (update interval). **Never publish to `relay/*`** — the relay is display-only. Served at `/api/smart-meter` (`status`: disabled/waiting/error/ok/offline/stale); the card is hidden when disabled (`SMART_METER_ENABLED`). `phases_on` is derived from per-phase voltage (`PHASE_ON_MIN_VOLTAGE`, 100 V); the meter has no per-phase flag, and relays `r1..r6` are not phases. `SMART_METER_DEMO=1|3` swaps the MQTT client for `DemoMeterFeed` (simulated readings through `handle_message`; the three-phase demo drops L3 for one minute in five, `demo: true` in the API, "Demo data" badge, no daily file).
 
 ### Threading Model
 

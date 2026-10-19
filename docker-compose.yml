@@ -1,5 +1,7 @@
 services:
   deye-dashboard:
+    # Built locally; the name lets tools/export_images.sh ship it to another machine
+    image: extended-dashboard:latest
     build:
       context: .
       dockerfile: Dockerfile
@@ -37,12 +39,12 @@ services:
     entrypoint: ["/bin/sh", "/mosquitto-entrypoint.sh"]
     ports:
       - "1883:1883"
-    env_file:
-      - path: ./data/.env
-        required: false
     volumes:
       - ./mosquitto/entrypoint.sh:/mosquitto-entrypoint.sh:ro
       - ./data/mosquitto:/mosquitto/data
+      # read-only: the entrypoint takes the broker login from data/.env
+      # (works with older Compose versions, e.g. on Synology, unlike optional env_file)
+      - ./data:/dashboard-data:ro
     restart: unless-stopped
     networks:
       - deye-network

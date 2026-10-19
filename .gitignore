@@ -35,3 +35,6 @@ Thumbs.db
 
 # Runtime data (settings, stats, MQTT broker files)
 data/
+
+# Exported image bundles (tools/export_images.sh)
+dist/
