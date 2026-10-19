@@ -57,6 +57,8 @@
     "low": "Мин:",
     "sunrise": "Восход:",
     "sunset": "Закат:",
+    "tomorrow": "Завтра",
+    "precipitation": "{value} мм",
     "unknown": "Неизвестно",
     "codes": {
       "0": "Ясно",

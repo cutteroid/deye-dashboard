@@ -1316,6 +1316,21 @@ function updateWeatherForecastBanner(data) {
         formatTimeFromISO(data.sunrise);
     document.getElementById('weather-forecast-sunset').textContent =
         formatTimeFromISO(data.sunset);
+
+    var tomorrow = data.tomorrow;
+    document.getElementById('weather-forecast-tomorrow').hidden = !tomorrow;
+    if (tomorrow) {
+        var tDesc = getWeatherDescription(tomorrow.weather_code);
+        var deg = function(v) { return v != null ? Math.round(v) + '°' : '--'; };
+        document.getElementById('weather-tomorrow-icon').textContent = tDesc.icon;
+        document.getElementById('weather-tomorrow-temps').textContent =
+            deg(tomorrow.temp_max) + ' / ' + deg(tomorrow.temp_min);
+        var text = tDesc.text;
+        if (tomorrow.precipitation >= 0.1) {
+            text += ' · ' + t('weather.precipitation', { value: tomorrow.precipitation.toFixed(1) });
+        }
+        document.getElementById('weather-tomorrow-desc').textContent = text;
+    }
 }
 
 function updateBatteryOverlay(data) {

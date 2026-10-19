@@ -57,6 +57,8 @@
     "low": "L:",
     "sunrise": "Sunrise:",
     "sunset": "Sunset:",
+    "tomorrow": "Tomorrow",
+    "precipitation": "{value} mm",
     "unknown": "Unknown",
     "codes": {
       "0": "Clear sky",

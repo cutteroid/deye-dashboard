@@ -215,6 +215,36 @@ class TestGetWeather:
         assert data["temperature"] == 22.5
 
 
+class TestParseWeather:
+    RAW = {
+        "current": {"temperature_2m": 11.4, "weather_code": 3},
+        "daily": {
+            "time": ["2026-10-19", "2026-10-20"],
+            "sunrise": ["2026-10-19T07:21", "2026-10-20T07:23"],
+            "sunset": ["2026-10-19T17:58", "2026-10-20T17:56"],
+            "temperature_2m_max": [13.2, 9.6],
+            "temperature_2m_min": [4.1, 2.8],
+            "precipitation_sum": [0.0, 3.4],
+            "weather_code": [3, 61],
+        },
+    }
+
+    def test_today_and_tomorrow(self):
+        from app import parse_weather
+        result = parse_weather(self.RAW)
+        assert result["temperature"] == 11.4 and result["temp_max"] == 13.2
+        assert result["sunrise"] == "2026-10-19T07:21"
+        assert result["tomorrow"] == {"date": "2026-10-20", "weather_code": 61,
+                                      "temp_max": 9.6, "temp_min": 2.8, "precipitation": 3.4}
+
+    def test_no_tomorrow_in_response(self):
+        from app import parse_weather
+        raw = {"current": {}, "daily": {k: v[:1] for k, v in self.RAW["daily"].items()}}
+        result = parse_weather(raw)
+        assert result["tomorrow"] is None and result["temp_min"] == 4.1
+        assert parse_weather({})["tomorrow"] is None
+
+
 class TestClearEndpoints:
     def test_clear_phase_stats(self, client):
         c, _, app_module = client

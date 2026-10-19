@@ -32,7 +32,7 @@ OPEN_METEO_URL = (
     f"?latitude={WEATHER_LATITUDE}&longitude={WEATHER_LONGITUDE}"
     "&current=temperature_2m,weather_code"
     "&daily=sunrise,sunset,temperature_2m_max,temperature_2m_min,precipitation_sum,weather_code"
-    "&timezone=auto&forecast_days=1"
+    "&timezone=auto&forecast_days=2"
 )
 
 logger = logging.getLogger(__name__)
@@ -74,6 +74,38 @@ def is_configured():
     return True
 
 
+def parse_weather(raw):
+    """Open-Meteo response -> today's values plus a "tomorrow" summary (None if missing)."""
+    current = raw.get("current") or {}
+    daily = raw.get("daily") or {}
+
+    def day(key, i):
+        values = daily.get(key) or []
+        return values[i] if len(values) > i else None
+
+    result = {
+        "temperature": current.get("temperature_2m"),
+        "weather_code": current.get("weather_code"),
+        "sunrise": day("sunrise", 0),
+        "sunset": day("sunset", 0),
+        "temp_max": day("temperature_2m_max", 0),
+        "temp_min": day("temperature_2m_min", 0),
+        "precipitation": day("precipitation_sum", 0),
+        "daily_weather_code": day("weather_code", 0),
+        "tomorrow": None,
+        "last_updated": datetime.now().isoformat(),
+    }
+    if day("time", 1) is not None:
+        result["tomorrow"] = {
+            "date": day("time", 1),
+            "weather_code": day("weather_code", 1),
+            "temp_max": day("temperature_2m_max", 1),
+            "temp_min": day("temperature_2m_min", 1),
+            "precipitation": day("precipitation_sum", 1),
+        }
+    return result
+
+
 class WeatherPoller:
     """Polls Open-Meteo API for current weather conditions."""
 
@@ -88,20 +120,7 @@ class WeatherPoller:
             if not resp.ok:
                 logger.warning("Open-Meteo API returned %s", resp.status_code)
                 return
-            raw = resp.json()
-            current = raw.get("current", {})
-            daily = raw.get("daily", {})
-            result = {
-                "temperature": current.get("temperature_2m"),
-                "weather_code": current.get("weather_code"),
-                "sunrise": daily.get("sunrise", [None])[0],
-                "sunset": daily.get("sunset", [None])[0],
-                "temp_max": daily.get("temperature_2m_max", [None])[0],
-                "temp_min": daily.get("temperature_2m_min", [None])[0],
-                "precipitation": daily.get("precipitation_sum", [None])[0],
-                "daily_weather_code": daily.get("weather_code", [None])[0],
-                "last_updated": datetime.now().isoformat(),
-            }
+            result = parse_weather(resp.json())
             with self._lock:
                 self._cache = result
             logger.info("Weather updated: %.1f°C code=%s", result.get("temperature", 0), result.get("weather_code"))

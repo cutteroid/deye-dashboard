@@ -1387,6 +1387,37 @@ body.fullscreen-mode .weather-detail-label {
     font-size: 0.9rem;
 }
 
+body.fullscreen-mode .weather-forecast-tomorrow {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding-left: 40px;
+    border-left: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+body.fullscreen-mode .weather-forecast-tomorrow[hidden] {
+    display: none;
+}
+
+body.fullscreen-mode .weather-tomorrow-icon {
+    font-size: 2.2rem;
+    line-height: 1;
+}
+
+body.fullscreen-mode .weather-tomorrow-title {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+body.fullscreen-mode .weather-tomorrow-desc {
+    font-size: 0.95rem;
+    opacity: 0.85;
+    margin-top: 2px;
+}
+
 /* Planned Outages Banner: full-width row under the status banners */
 .planned-outages-banner {
     display: none;
