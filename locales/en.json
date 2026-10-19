@@ -111,14 +111,15 @@
     "back_in": "Back in {time}",
     "back_soon": "Should be back soon",
     "outage_unavailable": "Outage (schedule unavailable)",
-    "unscheduled": "Unscheduled outage",
-    "remaining": "~{time} remaining"
+    "unscheduled": "Unscheduled outage"
   },
   "battery_banner": {
     "label": "Battery Level",
     "charging": "Charging {power}W",
     "discharging": "Discharging {power}W",
-    "idle": "Idle"
+    "idle": "Idle",
+    "runtime": "≈ {time}",
+    "runtime_label": "Lasts about"
   },
   "generator": {
     "title": "Generator",

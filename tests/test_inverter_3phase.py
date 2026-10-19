@@ -79,3 +79,13 @@ def test_high_voltage_model_scaling():
     assert data["battery_voltage"] == pytest.approx(312.5)
     assert data["battery_power"] == 3300 and data["battery_status"] == "Charging"
     assert (data["pv1_power"], data["pv2_power"]) == (2100, 1850)
+
+
+def test_capacity_and_shutdown_soc_for_runtime(inverter):
+    regs = {**REGISTERS, 592: 0, 102: 100, 115: 10}   # no BMS-measured capacity: use the setting
+    with patch.object(inverter, "read_register", side_effect=lambda addr: regs.get(addr, 0)):
+        data = inverter._read_3p_data_unlocked()
+    assert data["battery_capacity_ah"] == 100 and data["battery_shutdown_soc"] == 10
+    regs[592] = 280                                   # BMS-measured capacity wins
+    with patch.object(inverter, "read_register", side_effect=lambda addr: regs.get(addr, 0)):
+        assert inverter._read_3p_data_unlocked()["battery_capacity_ah"] == 280

@@ -268,3 +268,39 @@ class TestGeneratorMidnightAndRestart:
             log = json.load(f)
         assert log["2026-10-17"]["sessions"] == [{"start": "10:00:00", "end": "11:00:00"}]
         assert log["2026-10-17"]["runtime_seconds"] == 3600
+
+
+class TestBatteryRuntime:
+    """Runtime estimate: usable energy above the shutdown SOC / average discharge power."""
+
+    DATA = {"battery_soc": 92, "battery_shutdown_soc": 10, "battery_capacity_ah": 100, "battery_voltage": 53.2}
+
+    def test_estimate(self):
+        import app
+        # 100 Ah x 53.2 V = 5320 Wh; (92 - 10)% = 4362.4 Wh; at 411 W -> 636 min
+        assert app.estimate_battery_runtime(self.DATA, 411) == 636
+
+    def test_none_when_not_discharging_or_capacity_unknown(self):
+        import app
+        assert app.estimate_battery_runtime(self.DATA, 0) is None
+        assert app.estimate_battery_runtime({**self.DATA, "battery_capacity_ah": 0}, 400) is None
+
+    def test_at_or_below_shutdown_soc_is_zero(self):
+        import app
+        assert app.estimate_battery_runtime({**self.DATA, "battery_soc": 8}, 400) == 0
+
+    def test_capacity_override(self, monkeypatch):
+        import app
+        monkeypatch.setattr(app, "BATTERY_CAPACITY_KWH", 10.0)
+        assert app.estimate_battery_runtime({**self.DATA, "battery_shutdown_soc": 0}, 920) == 600  # 9.2 kWh / 920 W
+
+    def test_poller_averages_discharge_and_resets(self):
+        import app
+        poller = app.InverterPoller(inverter=None, battery_sampler=None)
+        for power in (-300, -500):        # average 400 W
+            result = {**self.DATA, "battery_power": power}
+            poller._add_runtime_estimate(result)
+        assert result["battery_runtime_minutes"] == app.estimate_battery_runtime(self.DATA, 400)
+        result = {**self.DATA, "battery_power": 1500}  # charging: no estimate, average restarts
+        poller._add_runtime_estimate(result)
+        assert result["battery_runtime_minutes"] is None and poller._discharge_samples == []

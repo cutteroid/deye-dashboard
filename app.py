@@ -143,6 +143,34 @@ class WeatherPoller:
 
 
 INVERTER_CACHE_FILE = os.environ.get("INVERTER_CACHE_FILE", "inverter_cache.json")
+# Overrides the capacity the inverter reports (for the battery runtime estimate)
+BATTERY_CAPACITY_KWH = env_float("BATTERY_CAPACITY_KWH", 0.0)
+RUNTIME_AVERAGE_SAMPLES = 10  # polls (~10 min) of discharge power behind the estimate
+
+
+def battery_capacity_wh(data):
+    """Full battery capacity in Wh: BATTERY_CAPACITY_KWH, else inverter's Ah x battery voltage."""
+    if BATTERY_CAPACITY_KWH > 0:
+        return BATTERY_CAPACITY_KWH * 1000
+    capacity_ah = data.get("battery_capacity_ah") or 0
+    voltage = data.get("battery_voltage") or 0
+    return capacity_ah * voltage if capacity_ah > 0 and voltage > 0 else None
+
+
+def estimate_battery_runtime(data, average_discharge_w):
+    """Minutes until the battery reaches its shutdown SOC at the given discharge power.
+
+    None when it can't be estimated (not discharging, capacity unknown).
+    """
+    capacity = battery_capacity_wh(data)
+    if not capacity or not average_discharge_w or average_discharge_w <= 0:
+        return None
+    soc = data.get("battery_soc") or 0
+    shutdown = data.get("battery_shutdown_soc") or 0
+    if not 0 <= shutdown < 100:
+        shutdown = 0
+    usable_wh = capacity * max(0, soc - shutdown) / 100
+    return int(usable_wh / average_discharge_w * 60)
 INVERTER_CACHE_MAX_AGE = 300  # seconds – serve cached data if fresher than 5 min
 
 
@@ -157,6 +185,7 @@ class InverterPoller:
         self._cache = {}
         self._lock = threading.Lock()
         self.cache_file = cache_file
+        self._discharge_samples = []  # recent discharge power (W) for the runtime estimate
         self._load_cache()
 
     def _load_cache(self):
@@ -206,6 +235,8 @@ class InverterPoller:
                             result.get("grid_power", 0))
 
             result["last_updated"] = datetime.now().isoformat()
+            if not result.get("error"):
+                self._add_runtime_estimate(result)
             with self._lock:
                 self._cache = result
             self._save_cache()
@@ -227,6 +258,20 @@ class InverterPoller:
                 )
         except Exception:
             logger.exception("Error polling inverter data")
+
+    def _add_runtime_estimate(self, result):
+        """Battery runtime left (minutes) at the average discharge power of recent polls.
+
+        Averaging keeps the estimate from jumping with every kettle; a pause in
+        discharging (charging, idle) starts the average over.
+        """
+        discharge = -(result.get("battery_power") or 0)  # battery_power < 0 = discharging
+        if discharge > 20:
+            self._discharge_samples = (self._discharge_samples + [discharge])[-RUNTIME_AVERAGE_SAMPLES:]
+        else:
+            self._discharge_samples = []
+        average = sum(self._discharge_samples) / len(self._discharge_samples) if self._discharge_samples else 0
+        result["battery_runtime_minutes"] = estimate_battery_runtime(result, average)
 
     @property
     def data(self):

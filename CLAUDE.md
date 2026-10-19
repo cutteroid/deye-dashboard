@@ -124,6 +124,8 @@ Config saved from the UI is validated by `setup.validate_config()` (types, range
 | 590 | Battery Power (signed, discharge > 0; negated in code) | W |
 | 591 | Battery Current (signed, discharge > 0; negated in code) | /100 A |
 | 598-600 | Grid Voltage L1-L3 (598 drives online/outage detection) | /10 V |
+| 592 / 102 | Battery capacity: BMS-measured ("corrected") / inverter setting — runtime estimate | Ah |
+| 115 | Battery shutdown SOC — runtime estimate counts down to it | % |
 | 607 | Grid Power (signed) | W |
 | 644-646 | Phase Voltages L1-L3 | /10 V |
 | 650-653 | Phase Loads L1-L3, Total Load | W |

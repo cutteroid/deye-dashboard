@@ -623,6 +623,16 @@ function updateBatteryBanner(data) {
     statusEl.innerHTML = flow
         ? t('battery_banner.' + flow, { power: powerHtml })
         : escapeHtml(t('battery_banner.idle'));
+
+    // During an outage: how long the battery lasts at the recent average load
+    // (estimated on the server until the inverter's shutdown SOC), in the header
+    var runtime = data.battery_runtime_minutes;
+    var showRuntime = flow === 'discharging' && (data.grid_voltage || 0) < 100 && typeof runtime === 'number';
+    document.getElementById('battery-banner-runtime').hidden = !showRuntime;
+    if (showRuntime) {
+        document.getElementById('battery-runtime-value').textContent =
+            t('battery_banner.runtime', { time: formatPlannedDuration(runtime) });
+    }
     statusEl.classList.toggle('battery-flow-charging', flow === 'charging');
     statusEl.classList.toggle('battery-flow-discharging', flow === 'discharging');
 
@@ -1168,22 +1178,8 @@ function updateOutageInfo() {
                 el.textContent = t('outage_info.back_soon');
             }
         } else {
-            // Unscheduled outage — show estimated battery remaining time
-            var remaining = '';
-            if (inverterConfig && inverterConfig.has_battery === false) {
-                remaining = d.status === 'error' ? t('outage_info.outage_unavailable') : t('outage_info.unscheduled');
-            } else if (latestInverterData) {
-                var soc = latestInverterData.battery_soc || 0;
-                var capacityWh = latestInverterData.battery_max_available_capacity_wh || 0;
-                var loadW = Math.abs(latestInverterData.battery_power || 0);
-                // Battery level itself is in the battery banner, so no SOC here
-                if (loadW > 0 && capacityWh > 0) {
-                    var remainingWh = (soc / 100) * capacityWh;
-                    var remainingMs = (remainingWh / loadW) * 3600 * 1000;
-                    remaining = t('outage_info.remaining', { time: formatCountdown(remainingMs) });
-                }
-            }
-            el.textContent = remaining || (d.status === 'error' ? t('outage_info.outage_unavailable') : t('outage_info.unscheduled'));
+            // Unscheduled outage (battery level and runtime left are in the battery banner)
+            el.textContent = d.status === 'error' ? t('outage_info.outage_unavailable') : t('outage_info.unscheduled');
         }
     } else {
         // Grid is on — show next outage countdown

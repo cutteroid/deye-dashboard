@@ -120,6 +120,11 @@
                         <div class="battery-banner-label" data-i18n="battery_banner.label">Battery Level</div>
                         <div class="battery-banner-value" id="battery-banner-value">--%</div>
                     </div>
+                    <!-- During an outage: estimated time until the inverter's shutdown SOC -->
+                    <div class="battery-banner-runtime" id="battery-banner-runtime" hidden>
+                        <div class="battery-banner-label" data-i18n="battery_banner.runtime_label">Lasts about</div>
+                        <div class="battery-runtime-value" id="battery-runtime-value">--</div>
+                    </div>
                 </div>
                 <div class="battery-banner-bar">
                     <div class="battery-banner-fill" id="battery-banner-fill" style="width: 0%"></div>

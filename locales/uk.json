@@ -111,14 +111,15 @@
     "back_in": "Світло з'явиться через {time}",
     "back_soon": "Світло має з'явитися незабаром",
     "outage_unavailable": "Відключення (графік недоступний)",
-    "unscheduled": "Позапланове відключення",
-    "remaining": "Залишилось ~{time}"
+    "unscheduled": "Позапланове відключення"
   },
   "battery_banner": {
     "label": "Рівень заряду",
     "charging": "Заряджання {power} Вт",
     "discharging": "Розряджання {power} Вт",
-    "idle": "Очікування"
+    "idle": "Очікування",
+    "runtime": "≈ {time}",
+    "runtime_label": "Вистачить на"
   },
   "generator": {
     "title": "Генератор",

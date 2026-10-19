@@ -187,6 +187,28 @@ body {
     font-weight: 700;
 }
 
+/* Runtime estimate, right side of the header row (empty otherwise) */
+.battery-banner-runtime {
+    margin-left: auto;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.battery-banner-runtime[hidden] {
+    display: none;
+}
+
+.battery-runtime-value {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #e2e8f0;
+    font-variant-numeric: tabular-nums;
+}
+
+body.fullscreen-mode .battery-runtime-value {
+    font-size: 1.7rem;
+}
+
 .battery-status-banner.battery-high .battery-banner-value {
     color: #6ec89b;
 }
@@ -2892,6 +2914,10 @@ html.low-power .pin-overlay {
     body.fullscreen-mode .battery-banner-value,
     body.fullscreen-mode .generator-banner-value {
         font-size: 1.6rem;
+    }
+
+    body.fullscreen-mode .battery-runtime-value {
+        font-size: 1.15rem;
     }
 
     body.fullscreen-mode .grid-status-label,

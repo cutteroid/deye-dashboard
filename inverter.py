@@ -171,6 +171,12 @@ class DeyeInverter:
                 available_capacity = (data["battery_capacity"] / 100) * data["battery_discharge_percent"]
                 data["battery_max_available_capacity_wh"] = available_capacity * data["battery_nominal_voltage"]
 
+                # For the runtime estimate: 204 = battery capacity (Ah), 217 = shutdown SOC
+                data["battery_capacity_ah"] = self.read_register(204)
+                time.sleep(0.05)
+                data["battery_shutdown_soc"] = self.read_register(217)
+                time.sleep(0.05)
+
                 if battery_sampler:
                     smoothed_v = battery_sampler.get_voltage()
                     if smoothed_v is not None:
@@ -284,6 +290,18 @@ class DeyeInverter:
                 raw_soc = self.read_register(588)
                 time.sleep(0.05)
                 data["battery_soc_raw"] = raw_soc
+
+                # For the runtime estimate: 592 = capacity measured by the BMS
+                # ("corrected"), 102 = capacity set on the inverter, 115 = SOC at
+                # which the inverter stops discharging
+                capacity_ah = self.read_register(592)
+                time.sleep(0.05)
+                if not capacity_ah:
+                    capacity_ah = self.read_register(102)
+                    time.sleep(0.05)
+                data["battery_capacity_ah"] = capacity_ah
+                data["battery_shutdown_soc"] = self.read_register(115)
+                time.sleep(0.05)
 
                 if battery_sampler:
                     smoothed_v = battery_sampler.get_voltage()
