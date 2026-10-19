@@ -977,11 +977,16 @@ function fetchOutageSchedule() {
     fetch('/api/outage_schedule')
         .then(function(r) { return r.json(); })
         .then(function(data) {
+            // "unknown" = the server has no current schedule yet (e.g. just after
+            // midnight, before its next fetch): keep the one on screen meanwhile
+            if (data.status === 'unknown' && outageScheduleData && outageScheduleData.days) return;
             outageScheduleData = data;
             updateOutageInfo();
             renderPlannedOutages();
         })
-        .catch(function() { outageScheduleData = null; renderPlannedOutages(); });
+        // A failed request (Wi-Fi blip, busy server) keeps the last schedule on
+        // screen; "Loading" only shows before the first answer
+        .catch(function() { if (!outageScheduleData) renderPlannedOutages(); });
 }
 
 // ===== PLANNED OUTAGES CARD =====
@@ -1370,17 +1375,28 @@ function fetchWeather() {
         });
 }
 
+// Requests to the dashboard server that may fail in a row (Wi-Fi blips) before a
+// card replaces its last data with an error
+var FETCH_FAILURES_BEFORE_ERROR = 3;
+
 // ===== SMART METER =====
 // Read-only readings of the MQTT smart meter (/api/smart-meter); the card stays
 // hidden unless the meter is enabled on the server.
 var SMART_METER_POLL_MS = 5000;
 var smartMeterData = null;
 
+var smartMeterFailures = 0;
+
 function fetchSmartMeter() {
     fetch('/api/smart-meter')
         .then(function(r) { return r.json(); })
-        .then(function(data) { smartMeterData = data; renderSmartMeter(); })
-        .catch(function() { smartMeterData = { status: 'error' }; renderSmartMeter(); });
+        .then(function(data) { smartMeterFailures = 0; smartMeterData = data; renderSmartMeter(); })
+        .catch(function() {
+            // Keep the last readings through a short network blip
+            if (smartMeterData && ++smartMeterFailures < FETCH_FAILURES_BEFORE_ERROR) return;
+            smartMeterData = { status: 'error' };
+            renderSmartMeter();
+        });
 }
 
 function renderSmartMeter() {
@@ -1513,11 +1529,18 @@ function alertsDistrictTitle(districtId, regionId) {
     return t('alerts.district_name', { name: name }) + ', ' + regionName;
 }
 
+var alertsFailures = 0;
+
 function fetchAlerts() {
     fetch('/api/alerts')
         .then(function(r) { return r.json(); })
-        .then(function(data) { alertsData = data; renderAlerts(); })
-        .catch(function() { alertsData = { status: 'error' }; renderAlerts(); });
+        .then(function(data) { alertsFailures = 0; alertsData = data; renderAlerts(); })
+        .catch(function() {
+            // Keep the last map through a short network blip
+            if (alertsData && ++alertsFailures < FETCH_FAILURES_BEFORE_ERROR) return;
+            alertsData = { status: 'error' };
+            renderAlerts();
+        });
 }
 
 function renderAlerts() {

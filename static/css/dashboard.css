@@ -2744,3 +2744,182 @@ html.low-power .onboarding-overlay,
 html.low-power .pin-overlay {
     background: rgba(0, 0, 0, 0.92);
 }
+
+/* ===== Small screens (7" tablets, e.g. Galaxy Tab A 7.0 SM-T280 = 960x600 CSS px) =====
+   The fullscreen first page is exactly one screen high: weather in one compact
+   line, smaller status banners, and the bottom row (planned outages | alerts map)
+   takes the rest, the map scaling to fit. Declared last so it overrides the
+   regular fullscreen rules above. */
+@media (max-height: 660px) {
+    body.fullscreen-mode .fullscreen-banner-wrapper {
+        height: 100vh;
+        min-height: 0;
+        grid-template-rows: auto auto minmax(0, 1fr);
+        align-content: stretch;
+        gap: 10px;
+        padding: 10px 12px;
+    }
+
+    body.fullscreen-mode .fullscreen-btn {
+        top: 6px;
+        right: 6px;
+        width: 34px;
+        height: 34px;
+    }
+
+    /* Weather: one line */
+    body.fullscreen-mode .weather-forecast-banner {
+        flex-wrap: nowrap;
+        gap: 22px;
+        padding: 6px 20px;
+    }
+
+    body.fullscreen-mode .weather-forecast-current {
+        gap: 10px;
+    }
+
+    body.fullscreen-mode .weather-forecast-icon {
+        font-size: 2rem;
+    }
+
+    body.fullscreen-mode .weather-forecast-temp {
+        font-size: 1.8rem;
+    }
+
+    body.fullscreen-mode .weather-forecast-desc,
+    body.fullscreen-mode .weather-tomorrow-desc {
+        font-size: 0.8rem;
+        margin-top: 0;
+        white-space: nowrap;
+    }
+
+    body.fullscreen-mode .weather-forecast-details {
+        flex-wrap: nowrap;
+        gap: 14px;
+        font-size: 0.95rem;
+        white-space: nowrap;
+    }
+
+    body.fullscreen-mode .weather-detail-label {
+        font-size: 0.8rem;
+    }
+
+    body.fullscreen-mode .weather-forecast-tomorrow {
+        gap: 8px;
+        padding-left: 20px;
+        white-space: nowrap;
+    }
+
+    body.fullscreen-mode .weather-tomorrow-icon {
+        font-size: 1.6rem;
+    }
+
+    body.fullscreen-mode .weather-tomorrow-title {
+        font-size: 0.95rem;
+    }
+
+    /* Grid / battery / generator */
+    body.fullscreen-mode .grid-status-banner,
+    body.fullscreen-mode .battery-status-banner,
+    body.fullscreen-mode.has-generator .generator-status-banner {
+        gap: 4px;
+        padding: 10px 18px;
+    }
+
+    body.fullscreen-mode .grid-status-icon,
+    body.fullscreen-mode .battery-banner-icon,
+    body.fullscreen-mode .generator-banner-icon {
+        font-size: 1.9rem;
+    }
+
+    body.fullscreen-mode .grid-status-value,
+    body.fullscreen-mode .battery-banner-value,
+    body.fullscreen-mode .generator-banner-value {
+        font-size: 1.6rem;
+    }
+
+    body.fullscreen-mode .grid-status-label,
+    body.fullscreen-mode .battery-banner-label,
+    body.fullscreen-mode .generator-banner-label,
+    body.fullscreen-mode .grid-outage-info,
+    body.fullscreen-mode .battery-banner-status,
+    body.fullscreen-mode .generator-banner-status {
+        font-size: 0.8rem;
+    }
+
+    body.fullscreen-mode .grid-outage-info,
+    body.fullscreen-mode .battery-banner-status,
+    body.fullscreen-mode .generator-banner-status {
+        margin-bottom: 6px;
+    }
+
+    body.fullscreen-mode .grid-banner-bar,
+    body.fullscreen-mode .battery-banner-bar {
+        height: 10px;
+        border-radius: 5px;
+    }
+
+    /* Bottom row: planned outages | alerts map */
+    body.fullscreen-mode .planned-outages-banner,
+    body.fullscreen-mode.alerts-enabled .alerts-banner {
+        min-height: 0;
+        overflow: hidden;
+        padding: 10px 16px;
+    }
+
+    body.fullscreen-mode .planned-outages-banner-header,
+    body.fullscreen-mode .alerts-header {
+        margin-bottom: 6px;
+    }
+
+    body.fullscreen-mode .planned-outages-banner-title,
+    body.fullscreen-mode .alerts-title {
+        font-size: 0.95rem;
+    }
+
+    body.fullscreen-mode.alerts-enabled:not(.has-generator):not(.outages-disabled) .planned-outages-banner-body {
+        gap: 8px;
+    }
+
+    body.fullscreen-mode .planned-outages-banner .planned-day-header {
+        margin-bottom: 4px;
+    }
+
+    body.fullscreen-mode .planned-outages-banner .planned-day-name {
+        font-size: 0.95rem;
+    }
+
+    body.fullscreen-mode .planned-outages-banner .planned-windows {
+        margin-top: 6px;
+        gap: 6px;
+    }
+
+    body.fullscreen-mode .planned-outages-banner .planned-window {
+        gap: 8px;
+        padding: 4px 8px;
+        font-size: 0.85rem;
+    }
+
+    body.fullscreen-mode .planned-outages-banner-source {
+        padding-top: 6px;
+    }
+
+    /* The map fills whatever height is left in its block */
+    body.fullscreen-mode .alerts-banner .alerts-map svg {
+        width: 100%;
+        height: 100%;
+        max-height: none;
+    }
+
+    body.fullscreen-mode .alerts-banner .alerts-footer {
+        margin-top: 6px;
+        font-size: 0.7rem;
+    }
+
+    body.fullscreen-mode .scroll-hint {
+        bottom: 4px;
+        width: 32px;
+        height: 32px;
+        font-size: 1rem;
+    }
+}
