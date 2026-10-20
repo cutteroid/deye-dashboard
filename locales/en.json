@@ -17,6 +17,7 @@
   },
   "units": {
     "w": "W",
+    "kw": "kW",
     "v": "V",
     "a": "A",
     "kwh": "kWh",
@@ -115,11 +116,12 @@
   },
   "battery_banner": {
     "label": "Battery Level",
-    "charging": "Charging {power}W",
-    "discharging": "Discharging {power}W",
+    "charging": "Charging {power}",
+    "discharging": "Discharging {power}",
     "idle": "Idle",
     "runtime": "≈ {time}",
-    "runtime_label": "Lasts about"
+    "runtime_label": "Lasts about",
+    "charge_label": "Full in"
   },
   "generator": {
     "title": "Generator",

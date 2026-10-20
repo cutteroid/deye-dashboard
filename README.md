@@ -218,7 +218,7 @@ These are auto-detected at startup. Set them only if auto-detection doesn't work
 | `INVERTER_PHASES` | Number of phases (`1` or `3`); also in Settings → Edit configuration (step 1) | auto-detected |
 | `INVERTER_HAS_BATTERY` | Whether a battery is connected (`true` / `false`) | auto-detected |
 | `INVERTER_PV_STRINGS` | Number of PV strings (`1` or `2`) | auto-detected |
-| `BATTERY_CAPACITY_KWH` | Battery capacity for the runtime estimate shown during outages ("≈ 10h 36m left"), if the inverter's own value is wrong. Without it: battery capacity in Ah from the inverter (BMS-measured, else the inverter setting) × battery voltage; the estimate counts down to the inverter's shutdown SOC at the average discharge power of the last ~10 minutes | from the inverter |
+| `BATTERY_CAPACITY_KWH` | Battery capacity for the battery banner's time estimates — "Lasts about" during outages, "Full in" while charging — if the inverter's own value is wrong. Without it: battery capacity in Ah from the inverter (BMS-measured, else the inverter setting) × battery voltage; the estimates use the average charge / discharge power of the last ~10 minutes and count down to 100% / the inverter's shutdown SOC | from the inverter |
 
 ### Weather
 
@@ -290,7 +290,7 @@ The meter talks MQTT: it connects to a broker and publishes its readings there (
 
 The card appears with "Waiting for data" and fills in after the meter's first message. The dashboard asks the meter to send readings every `SMART_METER_INTERVAL` seconds; the full summary (frequency, relay) arrives once a minute.
 
-Without `SMART_METER_MQTT_USER` / `SMART_METER_MQTT_PASSWORD` the broker accepts no connections from the network, so it is never open without a password.
+Without `SMART_METER_MQTT_USER` / `SMART_METER_MQTT_PASSWORD` the broker accepts no connections from the network, so it is never open without a password. If the meter (or the inverter's logger) is on a separate IoT / guest network, see [Devices on a Separate IoT Network](#devices-on-a-separate-iot-network).
 
 | Variable | Description | Default |
 |----------|-------------|---------|
@@ -460,6 +460,52 @@ nmap -sP 192.168.1.0/24
 ### Logger Serial Number
 
 The serial number is printed on the Solarman Wi-Fi logger stick, or can be found in the Solarman app under device settings.
+
+## Devices on a Separate IoT Network
+
+If the inverter's logger and the smart meter are on an isolated IoT / guest Wi-Fi (no access to the home network) and the dashboard runs on the home network, the router has to let exactly the dashboard's traffic through, in one direction each:
+
+| Connection | Who connects | Port |
+|------------|--------------|------|
+| Dashboard → Solarman logger | the dashboard (polls the inverter) | TCP 8899 on the logger |
+| Smart meter → dashboard host | the meter (it is an MQTT client of the broker) | TCP 1883 on the dashboard host |
+
+Everything else stays blocked: the IoT devices can't open any other connection into the home network, and the dashboard host can't open connections to the meter.
+
+On ASUS routers the IoT network ("Guest Network Pro") has only an all-or-nothing "Access Intranet" switch, so this needs [Asuswrt-Merlin](https://www.asuswrt-merlin.net/) firmware and a firewall script. Other routers usually offer the same as "allow rules" between networks / VLANs: create the rules from the table above.
+
+1. Give the dashboard host, the logger and the meter fixed addresses (DHCP reservations), and keep "Access Intranet" **off** on the IoT network.
+2. In Merlin, enable *Administration → System → Enable JFFS custom scripts and configs* and SSH.
+3. Create `/jffs/scripts/firewall-start` on the router (example addresses; use your own):
+
+   ```sh
+   #!/bin/sh
+   NAS=192.168.1.10         # dashboard host, home network
+   LOGGER=192.168.20.30     # Solarman logger, IoT network
+   METER=192.168.20.40      # Bakler smart meter, IoT network
+
+   # Delete first, so re-running the script doesn't stack duplicate rules
+   iptables -D FORWARD -s $NAS -d $LOGGER -p tcp --dport 8899 -j ACCEPT 2>/dev/null
+   iptables -D FORWARD -s $LOGGER -d $NAS -p tcp --sport 8899 -m state --state ESTABLISHED -j ACCEPT 2>/dev/null
+   iptables -D FORWARD -s $METER -d $NAS -p tcp --dport 1883 -j ACCEPT 2>/dev/null
+   iptables -D FORWARD -s $NAS -d $METER -p tcp --sport 1883 -m state --state ESTABLISHED -j ACCEPT 2>/dev/null
+
+   # NAS -> logger: NAS may open connections to the logger's port 8899 only;
+   # the logger may only reply on those connections
+   iptables -I FORWARD -s $NAS -d $LOGGER -p tcp --dport 8899 -j ACCEPT
+   iptables -I FORWARD -s $LOGGER -d $NAS -p tcp --sport 8899 -m state --state ESTABLISHED -j ACCEPT
+
+   # Meter -> NAS: the meter may connect to the MQTT broker (port 1883) only;
+   # the NAS may only reply on those connections
+   iptables -I FORWARD -s $METER -d $NAS -p tcp --dport 1883 -j ACCEPT
+   iptables -I FORWARD -s $NAS -d $METER -p tcp --sport 1883 -m state --state ESTABLISHED -j ACCEPT
+   ```
+
+   Leave out the `METER` lines if you have no smart meter.
+4. Make it executable and apply it: `chmod a+rx /jffs/scripts/firewall-start`, then `service restart_firewall` (or reboot). The router runs the script again after every firewall restart, and it survives firmware updates.
+5. Use the logger's IoT address as `INVERTER_IP` (Settings → Edit configuration). Network scan can't find it from the home network, so enter it by hand. Point the meter's MQTT settings at the dashboard host's home-network address (see [Smart Meter](#smart-meter-optional)).
+
+**Check:** from the dashboard host, `docker exec deye-dashboard python -c "import socket; socket.create_connection(('192.168.20.30', 8899), 3); print('logger reachable')"`; for the meter, `docker logs deye-mosquitto` shows a client connecting from its address. If the dashboard host has its own firewall (e.g. Synology: Control Panel → Security → Firewall), allow TCP 1883 from the meter there as well. If a check fails, `iptables -S FORWARD` on the router shows whether the rules are in place.
 
 ## Utility Scripts
 

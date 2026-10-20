@@ -17,6 +17,7 @@
   },
   "units": {
     "w": "Вт",
+    "kw": "кВт",
     "v": "В",
     "a": "А",
     "kwh": "кВт·ч",
@@ -115,11 +116,12 @@
   },
   "battery_banner": {
     "label": "Уровень заряда",
-    "charging": "Зарядка {power} Вт",
-    "discharging": "Разрядка {power} Вт",
+    "charging": "Зарядка {power}",
+    "discharging": "Разрядка {power}",
     "idle": "Ожидание",
     "runtime": "≈ {time}",
-    "runtime_label": "Хватит на"
+    "runtime_label": "Хватит на",
+    "charge_label": "До 100%"
   },
   "generator": {
     "title": "Генератор",

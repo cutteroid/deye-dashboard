@@ -602,6 +602,17 @@ function updatePhaseDisplay(data) {
     document.getElementById('voltage-l3').textContent = t('units.voltage_v', { value: (data.voltage_l3 || 0).toFixed(0) });
 }
 
+// Battery power for the banner: 950 -> "950 W", 3135 -> "3.1 kW" (locale decimal
+// separator). The number gets its own span so fullscreen mode can make it stand out.
+function batteryPowerHtml(watts) {
+    var kw = watts >= 999.5;
+    var number = kw
+        ? (watts / 1000).toLocaleString(i18nLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+        : String(Math.round(watts));
+    return '<span class="battery-flow-power">' + escapeHtml(number) + '</span>\u00A0' +
+        escapeHtml(t(kw ? 'units.kw' : 'units.w'));
+}
+
 function updateBatteryBanner(data) {
     const banner = document.getElementById('battery-banner');
     const valueEl = document.getElementById('battery-banner-value');
@@ -616,22 +627,29 @@ function updateBatteryBanner(data) {
     valueEl.textContent = soc + '%';
     fillEl.style.width = soc + '%';
 
-    // Update status text; the power number gets its own span so fullscreen
-    // mode can make it stand out (it's a number, safe as HTML)
-    var powerHtml = '<span class="battery-flow-power">' + Math.round(power) + '</span>';
+    // Update status text
     var flow = current > 0.5 ? 'charging' : current < -0.5 ? 'discharging' : null;
     statusEl.innerHTML = flow
-        ? t('battery_banner.' + flow, { power: powerHtml })
+        ? t('battery_banner.' + flow, { power: batteryPowerHtml(power) })
         : escapeHtml(t('battery_banner.idle'));
 
-    // During an outage: how long the battery lasts at the recent average load
-    // (estimated on the server until the inverter's shutdown SOC), in the header
-    var runtime = data.battery_runtime_minutes;
-    var showRuntime = flow === 'discharging' && (data.grid_voltage || 0) < 100 && typeof runtime === 'number';
-    document.getElementById('battery-banner-runtime').hidden = !showRuntime;
-    if (showRuntime) {
+    // Time estimate in the header (server-side, from the recent average power):
+    // until full while charging; until the shutdown SOC while discharging in an outage
+    var minutes = null, labelKey = null;
+    if (flow === 'charging' && typeof data.battery_charge_minutes === 'number') {
+        minutes = data.battery_charge_minutes;
+        labelKey = 'battery_banner.charge_label';
+    } else if (flow === 'discharging' && (data.grid_voltage || 0) < 100 &&
+               typeof data.battery_runtime_minutes === 'number') {
+        minutes = data.battery_runtime_minutes;
+        labelKey = 'battery_banner.runtime_label';
+    }
+    var estimateEl = document.getElementById('battery-banner-runtime');
+    estimateEl.hidden = minutes === null;
+    if (minutes !== null) {
+        setI18nText(estimateEl.querySelector('.battery-banner-label'), labelKey);
         document.getElementById('battery-runtime-value').textContent =
-            t('battery_banner.runtime', { time: formatPlannedDuration(runtime) });
+            t('battery_banner.runtime', { time: formatPlannedDuration(minutes) });
     }
     statusEl.classList.toggle('battery-flow-charging', flow === 'charging');
     statusEl.classList.toggle('battery-flow-discharging', flow === 'discharging');

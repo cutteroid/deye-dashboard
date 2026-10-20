@@ -301,6 +301,26 @@ class TestBatteryRuntime:
             result = {**self.DATA, "battery_power": power}
             poller._add_runtime_estimate(result)
         assert result["battery_runtime_minutes"] == app.estimate_battery_runtime(self.DATA, 400)
-        result = {**self.DATA, "battery_power": 1500}  # charging: no estimate, average restarts
+        result = {**self.DATA, "battery_power": 1500}  # charging: average restarts with charge power
         poller._add_runtime_estimate(result)
-        assert result["battery_runtime_minutes"] is None and poller._discharge_samples == []
+        assert result["battery_runtime_minutes"] is None and poller._flow_samples == [1500]
+        result = {**self.DATA, "battery_power": 0}     # idle: no estimates, nothing averaged
+        poller._add_runtime_estimate(result)
+        assert result["battery_charge_minutes"] is None and poller._flow_samples == []
+
+    def test_charge_time(self):
+        import app
+        # 100 Ah x 53.2 V = 5320 Wh; (100 - 92)% = 425.6 Wh; at 3135 W -> 8 min
+        assert app.estimate_battery_charge_time(self.DATA, 3135) == 8
+        assert app.estimate_battery_charge_time({**self.DATA, "battery_soc": 100}, 3135) is None
+        assert app.estimate_battery_charge_time(self.DATA, 0) is None
+
+    def test_poller_charge_estimate_uses_average_charge_power(self):
+        import app
+        poller = app.InverterPoller(inverter=None, battery_sampler=None)
+        data = {**self.DATA, "battery_soc": 50}
+        for power in (2000, 4000):        # average 3000 W
+            result = {**data, "battery_power": power}
+            poller._add_runtime_estimate(result)
+        assert result["battery_charge_minutes"] == app.estimate_battery_charge_time(data, 3000)
+        assert result["battery_runtime_minutes"] is None

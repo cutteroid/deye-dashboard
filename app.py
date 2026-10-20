@@ -171,6 +171,18 @@ def estimate_battery_runtime(data, average_discharge_w):
         shutdown = 0
     usable_wh = capacity * max(0, soc - shutdown) / 100
     return int(usable_wh / average_discharge_w * 60)
+
+
+def estimate_battery_charge_time(data, average_charge_w):
+    """Minutes until the battery is full at the given charge power (None if unknown/full).
+
+    Linear, so a little optimistic near 100% where chargers taper off.
+    """
+    capacity = battery_capacity_wh(data)
+    soc = data.get("battery_soc") or 0
+    if not capacity or not average_charge_w or average_charge_w <= 0 or soc >= 100:
+        return None
+    return int(capacity * (100 - soc) / 100 / average_charge_w * 60)
 INVERTER_CACHE_MAX_AGE = 300  # seconds – serve cached data if fresher than 5 min
 
 
@@ -185,7 +197,8 @@ class InverterPoller:
         self._cache = {}
         self._lock = threading.Lock()
         self.cache_file = cache_file
-        self._discharge_samples = []  # recent discharge power (W) for the runtime estimate
+        self._flow_samples = []  # recent charge or discharge power (W) for the time estimates
+        self._flow_direction = 0  # 1 charging, -1 discharging, 0 idle
         self._load_cache()
 
     def _load_cache(self):
@@ -260,18 +273,23 @@ class InverterPoller:
             logger.exception("Error polling inverter data")
 
     def _add_runtime_estimate(self, result):
-        """Battery runtime left (minutes) at the average discharge power of recent polls.
+        """Battery time estimates (minutes) at the average power of recent polls:
+        battery_runtime_minutes while discharging (until the shutdown SOC),
+        battery_charge_minutes while charging (until 100%).
 
-        Averaging keeps the estimate from jumping with every kettle; a pause in
-        discharging (charging, idle) starts the average over.
+        Averaging keeps the estimates from jumping with every kettle; switching
+        between charging, discharging and idle starts the average over.
         """
-        discharge = -(result.get("battery_power") or 0)  # battery_power < 0 = discharging
-        if discharge > 20:
-            self._discharge_samples = (self._discharge_samples + [discharge])[-RUNTIME_AVERAGE_SAMPLES:]
+        power = result.get("battery_power") or 0  # > 0 charging, < 0 discharging
+        direction = 1 if power > 20 else -1 if power < -20 else 0
+        if direction and direction == self._flow_direction:
+            self._flow_samples = (self._flow_samples + [abs(power)])[-RUNTIME_AVERAGE_SAMPLES:]
         else:
-            self._discharge_samples = []
-        average = sum(self._discharge_samples) / len(self._discharge_samples) if self._discharge_samples else 0
-        result["battery_runtime_minutes"] = estimate_battery_runtime(result, average)
+            self._flow_samples = [abs(power)] if direction else []
+        self._flow_direction = direction
+        average = sum(self._flow_samples) / len(self._flow_samples) if self._flow_samples else 0
+        result["battery_runtime_minutes"] = estimate_battery_runtime(result, average) if direction < 0 else None
+        result["battery_charge_minutes"] = estimate_battery_charge_time(result, average) if direction > 0 else None
 
     @property
     def data(self):
