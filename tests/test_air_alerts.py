@@ -121,6 +121,19 @@ class TestPoller:
         assert status["regions"]["UA-32"]["status"] == "alert"  # not downgraded
         assert set(status["districts"]) == {"UA6312", "UA6308", "UA1402", "UA3202"}
 
+    def test_exclusion_zone_follows_vyshhorodskyi_raion(self):
+        """The map draws the Chornobyl zone separately; it belongs to Vyshhorodskyi raion."""
+        poller = AlertsPoller(StaticProvider({"districts": {_district("Вишгородський"): {"status": "threat", "since": "x"}}}))
+        poller._fetch()
+        zone = next(code for code, d in DISTRICTS.items() if d["name"].startswith("Чорнобильська"))
+        assert poller.get_status()["districts"][zone] == {"status": "threat", "since": "x"}
+
+    def test_every_part_of_mapping_exists_on_map(self):
+        from air_alerts import DISTRICT_PART_OF
+        for part, raion in DISTRICT_PART_OF.items():
+            assert part in DISTRICTS and raion in DISTRICTS
+            assert DISTRICTS[part]["region"] == DISTRICTS[raion]["region"]
+
     def test_unknown_before_first_fetch(self):
         assert AlertsPoller(StaticProvider({})).get_status()["status"] == "unknown"
 

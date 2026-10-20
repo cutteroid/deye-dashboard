@@ -55,6 +55,12 @@ def _load_map_ids(path=MAP_FILE):
 # Region codes; {district_code: {"region": code, "name": Ukrainian name}}
 REGION_CODES, DISTRICTS = _load_map_ids()
 
+# Map areas drawn separately that administratively belong to a raion: they get
+# that raion's status. The Chornobyl Exclusion Zone (top of Kyiv oblast) is part
+# of Vyshhorodskyi raion since 2020; alert sources report only the raion, and
+# NEPTUN's own map colours the zone with it.
+DISTRICT_PART_OF = {"UA3200": "UA3210"}
+
 
 class AlertsFetchError(Exception):
     """Provider could not get alert statuses."""
@@ -257,6 +263,9 @@ class AlertsPoller:
         regions = _clean(raw.get("regions"), REGION_CODES)
         districts = {code: info for code, info in _clean(raw.get("districts"), DISTRICTS).items()
                      if info["status"] != "none"}
+        for part, raion in DISTRICT_PART_OF.items():
+            if raion in districts and part not in districts:
+                districts[part] = dict(districts[raion])
         # Derive region statuses from districts (alerts take precedence over threats)
         for code, info in sorted(districts.items(), key=lambda kv: kv[1]["status"] != "alert"):
             region = DISTRICTS[code]["region"]
