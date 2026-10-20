@@ -1486,14 +1486,24 @@ body.fullscreen-mode .weather-forecast-banner {
     align-items: center;
     justify-content: center;
     flex-wrap: wrap;
-    gap: 40px;
+    gap: 20px;
     width: 100%;
     box-sizing: border-box;
-    padding: 20px 40px;
+    padding: 20px 24px;
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 16px;
     color: #fff;
+}
+
+body.fullscreen-mode .weather-forecast-clock {
+    font-size: 2.6rem;
+    font-weight: 700;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    padding-right: 20px;
+    border-right: 1px solid rgba(255, 255, 255, 0.15);
 }
 
 body.fullscreen-mode .weather-forecast-current {
@@ -1521,7 +1531,7 @@ body.fullscreen-mode .weather-forecast-desc {
 body.fullscreen-mode .weather-forecast-details {
     display: flex;
     flex-wrap: wrap;
-    gap: 32px;
+    gap: 18px;
     font-size: 1.1rem;
     opacity: 0.85;
 }
@@ -1541,7 +1551,7 @@ body.fullscreen-mode .weather-forecast-tomorrow {
     display: flex;
     align-items: center;
     gap: 12px;
-    padding-left: 40px;
+    padding-left: 20px;
     border-left: 1px solid rgba(255, 255, 255, 0.15);
 }
 
@@ -2930,6 +2940,11 @@ html.low-power .pin-overlay {
         flex-wrap: nowrap;
         gap: 22px;
         padding: 6px 20px;
+    }
+
+    body.fullscreen-mode .weather-forecast-clock {
+        font-size: 1.8rem;
+        padding-right: 20px;
     }
 
     body.fullscreen-mode .weather-forecast-current {

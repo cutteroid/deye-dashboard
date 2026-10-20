@@ -1070,6 +1070,7 @@ loadPhaseStats();
 updateDashboard();
 
 // Weather forecast banner (independent of inverter data)
+updateClock();
 fetchWeather();
 setInterval(fetchWeather, WEATHER_POLL_MS);
 
@@ -1480,6 +1481,19 @@ function fetchWeather() {
         });
 }
 
+// Clock in the forecast banner: the device's local time, 24-hour (HH:MM)
+var clockTimer;  // no "= null": updateClock() already runs at startup, before this line
+
+function updateClock() {
+    var el = document.getElementById('weather-forecast-clock');
+    if (!el) return;
+    var now = new Date();
+    el.textContent = ('0' + now.getHours()).slice(-2) + ':' + ('0' + now.getMinutes()).slice(-2);
+    // Next update just after the minute changes
+    clearTimeout(clockTimer);
+    clockTimer = setTimeout(updateClock, 60000 - now.getSeconds() * 1000 - now.getMilliseconds() + 50);
+}
+
 // ===== SMART METER =====
 // Read-only readings of the MQTT smart meter (/api/smart-meter); the card stays
 // hidden unless the meter is enabled on the server.
@@ -1766,6 +1780,7 @@ alertsIntervalId = setInterval(fetchAlerts, ALERTS_POLL_MS);
 // Screen back on / tab visible again, or network back: don't wait for the next
 // poll (timers are throttled or paused while the tablet sleeps)
 function refreshAllData() {
+    updateClock();
     updateDashboard();
     fetchSmartMeter();
     fetchAlerts();
