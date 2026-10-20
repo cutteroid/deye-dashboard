@@ -890,7 +890,9 @@ function updateDashboard() {
             document.getElementById('grid-voltage-phases').hidden = !gridPhases;
             if (gridPhases) {
                 ['l1', 'l2', 'l3'].forEach(function(p) {
-                    document.getElementById('grid-voltage-' + p).textContent = fmt(data['grid_voltage_' + p], 0);
+                    var el = document.getElementById('grid-voltage-' + p);
+                    el.textContent = fmt(data['grid_voltage_' + p], 0);
+                    el.classList.toggle('grid-phase-down', (data['grid_voltage_' + p] || 0) < 100);
                 });
             }
             document.getElementById('daily-import').textContent = fmt(data.daily_grid_import, 1);
@@ -949,14 +951,24 @@ function updateDashboard() {
             const gridStatusLabel = document.getElementById('grid-status-label');
             const isOnline = gridIsOnline(data);
 
+            // On battery either way, but say why: some phases missing, grid out of
+            // range (all phases there) or no grid at all
+            var gridState = isOnline ? 'online' : (data.grid_state || 'outage');
+            gridBanner.classList.toggle('online', isOnline);
+            gridBanner.classList.toggle('offline', !isOnline);
+            gridBanner.classList.toggle('partial', gridState === 'partial' || gridState === 'out_of_range');
             if (isOnline) {
-                gridBanner.classList.remove('offline');
-                gridBanner.classList.add('online');
                 setI18nText(gridStatusValue, 'grid_banner.online');
                 setI18nText(gridStatusLabel, 'grid_banner.label');
+            } else if (gridState === 'partial') {
+                var missing = (data.grid_phases_missing || []).map(function(n) { return 'L' + n; });
+                setI18nText(gridStatusValue, missing.length > 1 ? 'grid_banner.phases_down' : 'grid_banner.phase_down',
+                    { phases: missing.join(', ') });
+                setI18nText(gridStatusLabel, 'grid_banner.partial_label');
+            } else if (gridState === 'out_of_range') {
+                setI18nText(gridStatusValue, 'grid_banner.on_battery');
+                setI18nText(gridStatusLabel, 'grid_banner.out_of_range_label');
             } else {
-                gridBanner.classList.remove('online');
-                gridBanner.classList.add('offline');
                 setI18nText(gridStatusValue, 'grid_banner.outage');
                 setI18nText(gridStatusLabel, 'grid_banner.no_power');
             }

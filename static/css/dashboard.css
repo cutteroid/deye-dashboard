@@ -396,6 +396,27 @@ body.fullscreen-mode .battery-runtime-value {
     color: #fbbf24;
 }
 
+/* Partial outage / grid out of range: on battery, but some grid is there — amber */
+.grid-status-banner.offline.partial {
+    background: rgba(251, 191, 36, 0.12);
+    border-color: #f59e0b;
+    box-shadow: 0 0 30px rgba(245, 158, 11, 0.25);
+    animation: none;
+}
+
+.grid-status-banner.offline.partial .grid-status-value {
+    color: #fbbf24;
+}
+
+.grid-status-banner.offline.partial .grid-outage-info {
+    color: #fcd34d;
+}
+
+/* Grid card: a phase without supply */
+.stat .value.grid-phase-down {
+    color: #f87171;
+}
+
 .dashboard {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -1927,6 +1948,10 @@ body.fullscreen-mode.page-scrolled .scroll-hint {
 
 .grid-banner-bar-fill.red {
     background: linear-gradient(90deg, #dc2626, #ef4444);
+}
+
+.grid-status-banner.partial .grid-banner-bar-fill.red {
+    background: linear-gradient(90deg, #f59e0b, #fbbf24);   /* partial outage: amber */
 }
 
 /* Settings Panel */

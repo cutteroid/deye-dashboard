@@ -103,3 +103,17 @@ def test_grid_online_from_relay_and_voltages(inverter, relay, volts, online):
     with patch.object(inverter, "read_register", side_effect=lambda addr: regs.get(addr, 0)):
         data = inverter._read_3p_data_unlocked()
     assert data["grid_online"] is online and data["grid_relay"] == relay
+
+
+@pytest.mark.parametrize("relay,volts,state,missing", [
+    (0x05, (227.6, 225.1, 215.4), "online", []),
+    (0x01, (251.1, 0.0, 245.8), "partial", [2]),          # live: L2 cut by the smart meter
+    (0x01, (0.0, 0.0, 245.8), "partial", [1, 2]),
+    (0x01, (238.0, 255.7, 239.0), "out_of_range", []),    # all phases there, inverter disconnected
+    (0x01, (0.0, 0.2, 0.0), "outage", [1, 2, 3]),
+])
+def test_grid_state(inverter, relay, volts, state, missing):
+    regs = {**REGISTERS, 552: relay, 598: int(volts[0] * 10), 599: int(volts[1] * 10), 600: int(volts[2] * 10)}
+    with patch.object(inverter, "read_register", side_effect=lambda addr: regs.get(addr, 0)):
+        data = inverter._read_3p_data_unlocked()
+    assert data["grid_state"] == state and data["grid_phases_missing"] == missing

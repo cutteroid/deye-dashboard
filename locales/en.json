@@ -102,7 +102,12 @@
     "checking": "Checking...",
     "online": "ONLINE",
     "outage": "OUTAGE",
-    "no_power": "No grid power"
+    "no_power": "No grid power",
+    "partial_label": "Partial outage",
+    "phase_down": "{phases} DOWN",
+    "phases_down": "{phases} DOWN",
+    "out_of_range_label": "Grid out of range",
+    "on_battery": "ON BATTERY"
   },
   "outage_info": {
     "scheduled_now": "Scheduled outage · ends in {time}",

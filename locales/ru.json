@@ -102,7 +102,12 @@
     "checking": "Проверка...",
     "online": "ЕСТЬ СВЕТ",
     "outage": "НЕТ СВЕТА",
-    "no_power": "Сеть обесточена"
+    "no_power": "Сеть обесточена",
+    "partial_label": "Частичное отключение",
+    "phase_down": "НЕТ ФАЗЫ {phases}",
+    "phases_down": "НЕТ ФАЗ {phases}",
+    "out_of_range_label": "Сеть вне нормы",
+    "on_battery": "НА БАТАРЕЕ"
   },
   "outage_info": {
     "scheduled_now": "Плановое отключение · закончится через {time}",

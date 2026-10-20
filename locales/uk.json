@@ -102,7 +102,12 @@
     "checking": "Перевірка...",
     "online": "Є СВІТЛО",
     "outage": "НЕМАЄ СВІТЛА",
-    "no_power": "Мережа знеструмлена"
+    "no_power": "Мережа знеструмлена",
+    "partial_label": "Часткове відключення",
+    "phase_down": "НЕМАЄ ФАЗИ {phases}",
+    "phases_down": "НЕМАЄ ФАЗ {phases}",
+    "out_of_range_label": "Мережа поза нормою",
+    "on_battery": "НА БАТАРЕЇ"
   },
   "outage_info": {
     "scheduled_now": "Планове відключення · закінчиться через {time}",

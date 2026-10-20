@@ -42,6 +42,18 @@ def grid_online(relay, voltages):
     return bool(present) and all(v >= GRID_ONLINE_MIN_VOLTAGE for v in present)
 
 
+def grid_state(online, voltages):
+    """"online", or why not: "partial" (some phases without supply), "out_of_range"
+    (all phases present but the inverter stays disconnected, e.g. voltage or
+    frequency out of limits) or "outage" (no supply at all)."""
+    if online:
+        return "online"
+    present = [v >= GRID_ONLINE_MIN_VOLTAGE for v in voltages if v is not None]
+    if not any(present):
+        return "outage"
+    return "out_of_range" if all(present) else "partial"
+
+
 def device_family(device_type):
     """Family name for a register-0 value ("unknown" if not recognised)."""
     return DEVICE_FAMILIES.get(device_type, "unknown")
@@ -218,6 +230,7 @@ class DeyeInverter:
             # Grid
             data["grid_voltage"] = self.read_register(150) / 10
             data["grid_online"] = grid_online(None, [data["grid_voltage"]])
+            data["grid_state"] = "online" if data["grid_online"] else "outage"
             time.sleep(0.05)
             raw_grid_power = self.read_register(169)
             data["grid_power"] = to_signed(raw_grid_power)
@@ -353,8 +366,12 @@ class DeyeInverter:
                 time.sleep(0.05)
             data["grid_relay"] = self.read_register(552)
             time.sleep(0.05)
-            data["grid_online"] = grid_online(data["grid_relay"], [
-                data["grid_voltage"], data.get("grid_voltage_l2"), data.get("grid_voltage_l3")])
+            grid_volts = [data["grid_voltage"], data.get("grid_voltage_l2"), data.get("grid_voltage_l3")]
+            data["grid_online"] = grid_online(data["grid_relay"], grid_volts)
+            data["grid_state"] = grid_state(data["grid_online"], grid_volts)
+            # Phase numbers without supply (L1..L3), for "L2 DOWN"
+            data["grid_phases_missing"] = [i + 1 for i, v in enumerate(grid_volts)
+                                           if v is not None and v < GRID_ONLINE_MIN_VOLTAGE]
             raw_grid_power = self.read_register(607)
             data["grid_power"] = to_signed(raw_grid_power)
             time.sleep(0.05)

@@ -124,7 +124,7 @@ Config saved from the UI is validated by `setup.validate_config()` (types, range
 | 590 | Battery Power (signed, discharge > 0; negated in code) | W |
 | 591 | Battery Current (signed, discharge > 0; negated in code) | /100 A |
 | 598-600 | Grid Voltage L1-L3 | /10 V |
-| 552 | Relay status bits: 0 inverter, 2 grid, 3 generator → `grid_online` (0 = unsupported/all off → all phases ≥ 100 V). Dashboard, battery runtime and Telegram outage alerts use `grid_online`, not the L1 voltage | bits |
+| 552 | Relay status bits: 0 inverter, 2 grid, 3 generator → `grid_online` (0 = unsupported/all off → all phases ≥ 100 V). Dashboard, battery runtime and Telegram outage alerts use `grid_online`, not the L1 voltage. When offline, `grid_state` says why: `partial` (some phases < 100 V, listed in `grid_phases_missing` → amber "L2 DOWN"), `out_of_range` (all phases present, inverter still disconnected → "ON BATTERY"), `outage` (no supply → red "OUTAGE") | bits |
 | 592 / 102 | Battery capacity: BMS-measured ("corrected") / inverter setting — runtime estimate | Ah |
 | 115 | Battery shutdown SOC — runtime estimate counts down to it | % |
 | 607 | Grid Power (signed) | W |

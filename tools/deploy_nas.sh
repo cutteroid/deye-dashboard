@@ -8,12 +8,14 @@
 #                                  then at most one password prompt per run)
 #   tools/deploy_nas.sh --setup    change the saved NAS address / folder
 #
-# Settings are kept in tools/.deploy_nas.env (not committed). The NAS folder's
+# Settings are kept in tools/.deploy_nas.env (not committed; DEPLOY_NAS_CONF=path
+# overrides it). The NAS folder's
 # data/ (config, stats, broker files) is never touched.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-CONF=tools/.deploy_nas.env
+# DEPLOY_NAS_CONF: use another settings file (e.g. for tests; never touches yours)
+CONF=${DEPLOY_NAS_CONF:-tools/.deploy_nas.env}
 if [ "${1:-}" = "--setup" ] || [ ! -f "$CONF" ]; then
     # shellcheck disable=SC1090
     [ -f "$CONF" ] && . "$CONF"
