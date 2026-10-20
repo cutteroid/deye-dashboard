@@ -372,10 +372,25 @@ function updateLowPowerToggle() {
 updateLowPowerToggle();
 
 // fetch() for endpoints behind the settings PIN
+// Requests to the dashboard server give up after this long. Without a timeout a
+// request that hangs on flaky Wi-Fi never settles; a few of those use up the
+// browser's 6 connections to the server and every later request just queues,
+// so the cards stop updating until the page is reloaded.
+var API_TIMEOUT_MS = 15000;
+
+function apiFetch(url, options) {
+    options = options || {};
+    if (typeof AbortController === 'undefined' || options.signal) return fetch(url, options);
+    var controller = new AbortController();
+    var timer = setTimeout(function() { controller.abort(); }, API_TIMEOUT_MS);
+    return fetch(url, Object.assign({}, options, { signal: controller.signal }))
+        .finally(function() { clearTimeout(timer); });
+}
+
 function settingsFetch(url, options) {
     options = options || {};
     options.headers = Object.assign({}, options.headers, { 'X-Settings-Pin': settingsPin || '' });
-    return fetch(url, options);
+    return apiFetch(url, options);
 }
 
 // What to do after a correct PIN (unlock server settings, clear stats, ...)
@@ -403,7 +418,7 @@ function submitSettingsPin() {
     if (!pin) return;
     submitBtn.disabled = true;
 
-    fetch('/api/settings/verify-pin', {
+    apiFetch('/api/settings/verify-pin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pin: pin }),
@@ -510,7 +525,7 @@ function formatGeneratorDuration(decimalHours) {
 // Phase statistics
 async function loadPhaseStats() {
     try {
-        const response = await fetch('/api/phase-stats');
+        const response = await apiFetch('/api/phase-stats');
         const stats = await response.json();
         renderPhaseStats(stats);
     } catch (e) {
@@ -1073,7 +1088,7 @@ var generatorData = null;
 var generatorIntervalId = null;
 
 function fetchOutageSchedule() {
-    fetch('/api/outage_schedule')
+    apiFetch('/api/outage_schedule')
         .then(function(r) { return r.json(); })
         .then(function(data) {
             // "unknown" = the server has no current schedule yet (e.g. just after
@@ -1211,6 +1226,11 @@ function renderPlannedOutages() {
     });
 }
 
+// Countdown time in the grid banner, highlighted (escaped: it's built from translations)
+function outageTimeHtml(ms) {
+    return '<span class="outage-time">' + escapeHtml(formatCountdown(ms)) + '</span>';
+}
+
 function updateOutageInfo() {
     var el = document.getElementById('grid-outage-info');
     var d = outageScheduleData;
@@ -1226,10 +1246,10 @@ function updateOutageInfo() {
         // itself rather than assuming an outage.
         if (d.status === 'active' && d.end_time) {
             var activeLeft = new Date(d.end_time) - now;
-            el.textContent = activeLeft > 0 ? t('outage_info.scheduled_now', { time: formatCountdown(activeLeft) }) : '';
+            el.innerHTML = activeLeft > 0 ? t('outage_info.scheduled_now', { time: outageTimeHtml(activeLeft) }) : '';
         } else if (d.status === 'upcoming' && d.upcoming_windows && d.upcoming_windows.length > 0) {
             var untilStart = new Date(d.upcoming_windows[0].start) - now;
-            el.textContent = untilStart > 0 ? t('outage_info.outage_in', { time: formatCountdown(untilStart) }) : '';
+            el.innerHTML = untilStart > 0 ? t('outage_info.outage_in', { time: outageTimeHtml(untilStart) }) : '';
         } else if (d.status === 'clear') {
             el.textContent = t('outage_info.no_outages_today');
         } else if (d.status === 'error') {
@@ -1243,7 +1263,7 @@ function updateOutageInfo() {
             var end = new Date(d.end_time);
             var diff = end - now;
             if (diff > 0) {
-                el.textContent = t('outage_info.back_in', { time: formatCountdown(diff) });
+                el.innerHTML = t('outage_info.back_in', { time: outageTimeHtml(diff) });
             } else {
                 el.textContent = t('outage_info.back_soon');
             }
@@ -1257,7 +1277,7 @@ function updateOutageInfo() {
             var start = new Date(d.upcoming_windows[0].start);
             var diff = start - now;
             if (diff > 0) {
-                el.textContent = t('outage_info.outage_in', { time: formatCountdown(diff) });
+                el.innerHTML = t('outage_info.outage_in', { time: outageTimeHtml(diff) });
             } else {
                 el.textContent = '';
             }
@@ -1448,7 +1468,7 @@ function updateBatteryOverlay(data) {
 var WEATHER_POLL_MS = 60000;
 
 function fetchWeather() {
-    fetch('/api/weather')
+    apiFetch('/api/weather')
         .then(function(response) { return response.json(); })
         .then(function(weatherData) {
             if (weatherData.error) return;
@@ -1469,7 +1489,7 @@ var smartMeterData = null;
 var smartMeterOkAt = 0;
 
 function fetchSmartMeter() {
-    fetch('/api/smart-meter')
+    apiFetch('/api/smart-meter')
         .then(function(r) { return r.json(); })
         .then(function(data) { smartMeterOkAt = Date.now(); smartMeterData = data; renderSmartMeter(); })
         .catch(function() {
@@ -1584,7 +1604,7 @@ function applyAlertsRegion() {
 }
 
 function loadAlertsMap() {
-    fetch(window.DASHBOARD_CONFIG.alertsMapUrl)
+    apiFetch(window.DASHBOARD_CONFIG.alertsMapUrl)
         .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
         .then(function(map) {
             alertsMapData = map;
@@ -1681,7 +1701,7 @@ function alertsDistrictTitle(districtId, regionId) {
 var alertsOkAt = 0;
 
 function fetchAlerts() {
-    fetch('/api/alerts')
+    apiFetch('/api/alerts')
         .then(function(r) { return r.json(); })
         .then(function(data) { alertsOkAt = Date.now(); alertsData = data; renderAlerts(); })
         .catch(function() {
@@ -1743,9 +1763,23 @@ loadAlertsMap();
 fetchAlerts();
 alertsIntervalId = setInterval(fetchAlerts, ALERTS_POLL_MS);
 
+// Screen back on / tab visible again, or network back: don't wait for the next
+// poll (timers are throttled or paused while the tablet sleeps)
+function refreshAllData() {
+    updateDashboard();
+    fetchSmartMeter();
+    fetchAlerts();
+    fetchOutageSchedule();
+    fetchWeather();
+}
+document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'visible') refreshAllData();
+});
+window.addEventListener('online', refreshAllData);
+
 // ===== GENERATOR =====
 function fetchGeneratorData() {
-    fetch('/api/generator')
+    apiFetch('/api/generator')
         .then(function(r) { return r.json(); })
         .then(function(data) {
             generatorData = data;
@@ -2212,7 +2246,7 @@ function showRestartOverlay() {
     var startTime = Date.now();
 
     var pollInterval = setInterval(function() {
-        fetch('/api/config/status')
+        apiFetch('/api/config/status')
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 if (data.configured) {

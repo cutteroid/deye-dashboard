@@ -255,3 +255,14 @@ class TestClearEndpoints:
         assert resp.status_code == 200
         mock_phase.assert_called_once_with({})
         mock_hist.assert_called_once_with({})
+
+
+class TestNoCacheHeaders:
+    def test_api_answers_are_never_cached(self, client):
+        c, _, app_module = client
+        app_module.alerts_poller = None
+        assert c.get("/api/alerts").headers["Cache-Control"] == "no-store"
+
+    def test_page_is_not_cached(self, client):
+        c, _, _ = client
+        assert "no-store" in c.get("/").headers["Cache-Control"]

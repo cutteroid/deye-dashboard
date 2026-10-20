@@ -838,8 +838,10 @@ def _save_to_phase_history(timestamp, l1, l2, l3):
 
 @app.after_request
 def add_no_cache_headers(response):
-    """Prevent browsers from serving stale cached pages."""
-    if response.content_type and "text/html" in response.content_type:
+    """Prevent browsers from serving stale cached pages or API answers."""
+    if request.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store"
+    elif response.content_type and "text/html" in response.content_type:
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
