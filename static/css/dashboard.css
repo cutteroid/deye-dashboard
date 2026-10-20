@@ -772,27 +772,12 @@ body.fullscreen-mode .battery-runtime-value {
     opacity: 1;
 }
 
-/* ===== ANIMATIONS ===== */
+/* ===== CARD STATES (static: card icons don't animate) ===== */
 
 /* Solar animation - glowing sun when producing */
 .card.solar-active {
     border-color: rgba(251, 191, 36, 0.5);
     box-shadow: 0 0 30px rgba(251, 191, 36, 0.2);
-}
-
-.card.solar-active .icon {
-    animation: sun-pulse 2s ease-in-out infinite;
-}
-
-@keyframes sun-pulse {
-    0%, 100% {
-        transform: scale(1);
-        filter: drop-shadow(0 0 5px rgba(251, 191, 36, 0.5));
-    }
-    50% {
-        transform: scale(1.2);
-        filter: drop-shadow(0 0 15px rgba(251, 191, 36, 0.8));
-    }
 }
 
 /* Battery charging animation - flowing energy */
@@ -841,39 +826,10 @@ body.fullscreen-mode .battery-runtime-value {
     box-shadow: 0 0 20px rgba(251, 191, 36, 0.15);
 }
 
-.card.battery-charging .icon,
-.card.battery-discharging .icon {
-    animation: battery-bounce 1s ease-in-out infinite;
-}
-
-@keyframes battery-bounce {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-3px); }
-}
-
 /* Grid electricity animation */
 .card.grid-active {
     border-color: rgba(96, 165, 250, 0.5);
     box-shadow: 0 0 20px rgba(96, 165, 250, 0.15);
-}
-
-.card.grid-active .icon {
-    animation: electricity-zap 0.5s ease-in-out infinite;
-}
-
-@keyframes electricity-zap {
-    0%, 100% {
-        transform: scale(1);
-        filter: drop-shadow(0 0 3px rgba(96, 165, 250, 0.5));
-    }
-    25% {
-        transform: scale(1.1) rotate(-5deg);
-        filter: drop-shadow(0 0 8px rgba(96, 165, 250, 0.8));
-    }
-    75% {
-        transform: scale(1.1) rotate(5deg);
-        filter: drop-shadow(0 0 8px rgba(96, 165, 250, 0.8));
-    }
 }
 
 /* Load/consumption animation */
@@ -890,15 +846,6 @@ body.fullscreen-mode .battery-runtime-value {
 @keyframes load-warning {
     0%, 100% { box-shadow: 0 0 20px rgba(248, 113, 113, 0.2); }
     50% { box-shadow: 0 0 35px rgba(248, 113, 113, 0.4); }
-}
-
-.card.load-active .icon {
-    animation: home-glow 2s ease-in-out infinite;
-}
-
-@keyframes home-glow {
-    0%, 100% { filter: drop-shadow(0 0 2px rgba(248, 113, 113, 0.3)); }
-    50% { filter: drop-shadow(0 0 8px rgba(248, 113, 113, 0.6)); }
 }
 
 /* Consumption card: per-phase section below the home load */
@@ -1034,39 +981,9 @@ body.fullscreen-mode .battery-runtime-value {
     color: #64748b;
 }
 
-/* Grid status icon animations */
-.grid-status-banner.online .grid-status-icon {
-    animation: bolt-pulse 2s ease-in-out infinite;
-}
-
-@keyframes bolt-pulse {
-    0%, 100% {
-        transform: scale(1);
-        filter: drop-shadow(0 0 5px rgba(110, 200, 155, 0.5));
-    }
-    50% {
-        transform: scale(1.1);
-        filter: drop-shadow(0 0 15px rgba(110, 200, 155, 0.8));
-    }
-}
-
-.grid-status-banner.offline .grid-status-icon {
-    animation: bolt-shake 0.5s ease-in-out infinite;
-}
-
-@keyframes bolt-shake {
-    0%, 100% { transform: translateX(0); }
-    25% { transform: translateX(-3px); }
-    75% { transform: translateX(3px); }
-}
-
 /* Smooth transitions for cards */
 .card {
     transition: border-color 0.3s ease, box-shadow 0.3s ease;
-}
-
-.card-header .icon {
-    transition: transform 0.3s ease, filter 0.3s ease;
 }
 
 /* Responsive - iPad Air and tablets (portrait ~820px, landscape ~1180px) */
