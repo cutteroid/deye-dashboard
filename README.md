@@ -192,6 +192,10 @@ You can also run the dashboard using Docker, which is the recommended approach f
 git clone https://github.com/cutteroid/inverter-dashboard.git
 cd inverter-dashboard
 
+# Linux: data/ must belong to the container's user (1000), or the dashboard
+# can't save its settings (a folder Docker creates itself belongs to root)
+mkdir -p data && sudo chown 1000:1000 data
+
 # Build and start the dashboard (and the MQTT broker for the smart meter)
 docker compose up -d
 

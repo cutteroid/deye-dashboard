@@ -1,348 +1,194 @@
-# Docker Setup for Deye Dashboard
+# Docker Setup
 
-This document explains how to build and run the Deye Dashboard using Docker.
+How to build and run the dashboard with Docker. For all settings and features see the [main README](README.md).
 
-## Prerequisites
+## How configuration works
 
-- Docker installed on your system
-- Docker Compose (optional, but recommended)
-- Environment variables configured (see below)
+The container keeps **everything it stores in `./data`**, mounted at `/app/data`:
 
-## Quick Start
+- **Configuration:** `data/.env`. The app loads it at startup, and the settings wizard and **Settings → Edit configuration** write to it.
+- **Data files:** stats, logs and caches (see [Data persistence](#data-persistence)).
 
-### Using Docker Compose (Recommended)
+Don't pass settings to the container from outside (`--env-file`, `-e`, or `env_file:` / `environment:` in a compose file). Environment variables take precedence over `data/.env`, so anything you later change in the dashboard's settings would be silently ignored.
 
-1. **Create a `.env` file** with your configuration:
+Without `data/.env` the dashboard starts in setup mode and opens the setup wizard.
 
-```bash
-cp .env.example .env
-# Edit .env with your inverter IP, logger serial, and other settings
-```
+## Quick start
 
-2. **Build and start the dashboard:**
+### Docker Compose (recommended)
 
 ```bash
-docker-compose up -d
+git clone https://github.com/cutteroid/inverter-dashboard.git
+cd inverter-dashboard
+
+# Linux: create data/ for the container's user first (a folder Docker creates
+# itself would belong to root, and the dashboard couldn't save its settings)
+mkdir -p data && sudo chown 1000:1000 data
+
+docker compose up -d --build
 ```
 
-3. **Access the dashboard:**
+Open http://localhost:8080 and follow the setup wizard, which saves `data/.env`.
 
-Open http://localhost:8080 in your browser
-
-4. **View logs:**
+To prepare the configuration by hand instead (e.g. to copy an existing one):
 
 ```bash
-docker-compose logs -f
+mkdir -p data
+cp .env.example data/.env     # then edit data/.env
+docker compose up -d --build
 ```
 
-5. **Stop the dashboard:**
+`docker compose up` starts two containers:
+
+| Container | Purpose | Port |
+|-----------|---------|------|
+| `deye-dashboard` | The dashboard | 8080 |
+| `deye-mosquitto` | MQTT broker for the optional smart meter; reachable from the network only once `SMART_METER_MQTT_USER` / `SMART_METER_MQTT_PASSWORD` are set in `data/.env` | 1883 |
+
+Logs and stopping:
 
 ```bash
-docker-compose down
+docker compose logs -f
+docker compose down
 ```
 
-### Using Docker CLI
-
-1. **Build the image:**
+### Docker CLI
 
 ```bash
 docker build -t deye-dashboard:latest .
-```
 
-2. **Create a `.env` file:**
-
-```bash
-cp .env.example .env
-# Edit .env with your configuration
-```
-
-3. **Run the container:**
-
-```bash
 docker run -d \
   --name deye-dashboard \
   -p 8080:8080 \
-  --env-file .env \
   -v $(pwd)/data:/app/data \
   --restart unless-stopped \
   deye-dashboard:latest
 ```
 
-4. **View logs:**
+The configuration comes from `./data/.env` (or the setup wizard), as with Compose. This runs only the dashboard. For the smart meter's broker, use Compose.
 
 ```bash
 docker logs -f deye-dashboard
-```
-
-5. **Stop the container:**
-
-```bash
-docker stop deye-dashboard
-docker rm deye-dashboard
+docker stop deye-dashboard && docker rm deye-dashboard
 ```
 
 ## Configuration
 
-All configuration is done through environment variables in your `.env` file:
-
-### Required Settings
+Required, set by the setup wizard (step 1) or in `data/.env`:
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `INVERTER_IP` | IP address of your Deye inverter | `192.168.1.100` |
+| `INVERTER_IP` | IP address of the inverter's Solarman logger | `192.168.1.100` |
 | `LOGGER_SERIAL` | Serial number of the Solarman Wi-Fi logger | `1234567890` |
 
-### Optional Settings
+Everything else is optional: weather location, outage provider, air raid alerts, smart meter, Telegram bot, battery capacity, settings PIN and so on. See [Configuration in the README](README.md#configuration) and `.env.example`. Most of it can also be changed in the dashboard under **Settings → Edit configuration**. Changes are saved to `data/.env` and the dashboard restarts by itself.
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `WEATHER_LATITUDE` | Latitude for weather forecast | `50.4501` |
-| `WEATHER_LONGITUDE` | Longitude for weather forecast | `30.5234` |
-| `INVERTER_PHASES` | Number of phases (1 or 3) | auto-detected |
-| `INVERTER_HAS_BATTERY` | Whether battery is connected (true/false) | auto-detected |
-| `INVERTER_PV_STRINGS` | Number of PV strings (1 or 2) | auto-detected |
-| `INVERTER_HAS_GENERATOR` | Whether generator is connected | false |
-| `OUTAGE_PROVIDER` | Outage provider: `lvivoblenergo`, `yasno`, or `none` | `none` |
-| `OUTAGE_GROUP` | Your outage queue/group number | — |
-| `TELEGRAM_ENABLED` | Enable Telegram bot | false |
-| `TELEGRAM_BOT_TOKEN` | Bot token from @BotFather | — |
-| `TELEGRAM_ALLOWED_USERS` | Comma-separated Telegram user IDs | — |
-| `TELEGRAM_PUBLIC` | Allow any user to query bot | false |
+### Data persistence
 
-### Data Persistence
+Everything the dashboard stores lives in `data/`, so it survives rebuilds, updates and container re-creation:
 
-The container mounts a `data` volume at `/app/data` for persistent storage of:
+- `.env`: the configuration
+- `phase_stats.json`, `phase_history.json`: phase statistics
+- `grid_daily_log.json`, `generator_log.json`: grid import and generator logs
+- `inverter_cache.json`, `inverter_config.json`: last readings and the detected inverter model
+- `bot_state.json`, `battery_reports/`: Telegram bot state
+- `smart_meter_daily.json`, `mosquitto/`: smart meter counter and broker files
 
-- Phase statistics (`phase_stats.json`)
-- Phase history (`phase_history.json`)
-
-The `data` directory is created automatically on first run.
-
-## Volumes and Ports
-
-### Ports
-
-- **8080** — Flask web application
-
-### Volumes
-
-- **`./data:/app/data`** — Persistent data storage
-
-## Environment Variables
-
-### Using with docker-compose
-
-Create a `.env` file in the project root:
-
-```env
-INVERTER_IP=192.168.1.100
-LOGGER_SERIAL=1234567890
-WEATHER_LATITUDE=50.4501
-WEATHER_LONGITUDE=30.5234
-OUTAGE_PROVIDER=lvivoblenergo
-OUTAGE_GROUP=1.1
-TELEGRAM_ENABLED=false
-```
-
-The values are automatically loaded by `docker-compose`.
-
-### Using with docker run
-
-Pass environment variables with `--env-file`:
+The dashboard runs as user `1000` inside the container, so it needs write access to `data/`. On Linux, give the folder to that user, and do it again if files in it were created as another user:
 
 ```bash
-docker run -d \
-  --name deye-dashboard \
-  -p 8080:8080 \
-  --env-file .env \
-  -v $(pwd)/data:/app/data \
-  deye-dashboard:latest
+sudo chown -R 1000:1000 data
 ```
 
-Or set individual variables:
+(Docker Desktop on macOS / Windows maps permissions itself; there this isn't needed.)
 
-```bash
-docker run -d \
-  --name deye-dashboard \
-  -p 8080:8080 \
-  -e INVERTER_IP=192.168.1.100 \
-  -e LOGGER_SERIAL=1234567890 \
-  -v $(pwd)/data:/app/data \
-  deye-dashboard:latest
-```
+### Ports and volumes
+
+| | Dashboard | MQTT broker |
+|---|---|---|
+| Port | `8080` | `1883` |
+| Volume | `./data:/app/data` | `./data/mosquitto:/mosquitto/data`, and `./data` read-only (for the broker login in `data/.env`) |
 
 ## Networking
 
-### Docker Compose
+- The services share the bridge network `deye-network`. The dashboard reaches the broker as `mosquitto`.
+- From the host, the dashboard is at `http://localhost:8080`. From other devices, use `http://<host-ip>:8080`.
+- The container reaches devices on your local network (the inverter's logger, a smart meter) through the host. If they're on a separate IoT / guest network, the router has to allow exactly that traffic; see [Devices on a Separate IoT Network](README.md#devices-on-a-separate-iot-network).
 
-The service runs on a named bridge network `deye-network` for isolation.
+## Health checks
 
-### Access from Host
-
-- Use `http://localhost:8080` on the host machine
-- The container can reach other local services on the host network (e.g., inverter at `192.168.1.100`)
-
-### Access from Other Containers
-
-If you want to add other services (e.g., Grafana, monitoring), use the service name:
-
-```yaml
-# In docker-compose.yml for another service
-depends_on:
-  - deye-dashboard
-environment:
-  DASHBOARD_URL: http://deye-dashboard:8080
-```
-
-## Health Checks
-
-The container includes a built-in health check that:
-
-- Pings the `/api/data` endpoint every 30 seconds
-- Waits 40 seconds before starting health checks
-- Considers the container unhealthy after 3 failed checks
-
-Check the health status:
+The image has a built-in health check: it requests `/api/data` every 30 seconds, starting 40 seconds after startup, and marks the container unhealthy after 3 failures.
 
 ```bash
-docker ps  # Shows health status
-# or
+docker ps
 docker inspect deye-dashboard --format='{{.State.Health.Status}}'
 ```
 
-## Building and Publishing
-
-### Build with custom tags
+## Updating
 
 ```bash
-docker build -t myregistry/deye-dashboard:1.0.0 .
-docker build -t myregistry/deye-dashboard:latest .
+git pull
+docker compose up -d --build
 ```
 
-### Push to registry
+The image is built locally from the source, so there's nothing to `docker pull`. Configuration and data in `data/` are kept.
+
+- **Synology NAS** or another Docker host without the source: `tools/deploy_nas.sh` sends only the changed build files and rebuilds there (see the README).
+- **An image bundle for offline installs:** `tools/export_images.sh`.
+
+## Building images
 
 ```bash
-docker login
-docker push myregistry/deye-dashboard:1.0.0
-docker push myregistry/deye-dashboard:latest
-```
+docker build -t myregistry/deye-dashboard:2.0.1 .
 
-### Build for multiple architectures (requires buildx)
-
-```bash
-docker buildx build --platform linux/amd64,linux/arm64 -t myregistry/deye-dashboard:latest .
+# Several architectures (requires buildx)
+docker buildx build --platform linux/amd64,linux/arm64 -t myregistry/deye-dashboard:2.0.1 .
 ```
 
 ## Troubleshooting
 
-### Container won't start
-
-Check the logs:
+### Container won't start / setup wizard appears every time
 
 ```bash
-docker-compose logs deye-dashboard
-# or
-docker logs deye-dashboard
+docker compose logs deye-dashboard
 ```
 
-### Cannot connect to inverter
+- If the wizard keeps appearing, the dashboard can't read a valid `data/.env`. Check that the file exists and that `data/` is writable by user `1000` (see above).
+- Settings you change in the dashboard don't stick: check that nothing passes them as environment variables (`--env-file`, `-e`, `environment:` / `env_file:` for the dashboard service).
 
-Ensure the inverter IP is correct and reachable from the container:
+### Cannot connect to the inverter
+
+Check that the logger is reachable from the container:
 
 ```bash
-docker exec deye-dashboard ping 192.168.1.100
+docker exec deye-dashboard python -c "import socket; socket.create_connection(('192.168.1.100', 8899), 3); print('logger reachable')"
 ```
 
-If the inverter is on a different network, you may need to use `--network host` or adjust network settings.
+If it isn't, the logger may be on another network (see Networking).
 
-### Missing data files
-
-Ensure the `data` directory has write permissions:
-
-```bash
-mkdir -p data
-chmod 777 data
-```
-
-### High memory usage
-
-Monitor resource usage:
+### Resource usage
 
 ```bash
 docker stats deye-dashboard
 ```
 
-Limit resources in `docker-compose.yml`:
+To limit resources, add to the `deye-dashboard` service in `docker-compose.yml`:
 
 ```yaml
-services:
-  deye-dashboard:
-    # ... other config ...
     deploy:
       resources:
         limits:
           cpus: '0.5'
           memory: 256M
-        reservations:
-          cpus: '0.25'
-          memory: 128M
 ```
 
-## Updating
+## Production notes
 
-### With docker-compose
-
-```bash
-docker-compose pull
-docker-compose up -d
-```
-
-### With docker
-
-```bash
-docker pull deye-dashboard:latest
-docker stop deye-dashboard
-docker rm deye-dashboard
-docker run -d \
-  --name deye-dashboard \
-  -p 8080:8080 \
-  --env-file .env \
-  -v $(pwd)/data:/app/data \
-  deye-dashboard:latest
-```
-
-## Production Deployment
-
-For production, consider:
-
-1. **Use a reverse proxy** (nginx, Traefik) for SSL/TLS and routing
-2. **Set resource limits** to prevent container from consuming all resources
-3. **Use named volumes** instead of bind mounts for better portability
-4. **Run with read-only root filesystem** when possible
-5. **Use a secrets manager** for sensitive data (Telegram tokens, etc.)
-6. **Monitor logs** with a centralized logging solution
-
-Example production setup with nginx:
+- Put a reverse proxy (nginx, Traefik) in front for TLS. Keep the dashboard itself on the local network; its settings PIN is basic protection, not real authentication.
+- Keep `data/` backed up: it holds the configuration (including any Telegram token and MQTT password) and the statistics.
+- Example with nginx, added next to the existing services in `docker-compose.yml` (no `env_file` / `environment` for the dashboard):
 
 ```yaml
-version: '3.8'
-
-services:
-  deye-dashboard:
-    build: .
-    container_name: deye-dashboard
-    env_file: .env
-    volumes:
-      - dashboard-data:/app/data
-    networks:
-      - deye-network
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 256M
-
   nginx:
     image: nginx:alpine
     ports:
@@ -356,17 +202,10 @@ services:
     networks:
       - deye-network
     restart: unless-stopped
-
-volumes:
-  dashboard-data:
-
-networks:
-  deye-network:
 ```
 
-## See Also
+## See also
 
-- [Docker Documentation](https://docs.docker.com/)
-- [Docker Compose Documentation](https://docs.docker.com/compose/)
 - [Main README](README.md)
-
+- [Docker documentation](https://docs.docker.com/)
+- [Docker Compose documentation](https://docs.docker.com/compose/)
