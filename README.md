@@ -151,8 +151,8 @@ Raspberry Pi зчитує дані з вашого інвертора кожні
 ## Quick Start
 
 ```bash
-git clone https://github.com/cutteroid/kiosk-dashboard.git
-cd kiosk-dashboard
+git clone https://github.com/cutteroid/inverter-dashboard.git
+cd inverter-dashboard
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -189,8 +189,8 @@ You can also run the dashboard using Docker, which is the recommended approach f
 ### Using Docker Compose (Recommended)
 
 ```bash
-git clone https://github.com/cutteroid/kiosk-dashboard.git
-cd kiosk-dashboard
+git clone https://github.com/cutteroid/inverter-dashboard.git
+cd inverter-dashboard
 
 # Build and start the dashboard (and the MQTT broker for the smart meter)
 docker compose up -d
