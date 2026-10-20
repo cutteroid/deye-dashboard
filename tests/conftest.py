@@ -1,13 +1,13 @@
-"""Shared fixtures for Deye Dashboard tests."""
+"""Shared test fixtures."""
 import pytest
 from unittest.mock import patch, MagicMock
-from inverter import DeyeInverter
+from inverters import DeyeInverter
 
 
 @pytest.fixture
 def mock_inverter():
     """Create a DeyeInverter with a mocked PySolarmanV5 connection."""
-    with patch("inverter.PySolarmanV5"):
+    with patch("inverters.deye.PySolarmanV5"):
         inv = DeyeInverter(ip="192.168.1.1", serial=123456)
         inv.inverter = MagicMock()
         return inv

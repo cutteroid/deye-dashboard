@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, PropertyMock, patch
 import pytest
 
 import telegram_bot
-from inverter import InverterConfig
+from inverters import InverterConfig
 from telegram_bot import TelegramBot
 
 

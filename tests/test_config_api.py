@@ -3,7 +3,7 @@ import json
 import pytest
 from unittest.mock import patch, MagicMock
 
-from inverter import InverterConfig
+from inverters import InverterConfig
 
 
 @pytest.fixture
@@ -308,7 +308,7 @@ class TestIsConfigured:
                 assert is_configured() is False, serial
 
     def test_parse_logger_serial(self):
-        from app import parse_logger_serial
+        from inverters.deye import parse_logger_serial
         assert parse_logger_serial("2712345678") == 2712345678
         assert parse_logger_serial(" 42 ") == 42
         assert parse_logger_serial("4294967296") == 0

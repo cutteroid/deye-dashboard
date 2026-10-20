@@ -1,4 +1,4 @@
-"""Deye Dashboard - Simple web dashboard for Deye solar inverters."""
+"""Web dashboard for hybrid solar inverters (inverter drivers: see inverters/)."""
 try:
     from dotenv import load_dotenv
     load_dotenv()
@@ -6,7 +6,7 @@ except ImportError:
     pass
 
 from flask import Flask, render_template, jsonify, request, url_for
-from inverter import DeyeInverter, BatterySampler, InverterConfig
+from inverters import BatterySampler, DRIVERS, InverterConfig, create_inverter, driver_class
 from telegram_bot import TelegramBot
 from outage_providers import OutageSchedulePoller, create_outage_provider
 from update_manager import get_current_version, UpdatePoller, UpdateManager
@@ -38,15 +38,6 @@ OPEN_METEO_URL = (
 logger = logging.getLogger(__name__)
 
 
-def parse_logger_serial(raw):
-    """Logger serial as int, or 0 if missing/invalid (must fit in 32 bits)."""
-    try:
-        serial = int(str(raw).strip())
-    except (TypeError, ValueError):
-        return 0
-    return serial if 0 < serial <= 0xFFFFFFFF else 0
-
-
 def env_float(name, default):
     """Float env var; a bad value falls back to the default instead of crashing."""
     raw = os.environ.get(name, "")
@@ -58,20 +49,20 @@ def env_float(name, default):
 
 
 def is_configured():
-    """Check if .env has valid required config.
+    """Are the selected inverter driver's settings complete and valid?
 
-    An invalid serial counts as not configured, so the dashboard opens the
-    setup wizard (where it can be fixed) instead of failing at startup.
+    Invalid settings count as not configured, so the dashboard opens the setup
+    wizard (where they can be fixed) instead of failing at startup.
     """
-    ip = os.environ.get("INVERTER_IP", "0.0.0.0")
-    serial_raw = os.environ.get("LOGGER_SERIAL", "")
-    if ip in ("0.0.0.0", "") or not serial_raw:
+    try:
+        driver = driver_class(os.environ.get("INVERTER_TYPE"))
+    except ValueError as e:
+        logger.warning("%s; starting in setup mode", e)
         return False
-    if not parse_logger_serial(serial_raw):
-        logger.warning("LOGGER_SERIAL=%r is not a valid logger serial (1..4294967295); "
-                       "starting in setup mode", serial_raw)
-        return False
-    return True
+    problem = driver.settings_problem(os.environ)
+    if problem and any(os.environ.get(key) for key in driver.required_settings):
+        logger.warning("Inverter settings: %s; starting in setup mode", problem)
+    return not problem
 
 
 def parse_weather(raw):
@@ -354,8 +345,6 @@ def inject_asset_url():
     return {"asset_url": asset_version_url}
 
 # Configuration - can be overridden with environment variables
-INVERTER_IP = os.environ.get("INVERTER_IP", "0.0.0.0")
-LOGGER_SERIAL = parse_logger_serial(os.environ.get("LOGGER_SERIAL", "0"))
 PHASE_STATS_FILE = os.environ.get("PHASE_STATS_FILE", "phase_stats.json")
 PHASE_HISTORY_FILE = os.environ.get("PHASE_HISTORY_FILE", "phase_history.json")
 GRID_DAILY_LOG_FILE = os.environ.get("GRID_DAILY_LOG_FILE", "grid_daily_log.json")
@@ -390,6 +379,7 @@ def apply_env_overrides(base):
         has_generator=_env_bool(env_generator) if env_generator else base.has_generator,
         device_type=base.device_type,
         family=base.family,
+        supported=base.supported,
     )
 
 
@@ -419,6 +409,7 @@ def load_cached_inverter_config():
             pv_strings=int(data["pv_strings"]), has_generator=bool(data["has_generator"]),
             device_type=int(device_type) if device_type is not None else None,
             family=str(data.get("family") or "unknown"),
+            supported=bool(data.get("supported", True)),
         )
     except (KeyError, TypeError, ValueError):
         logger.warning("Ignoring invalid cached inverter config in %s", INVERTER_CONFIG_FILE)
@@ -452,7 +443,7 @@ def refresh_inverter_config(inv, config):
     updated = apply_env_overrides(detected)
     if updated != config:
         logger.info("Inverter config updated by auto-detect: %s -> %s", config.to_dict(), updated.to_dict())
-        for field in ("phases", "has_battery", "pv_strings", "has_generator", "device_type", "family"):
+        for field in ("phases", "has_battery", "pv_strings", "has_generator", "device_type", "family", "supported"):
             setattr(config, field, getattr(updated, field))
 
 
@@ -461,6 +452,7 @@ def refresh_device_type(inv, config):
     device_type, family = inv.read_device_type()
     if family != "unknown" or device_type is not None:
         config.device_type, config.family = device_type, family
+        config.supported = inv.family_supported(family)
 
 
 # Service variables — initialised by init_services() when configured
@@ -538,7 +530,7 @@ def init_services():
     global outage_poller, weather_poller, inverter_poller
     global update_poller, update_manager, alerts_poller, smart_meter
 
-    inverter = DeyeInverter(INVERTER_IP, LOGGER_SERIAL)
+    inverter = create_inverter(os.environ)
     inverter_config = initial_inverter_config()
     inverter.config = inverter_config
     # Background: full auto-detect, or (all capabilities set in env) just the
@@ -854,7 +846,10 @@ def index():
                            locales=LOCALES, default_language=DEFAULT_LANGUAGE,
                            alerts_map_url=asset_version_url("data/ukraine-regions.json"),
                            alerts_region=region if region in REGION_CODES else "",
-                           alerts_region_codes=list(REGION_CODES))
+                           alerts_region_codes=list(REGION_CODES),
+                           # Inverter type list for the settings; with one driver it isn't shown
+                           inverter_types=[{"id": d.name, "name": d.display_name} for d in DRIVERS.values()]
+                           if len(DRIVERS) > 1 else [])
 
 
 @app.route("/api/data")
@@ -1199,9 +1194,12 @@ def save_config():
 
     # Merge — new values override existing
     existing.update(new_values)
-    if not existing.get("INVERTER_IP") or not existing.get("LOGGER_SERIAL"):
-        return jsonify({"status": "error",
-                        "error": "Invalid configuration — INVERTER_IP and LOGGER_SERIAL are required"}), 400
+    try:
+        problem = driver_class(existing.get("INVERTER_TYPE")).settings_problem(existing)
+    except ValueError as e:
+        problem = str(e)
+    if problem:
+        return jsonify({"status": "error", "error": f"Invalid configuration — {problem}"}), 400
     write_env(existing, extra_lines)
 
     # Schedule a service restart after 2 seconds
@@ -1228,13 +1226,16 @@ def reset_config():
 @app.route("/api/config/discover")
 @require_settings_pin
 def config_discover():
-    """Discover inverters on the local network with retries."""
-    from discover_inverter import discover
+    """Discover inverters on the local network with retries (the selected driver's scan)."""
+    try:
+        driver = driver_class(request.args.get("type") or os.environ.get("INVERTER_TYPE"))
+    except ValueError as e:
+        return jsonify({"devices": [], "error": str(e)}), 400
     max_attempts = 3
     devices = []
     for attempt in range(1, max_attempts + 1):
         try:
-            devices = discover(quiet=True)
+            devices = driver.discover()
         except Exception:
             logger.exception("Discovery attempt %d failed", attempt)
         if devices:
@@ -1289,9 +1290,14 @@ def main():
     )
 
     # Log startup configuration
-    logger.info("=== Deye Dashboard starting ===")
+    logger.info("=== Dashboard starting ===")
     logger.info("Version: %s", get_current_version())
-    logger.info("INVERTER_IP=%s  LOGGER_SERIAL=%s", INVERTER_IP, LOGGER_SERIAL)
+    try:
+        driver = driver_class(os.environ.get("INVERTER_TYPE"))
+        logger.info("Inverter driver: %s  %s", driver.name,
+                    "  ".join(f"{key}={os.environ.get(key, '')}" for key in driver.required_settings))
+    except ValueError as e:
+        logger.warning("%s", e)
 
     if _configured:
         init_services()

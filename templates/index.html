@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Deye Solar Dashboard</title>
+    <title>Dashboard</title>
     <link rel="stylesheet" href="{{ asset_url('css/dashboard.css') }}">
     <script>
         // Low power mode is per device; apply it before the first paint
@@ -18,7 +18,7 @@
     <div id="battery-overlay"></div>
 
     <div class="header">
-        <h1 data-i18n="app.title">Deye Solar Dashboard</h1>
+        <h1 data-i18n="app.title">Dashboard</h1>
         <div class="status" id="status" data-i18n="status.connecting">Connecting...</div>
         <!-- Shown when the inverter reports a type this dashboard can't read (string / micro) -->
         <div class="inverter-warning" id="inverter-warning" hidden></div>
@@ -498,7 +498,13 @@
             <!-- Step 1: Inverter Connection -->
             <div class="onboarding-step active" id="onb-step-1">
                 <h2 data-i18n="onboarding.step1_title">Inverter Connection</h2>
-                <p class="subtitle" data-i18n="onboarding.step1_subtitle">Connect to your Deye/Solarman inverter on the local network.</p>
+                <p class="subtitle" data-i18n="onboarding.step1_subtitle">Connect to your inverter on the local network.</p>
+
+                <!-- Inverter driver; only shown once there is more than one (DASHBOARD_CONFIG.inverterTypes) -->
+                <div class="onboarding-field" id="onb-type-field" hidden>
+                    <label data-i18n="onboarding.inverter_type">Inverter type</label>
+                    <select class="onboarding-select" id="onb-type"></select>
+                </div>
 
                 <div style="margin-bottom: 16px;">
                     <button class="onboarding-btn secondary" id="onb-scan-btn" onclick="discoverInverters()" style="width:100%;" data-i18n="onboarding.scan_network">Scan Network</button>
@@ -770,7 +776,8 @@
             firstRun: {{ first_run|tojson }},
             alertsMapUrl: {{ alerts_map_url|tojson }},
             alertsRegion: {{ alerts_region|tojson }},
-            alertsRegionCodes: {{ alerts_region_codes|tojson }}
+            alertsRegionCodes: {{ alerts_region_codes|tojson }},
+            inverterTypes: {{ inverter_types|tojson }}
         };
     </script>
     <script src="{{ asset_url('js/dashboard.js') }}"></script>

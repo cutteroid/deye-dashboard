@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 import pytest
 
-from inverter import DeyeInverter, InverterConfig
+from inverters import DeyeInverter, InverterConfig
 
 
 def u16(value):
@@ -31,7 +31,7 @@ REGISTERS = {
 
 @pytest.fixture
 def inverter():
-    with patch("inverter.PySolarmanV5"), patch("inverter.time.sleep"):
+    with patch("inverters.deye.PySolarmanV5"), patch("inverters.deye.time.sleep"):
         inv = DeyeInverter(ip="192.168.1.1", serial=123456, config=InverterConfig(phases=3))
         with patch.object(inv, "read_register", side_effect=lambda addr: REGISTERS.get(addr, 0)):
             yield inv
@@ -72,7 +72,7 @@ def test_grid_voltage_per_phase(inverter):
 def test_high_voltage_model_scaling():
     """HV 3-phase: battery voltage in 0.1 V, battery and PV power in 10 W."""
     regs = {**REGISTERS, 587: 3125, 590: u16(-330), 672: 210, 673: 185}
-    with patch("inverter.PySolarmanV5"), patch("inverter.time.sleep"):
+    with patch("inverters.deye.PySolarmanV5"), patch("inverters.deye.time.sleep"):
         inv = DeyeInverter(ip="192.168.1.1", serial=1, config=InverterConfig(phases=3, family="hybrid_3p_hv"))
         with patch.object(inv, "read_register", side_effect=lambda addr: regs.get(addr, 0)):
             data = inv._read_3p_data_unlocked()

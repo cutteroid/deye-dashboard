@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Interactive setup script for Deye Dashboard .env configuration.
+"""Interactive setup script for the dashboard's .env configuration.
 
 Guides the user through configuring inverter, weather, outage provider,
 and Telegram settings. Preserves unrecognized .env lines on re-run.
@@ -24,7 +24,7 @@ NC = "\033[0m"  # No Color
 
 # Keys managed by this script (order matters for output)
 MANAGED_KEYS = [
-    "INVERTER_IP", "LOGGER_SERIAL", "INVERTER_PHASES",
+    "INVERTER_TYPE", "INVERTER_IP", "LOGGER_SERIAL", "INVERTER_PHASES",
     "WEATHER_LATITUDE", "WEATHER_LONGITUDE",
     "OUTAGE_PROVIDER", "OUTAGE_GROUP", "OUTAGE_REGION_ID", "OUTAGE_DSO_ID",
     "OUTAGE_DTEK_REGION",
@@ -35,6 +35,9 @@ MANAGED_KEYS = [
 ]
 
 MAX_LOGGER_SERIAL = 0xFFFFFFFF  # Solarman V5 packs the serial as an unsigned 32-bit int
+# Inverter drivers (inverters.DRIVERS; this script uses the stdlib only, so it can't
+# import them — tests keep both lists in sync)
+INVERTER_TYPES = ("deye",)
 OUTAGE_PROVIDERS = ("lvivoblenergo", "yasno", "dtek", "none")
 INVERTER_PHASE_CHOICES = ("1", "3")
 AIR_ALERTS_PROVIDERS = ("neptun", "mock", "none")
@@ -96,6 +99,7 @@ def _check_token(v):
 
 # Validators per managed key; empty values are allowed for optional keys.
 _VALIDATORS = {
+    "INVERTER_TYPE": _check_choice(INVERTER_TYPES),   # empty = default driver
     "INVERTER_IP": _check_host,
     "LOGGER_SERIAL": _check_int_range(1, MAX_LOGGER_SERIAL),
     "INVERTER_PHASES": _check_choice(INVERTER_PHASE_CHOICES),  # empty = auto-detect
@@ -224,7 +228,7 @@ def section_inverter(defaults):
     print(f"{YELLOW}Inverter Settings{NC}")
 
     # Try auto-discovery
-    print("  Scanning local network for Deye/Solarman inverters...")
+    print("  Scanning local network for inverters...")
     print()
     devices = try_discover()
 
@@ -263,7 +267,9 @@ def section_inverter(defaults):
         phases = ask("Phases: 1, 3, or empty to auto-detect", "")
 
     print()
-    return {"INVERTER_IP": ip, "LOGGER_SERIAL": serial, "INVERTER_PHASES": phases}
+    # Only one driver so far: keep whatever type was set (empty = default)
+    return {"INVERTER_TYPE": defaults.get("INVERTER_TYPE", ""), "INVERTER_IP": ip,
+            "LOGGER_SERIAL": serial, "INVERTER_PHASES": phases}
 
 
 def section_weather(defaults):
@@ -379,7 +385,9 @@ def write_env(values, extra_lines, path=".env"):
     """Write .env file from collected values and preserved extra lines."""
     lines = []
 
-    lines.append("# Deye Inverter Configuration")
+    lines.append("# Inverter")
+    if values.get("INVERTER_TYPE"):
+        lines.append(f"INVERTER_TYPE={values['INVERTER_TYPE']}")
     lines.append(f"INVERTER_IP={values.get('INVERTER_IP', '')}")
     lines.append(f"LOGGER_SERIAL={values.get('LOGGER_SERIAL', '')}")
     # Not written = auto-detected at startup
@@ -453,7 +461,7 @@ def write_env(values, extra_lines, path=".env"):
 def main():
     print()
     print(f"{CYAN}{BOLD}========================================{NC}")
-    print(f"{CYAN}{BOLD}  Deye Dashboard — Setup{NC}")
+    print(f"{CYAN}{BOLD}  Dashboard — Setup{NC}")
     print(f"{CYAN}{BOLD}========================================{NC}")
     print()
 

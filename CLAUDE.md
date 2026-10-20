@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Web dashboard for Deye solar inverters using the Solarman V5 protocol. Displays real-time solar production, battery status, grid power, home consumption, weather, and power outage schedules. Includes a Telegram bot for notifications in literary Ukrainian style.
+Web dashboard for hybrid solar inverters, read through inverter drivers (`inverters/`; so far: Deye / Sunsynk via a Solarman V5 logger). Displays real-time solar production, battery status, grid power, home consumption, weather, and power outage schedules. Includes a Telegram bot for notifications in literary Ukrainian style.
 
 ## Development Commands
 
@@ -51,7 +51,11 @@ python scan_phases.py       # phase registers
 
 - **`app.py`** — Flask web server. Contains the main application, API routes, and background poller classes (`InverterPoller`, `WeatherPoller`). Serves the single-page dashboard at `/` and JSON API at `/api/*`. Manages phase stats and grid daily logs as JSON files.
 
-- **`inverter.py`** — `DeyeInverter` class for Modbus communication via `pysolarmanv5`. Reads holding registers with 50ms delays between reads to avoid overwhelming the logger. `BatterySampler` runs in a separate thread to smooth voltage/SOC readings using a rolling buffer with outlier rejection. `InverterConfig` dataclass describes inverter capabilities (phases, battery, PV strings).
+- **`inverters/`** — inverter drivers, selected by `INVERTER_TYPE` (default `deye`):
+  - `base.py` — brand-neutral: `InverterConfig` (capabilities: phases, battery, PV strings, generator, model family, `supported`), the `InverterDriver` interface (`from_settings`, `settings_problem`/`required_settings`, `read_all_data`, `detect_config`, `read_device_type`, `read_battery_sample`, `discover`), the **reading fields every driver returns** (module docstring — the rest of the app uses only those, never registers), shared grid logic (`grid_online`, `grid_state`, `grid_phases_missing`) and `BatterySampler` (smooths voltage/SOC through `read_battery_sample()`).
+  - `deye.py` — `DeyeInverter`: Modbus over Solarman V5 (`pysolarmanv5`), both register maps, device-type families, HV scaling, grid relay, capability detection, Solarman discovery (`discover_inverter.py`). 50 ms between register reads to spare the logger.
+  - `__init__.py` — `DRIVERS` registry, `driver_class()`, `create_inverter(settings)`. **New driver:** subclass `InverterDriver`, return the documented fields, register it in `DRIVERS`, add its name to `setup.INVERTER_TYPES` (stdlib-only script; a test keeps the lists in sync) and its settings to the wizard (step 1). The wizard's "Inverter type" list appears by itself once `DRIVERS` has more than one entry.
+  - UI text never names a brand (tests check page and locales); brand-specific wording belongs to the driver (`display_name`).
 
 - **`telegram_bot.py`** — Telegram bot with commands (`/battery`, `/outage`, `/grid`, `/test`). Sends notifications for low battery and grid restore events. Messages are written in 1800s literary Ukrainian style. Uses `poems.py` for weather-themed poetry excerpts.
 
@@ -95,13 +99,13 @@ The app runs several daemon threads:
 - `AlertsPoller` — fetches air raid alerts every 30s
 - paho-mqtt network loop (`SmartMeterClient`, when the smart meter is enabled) — handles meter messages as they arrive
 
-All pollers use thread locks for safe cache access. The inverter connection (`DeyeInverter.lock`) is shared between `InverterPoller`, `BatterySampler` and auto-detect. The Telegram bot reads `InverterPoller.data` (no direct inverter reads).
+All pollers use thread locks for safe cache access. The inverter connection (the driver's `lock`) is shared between `InverterPoller`, `BatterySampler` and auto-detect. The Telegram bot reads `InverterPoller.data` (no direct inverter reads).
 
 Data files (stats, logs, caches, bot state) go through `storage.py`: `atomic_write_json()` (temp file + fsync + rename, safe across power cuts) and `load_json()` (missing/corrupt file → default; corrupt files are moved to `*.corrupt`). Read-modify-write updates in `app.py` hold `_data_lock`.
 
 Config saved from the UI is validated by `setup.validate_config()` (types, ranges, no line breaks, no unknown keys) before `.env` is written.
 
-## Inverter Connection
+## Deye Driver (`inverters/deye.py`)
 
 - Uses `pysolarmanv5` library for Modbus over TCP
 - Port 8899 (Solarman V5 protocol)
@@ -109,11 +113,11 @@ Config saved from the UI is validated by `setup.validate_config()` (types, range
 - Slave ID: 1
 - Connection is opened per-poll and closed after each read cycle (see `read_all_data` → `disconnect()` in finally block)
 - 50ms sleep between register reads to reduce logger connection pressure
-- Configuration via environment variables: `INVERTER_IP`, `LOGGER_SERIAL`
+- Configuration via environment variables: `INVERTER_IP`, `LOGGER_SERIAL` (`INVERTER_TYPE=deye` or unset)
 - Inverter capabilities (phases, battery, PV strings) auto-detected at startup via `detect_config()`
-- Register 0 = device type → family (`DEVICE_FAMILIES` in `inverter.py`, codes from ha-solarman's Deye autodetection): `hybrid_1p` (Sunsynk-style map), `hybrid_3p_lv`, `hybrid_3p_hv` (same map as LV, but battery voltage ×0.1 V and battery/PV power ×10 W — `InverterConfig.high_voltage`), `string` / `micro` (other maps, not implemented: `supported: false` → warning on the dashboard). A known family sets the phase count without L2/L3 voltage sampling; unknown codes fall back to it. Read even when all `INVERTER_*` capabilities are set in env (`refresh_device_type`)
+- Register 0 = device type → family (`DEVICE_FAMILIES` in `inverters/deye.py`, codes from ha-solarman's Deye autodetection): `hybrid_1p` (Sunsynk-style map), `hybrid_3p_lv`, `hybrid_3p_hv` (same map as LV, but battery voltage ×0.1 V and battery/PV power ×10 W — `DeyeInverter.high_voltage`), `string` / `micro` (other maps, not implemented: `supported: false` → warning on the dashboard). A known family sets the phase count without L2/L3 voltage sampling; unknown codes fall back to it. Read even when all `INVERTER_*` capabilities are set in env (`refresh_device_type`)
 
-## Key Registers (Holding) — 3-Phase Hybrid
+## Key Registers (Holding) — Deye 3-Phase Hybrid
 
 | Register | Description | Scale |
 |----------|-------------|-------|
@@ -134,7 +138,7 @@ Config saved from the UI is validated by `setup.validate_config()` (types, range
 | 529, 520, 521, 526 | Daily PV/Import/Export/Load (502 = inverter output, not PV) | /10 kWh |
 | 514, 515 | Daily Battery Charge/Discharge | /10 kWh |
 
-## Key Registers (Holding) — 1-Phase Hybrid (Sunsynk)
+## Key Registers (Holding) — Deye 1-Phase Hybrid (Sunsynk)
 
 | Register | Description | Scale |
 |----------|-------------|-------|

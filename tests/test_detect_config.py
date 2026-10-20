@@ -1,20 +1,20 @@
 """Tests for DeyeInverter.detect_config() two-stage detection."""
 import pytest
 from unittest.mock import patch, MagicMock
-from inverter import DeyeInverter, InverterConfig
+from inverters import DeyeInverter, InverterConfig
 
 
 @pytest.fixture(autouse=True)
 def no_sleep():
     """detect_config() sleeps 2s between samples; skip that in tests."""
-    with patch("inverter.time.sleep"):
+    with patch("inverters.deye.time.sleep"):
         yield
 
 
 @pytest.fixture
 def inverter():
     """Create a DeyeInverter with a mocked PySolarmanV5 connection."""
-    with patch("inverter.PySolarmanV5"):
+    with patch("inverters.deye.PySolarmanV5"):
         inv = DeyeInverter(ip="192.168.1.1", serial=123456)
         inv.inverter = MagicMock()
         return inv

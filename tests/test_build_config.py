@@ -1,13 +1,13 @@
 """Tests for build_inverter_config() env var logic."""
 import pytest
 from unittest.mock import patch, MagicMock
-from inverter import InverterConfig, DeyeInverter
+from inverters import InverterConfig, DeyeInverter
 
 
 class TestBuildInverterConfig:
     def _build(self, env_vars, detect_result=None, detect_raises=False):
         """Helper that imports and calls build_inverter_config with env overrides."""
-        with patch("inverter.PySolarmanV5"):
+        with patch("inverters.deye.PySolarmanV5"):
             inv = DeyeInverter(ip="192.168.1.1", serial=123456)
             inv.inverter = MagicMock()
 
@@ -159,14 +159,14 @@ class TestNonBlockingConfig:
 class TestDeviceTypePlumbing:
     def test_env_overrides_keep_detected_family(self, monkeypatch):
         import app
-        from inverter import InverterConfig
+        from inverters import InverterConfig
         monkeypatch.setenv("INVERTER_PHASES", "3")
         result = app.apply_env_overrides(InverterConfig(phases=1, device_type=0x0006, family="hybrid_3p_hv"))
         assert result.phases == 3 and result.family == "hybrid_3p_hv" and result.device_type == 6
 
     def test_cached_config_roundtrip(self, tmp_path, monkeypatch):
         import app
-        from inverter import InverterConfig
+        from inverters import InverterConfig
         monkeypatch.setattr(app, "INVERTER_CONFIG_FILE", str(tmp_path / "c.json"))
         app.atomic_write_json(app.INVERTER_CONFIG_FILE, InverterConfig(device_type=5, family="hybrid_3p_lv").to_dict())
         cached = app.load_cached_inverter_config()
@@ -183,7 +183,7 @@ class TestDeviceTypePlumbing:
     def test_refresh_device_type_updates_config_in_place(self):
         import app
         from unittest.mock import MagicMock
-        from inverter import InverterConfig
+        from inverters import InverterConfig
         config = InverterConfig()
         inv = MagicMock()
         inv.read_device_type.return_value = (0x0005, "hybrid_3p_lv")

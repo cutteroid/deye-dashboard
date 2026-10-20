@@ -1968,6 +1968,7 @@ function showOnboarding(editMode) {
     onboardingStep = 1;
     var overlay = document.getElementById('onboarding-overlay');
     overlay.classList.remove('hidden');
+    fillInverterTypeOptions();
     fillAlertsRegionOptions();
     updateOnboardingUI();
 
@@ -1976,6 +1977,7 @@ function showOnboarding(editMode) {
         settingsFetch('/api/config')
             .then(function(r) { return r.json(); })
             .then(function(cfg) {
+                if (cfg.INVERTER_TYPE) document.getElementById('onb-type').value = cfg.INVERTER_TYPE;
                 if (cfg.INVERTER_IP) document.getElementById('onb-ip').value = cfg.INVERTER_IP;
                 if (cfg.LOGGER_SERIAL) document.getElementById('onb-serial').value = cfg.LOGGER_SERIAL;
                 document.getElementById('onb-phases').value =
@@ -2111,7 +2113,8 @@ function discoverInverters() {
     statusEl.innerHTML = '<span class="onboarding-spinner"></span> ' + t('onboarding.scanning');
     resultsEl.innerHTML = '';
 
-    settingsFetch('/api/config/discover')
+    var typeSelect = document.getElementById('onb-type');
+    settingsFetch('/api/config/discover' + (typeSelect.value ? '?type=' + encodeURIComponent(typeSelect.value) : ''))
         .then(function(r) { return r.json(); })
         .then(function(data) {
             btn.disabled = false;
@@ -2193,6 +2196,20 @@ function selectOutageProviderByValue(value) {
     document.getElementById('onb-outage-dtek-fields').classList.toggle('visible', value === 'dtek');
 }
 
+// Inverter driver list (server: one entry per driver; hidden while there is only one)
+function fillInverterTypeOptions() {
+    var types = window.DASHBOARD_CONFIG.inverterTypes || [];
+    var select = document.getElementById('onb-type');
+    document.getElementById('onb-type-field').hidden = types.length < 2;
+    if (select.options.length) return;
+    types.forEach(function(type) {
+        var option = document.createElement('option');
+        option.value = type.id;
+        option.textContent = type.name;
+        select.appendChild(option);
+    });
+}
+
 // Region list for the alerts step: "Whole Ukraine" first, then regions by translated name
 var onbAlertsProvider = 'neptun';
 
@@ -2222,7 +2239,9 @@ function toggleOnb(el, fieldsId) {
 function saveConfig() {
     var config = {};
 
-    // Step 1
+    // Step 1 (the type only when there is a choice; otherwise the server's default)
+    var typeSelect = document.getElementById('onb-type');
+    if (typeSelect.options.length > 1) config.INVERTER_TYPE = typeSelect.value;
     config.INVERTER_IP = document.getElementById('onb-ip').value.trim();
     config.LOGGER_SERIAL = document.getElementById('onb-serial').value.trim();
     config.INVERTER_PHASES = document.getElementById('onb-phases').value;  // '' = auto-detect

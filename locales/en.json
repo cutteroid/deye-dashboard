@@ -44,7 +44,7 @@
     "connection_failed": "Connection failed"
   },
   "inverter": {
-    "unsupported": "This inverter reports itself as a {type} (device type {code}). The dashboard only supports Deye hybrid inverters, so the readings below are probably wrong.",
+    "unsupported": "This inverter reports itself as a {type} (device type {code}). The dashboard can't read this inverter type yet, so the readings below are probably wrong.",
     "family_string": "string (grid-tie) inverter",
     "family_micro": "microinverter"
   },
@@ -307,7 +307,8 @@
   },
   "onboarding": {
     "step1_title": "Inverter Connection",
-    "step1_subtitle": "Connect to your Deye/Solarman inverter on the local network.",
+    "step1_subtitle": "Connect to your inverter on the local network.",
+    "inverter_type": "Inverter type",
     "scan_network": "Scan Network",
     "scanning": "Scanning network...",
     "no_devices": "No inverters found on the network.",

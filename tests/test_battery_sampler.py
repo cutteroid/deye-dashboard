@@ -1,14 +1,14 @@
 """Tests for BatterySampler logic."""
 import pytest
 from unittest.mock import patch, MagicMock
-from inverter import BatterySampler, DeyeInverter, InverterConfig
+from inverters import BatterySampler, DeyeInverter, InverterConfig
 from tests.conftest import mock_read_register
 
 
 @pytest.fixture
 def sampler():
     """Create a BatterySampler with a mocked inverter."""
-    with patch("inverter.PySolarmanV5"):
+    with patch("inverters.deye.PySolarmanV5"):
         inv = DeyeInverter(ip="192.168.1.1", serial=123456)
         inv.inverter = MagicMock()
         inv.config = InverterConfig(phases=3)
@@ -96,15 +96,28 @@ class TestSample:
 
 
 class TestConnectionCleanup:
-    def test_disconnects_after_failed_read(self):
-        from unittest.mock import MagicMock
-        from inverter import BatterySampler, InverterConfig
-        import threading
-        inv = MagicMock()
-        inv.config = InverterConfig(phases=3, has_battery=True)
-        inv.lock = threading.Lock()
-        inv.inverter = MagicMock()
-        inv.read_register.side_effect = Exception("No socket available")
-        sampler = BatterySampler(inv)
-        sampler._sample()
+    def test_driver_disconnects_after_failed_read(self):
+        """The Deye driver closes a broken connection, so the next reader reconnects."""
+        with patch("inverters.deye.PySolarmanV5"):
+            inv = DeyeInverter(ip="192.168.1.1", serial=123456, config=InverterConfig(phases=3))
+            inv.inverter = MagicMock()
+            inv.read_register = MagicMock(side_effect=Exception("No socket available"))
+            inv.disconnect = MagicMock()
+            sampler = BatterySampler(inv)
+            sampler._sample()           # must not raise
         inv.disconnect.assert_called_once()
+        assert sampler._buffer == [] and sampler._soc_buffer == []
+
+
+class TestDriverIndependence:
+    def test_works_with_any_driver(self):
+        """The sampler only uses the driver interface (no registers)."""
+        from inverters import InverterDriver
+
+        class FakeDriver(InverterDriver):
+            def read_battery_sample(self):
+                return 51.2, 64
+
+        sampler = BatterySampler(FakeDriver())
+        sampler._sample()
+        assert sampler.get_voltage() == pytest.approx(51.2) and sampler.get_soc() == 64

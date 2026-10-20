@@ -204,9 +204,12 @@ All configuration is done via environment variables, typically set in a `.env` f
 
 ### Inverter (required)
 
+The dashboard reads the inverter through a driver (`inverters/`). Supported so far: **Deye / Sunsynk hybrid inverters with a Solarman Wi-Fi logger** (driver `deye`, the default). Other brands can be added as drivers; see `inverters/__init__.py`.
+
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `INVERTER_IP` | IP address of your Deye inverter on the local network | `192.168.1.100` |
+| `INVERTER_TYPE` | Inverter driver | `deye` (default) |
+| `INVERTER_IP` | IP address of the inverter's logger on the local network | `192.168.1.100` |
 | `LOGGER_SERIAL` | Serial number of the Solarman Wi-Fi logger (printed on the stick or found in the Solarman app) | `1234567890` |
 
 ### Inverter Capabilities (optional)
@@ -429,7 +432,7 @@ To change settings, edit `.env` directly and re-deploy.
 
 ### What the deploy script does
 
-1. **Rsync** — copies `app.py`, `inverter.py`, `telegram_bot.py`, `poems.py`, `outage_providers/`, `requirements.txt`, `templates/`, and `.env` to the remote server
+1. **Rsync** — copies `app.py`, `inverters/`, `telegram_bot.py`, `poems.py`, `outage_providers/`, `requirements.txt`, `templates/`, and `.env` to the remote server
 2. **Python setup** — creates a virtual environment (if needed) and installs dependencies from `requirements.txt`
 3. **Systemd service** — creates a service file at `/etc/systemd/system/<service-name>.service`, enables it, and restarts it
 4. The dashboard runs on port 8080 by default

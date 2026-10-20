@@ -4,7 +4,7 @@ import pytest
 from unittest.mock import patch, MagicMock, PropertyMock
 from datetime import datetime, timedelta
 
-from inverter import InverterConfig
+from inverters import InverterConfig
 
 
 @pytest.fixture

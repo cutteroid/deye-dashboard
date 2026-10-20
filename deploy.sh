@@ -101,7 +101,7 @@ echo -e "${GREEN}Deploying Deye Dashboard to ${REMOTE_HOST}...${NC}"
 # Files to deploy
 FILES=(
     "app.py"
-    "inverter.py"
+    "inverters"
     "telegram_bot.py"
     "poems.py"
     "outage_providers"

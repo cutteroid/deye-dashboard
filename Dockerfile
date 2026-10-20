@@ -26,7 +26,7 @@ RUN pip install --upgrade pip && \
 
 # Copy application code
 COPY app.py .
-COPY inverter.py .
+COPY inverters/ ./inverters/
 COPY telegram_bot.py .
 COPY poems.py .
 COPY outage_providers/ ./outage_providers/
