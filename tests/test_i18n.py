@@ -70,12 +70,12 @@ class TestAppLocales:
         assert list(app_module.LOCALES)[0] == app_module.DEFAULT_LANGUAGE == "en"
         assert "uk" in app_module.LOCALES
 
-    def test_index_embeds_locales_and_language_button(self):
+    def test_index_embeds_locales_and_language_list(self):
         import app as app_module
         app_module.app.config["TESTING"] = True
         with app_module.app.test_client() as c:
             html = c.get("/").get_data(as_text=True)
-        assert 'id="language-btn"' in html
+        assert 'id="language-select"' in html   # language select in the settings panel
         # uk.json is embedded (non-ASCII is JSON-escaped in the page)
         uk_name = json.dumps(_load("uk")["meta.name"])[1:-1]
         assert '"uk":' in html and uk_name in html

@@ -34,7 +34,6 @@
   "toolbar": {
     "fullscreen": "Toggle Fullscreen",
     "settings": "Settings",
-    "language": "Language: {name}",
     "scroll_details": "Scroll to details"
   },
   "status": {
@@ -276,9 +275,11 @@
     "server_settings": "Server settings",
     "server_locked_hint": "Configuration changes the server. Enter the settings PIN to unlock.",
     "unlock": "Unlock",
+    "language": "Language",
     "display": "Display",
     "low_power": "Low power mode",
-    "low_power_hint": "Turns off animations and blur effects. Saved on this device.",
+    "low_power_hint": "Turns off animations and blur effects.",
+    "local_hint": "Language and display settings are saved on this device.",
     "configuration": "Configuration",
     "edit_configuration": "Edit Configuration",
     "factory_reset": "Factory Reset",

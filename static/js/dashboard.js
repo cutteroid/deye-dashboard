@@ -75,8 +75,7 @@ function applyTranslations() {
     });
     document.documentElement.lang = i18nLang;
     document.title = t('app.title');
-    var langBtn = document.getElementById('language-btn');
-    if (langBtn) langBtn.textContent = t('meta.short');
+    renderLanguageOptions();
 }
 
 function setLanguage(lang) {
@@ -87,67 +86,19 @@ function setLanguage(lang) {
     refreshTranslatedContent();
 }
 
-// Language button: opens a list of the available languages
-function toggleLanguageMenu(event) {
-    if (event) event.stopPropagation();
-    var menu = document.getElementById('language-menu');
-    if (menu.classList.contains('hidden')) openLanguageMenu();
-    else closeLanguageMenu();
+// Language select in the settings panel. Each language is listed by its own
+// name ("English", "Українська").
+function renderLanguageOptions() {
+    var select = document.getElementById('language-select');
+    if (!select) return;
+    if (!select.options.length) {
+        select.innerHTML = Object.keys(I18N_MESSAGES).map(function(lang) {
+            var meta = I18N_MESSAGES[lang].meta || {};
+            return '<option value="' + lang + '" lang="' + lang + '">' + escapeHtml(meta.name || lang) + '</option>';
+        }).join('');
+    }
+    select.value = i18nLang;
 }
-
-function openLanguageMenu() {
-    var menu = document.getElementById('language-menu');
-    var btn = document.getElementById('language-btn');
-    // Each language is listed by its own name ("English", "Українська")
-    menu.innerHTML = Object.keys(I18N_MESSAGES).map(function(lang) {
-        var meta = I18N_MESSAGES[lang].meta || {};
-        return '<button type="button" class="language-option" role="menuitemradio" data-lang="' + lang + '"' +
-            ' aria-checked="' + (lang === i18nLang) + '" lang="' + lang + '">' +
-            '<span class="language-option-code">' + escapeHtml(meta.short || lang.toUpperCase()) + '</span>' +
-            '<span>' + escapeHtml(meta.name || lang) + '</span>' +
-            '<span class="language-option-check">✓</span></button>';
-    }).join('');
-    menu.querySelectorAll('.language-option').forEach(function(option) {
-        option.addEventListener('click', function() {
-            closeLanguageMenu();
-            setLanguage(option.getAttribute('data-lang'));
-        });
-    });
-
-    positionLanguageMenu();
-    menu.classList.remove('hidden');
-    btn.setAttribute('aria-expanded', 'true');
-    var current = menu.querySelector('[aria-checked="true"]');
-    if (current) current.focus();
-}
-
-// Below the button, right edges aligned
-function positionLanguageMenu() {
-    var menu = document.getElementById('language-menu');
-    var rect = document.getElementById('language-btn').getBoundingClientRect();
-    menu.style.top = (rect.bottom + 8) + 'px';
-    menu.style.right = (document.documentElement.clientWidth - rect.right) + 'px';
-}
-
-function closeLanguageMenu() {
-    var menu = document.getElementById('language-menu');
-    if (menu.classList.contains('hidden')) return;
-    menu.classList.add('hidden');
-    document.getElementById('language-btn').setAttribute('aria-expanded', 'false');
-}
-
-// Close on outside click or Escape
-document.addEventListener('click', function(e) {
-    var menu = document.getElementById('language-menu');
-    if (menu && !menu.contains(e.target)) closeLanguageMenu();
-});
-document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') closeLanguageMenu();
-});
-// Keep it attached to the button when the screen rotates or resizes
-window.addEventListener('resize', function() {
-    if (!document.getElementById('language-menu').classList.contains('hidden')) positionLanguageMenu();
-});
 
 // Re-render content that code builds from translated strings
 function refreshTranslatedContent() {
@@ -290,8 +241,7 @@ function updateFullscreenIcon() {
         enterIcon.style.display = 'none';
         exitIcon.style.display = 'block';
         document.body.classList.add('fullscreen-mode');
-        // Their buttons are hidden in fullscreen, so don't leave them open
-        closeLanguageMenu();
+        // Its button is hidden in fullscreen, so don't leave it open
         closeSettingsPanel();
     } else {
         enterIcon.style.display = 'block';
@@ -2304,41 +2254,211 @@ function resetConfiguration() {
 // Check the first run on page load.
 checkFirstRun();
 
-// Initialize Sortable for dashboard cards.
-(function() {
-    const el = document.querySelector('.dashboard');
-    if (el && typeof Sortable !== 'undefined') {
-        Sortable.create(el, {
-            animation: 150,
-            ghostClass: 'sortable-ghost',
-            chosenClass: 'sortable-chosen',
-            handle: '.card-header',
-            dataIdAttr: 'data-id',
-            store: {
-                get: function (sortable) {
-                    var order = localStorage.getItem('dashboard-cards-order');
-                    // "Planned outages" replaced "Outage history"; keep its saved position
-                    // "Consumption" replaced "Home consumption" + "Load per phase"
-                    var renamed = { 'outage-history-card': 'planned-outages-card', 'load-card': 'consumption-card' };
-                    if (!order) return [];
-                    var saved = JSON.parse(order).map(function(id) {
-                        return renamed[id] || id;
-                    }).filter(function(id) { return id !== 'phase-card'; });
-                    // Cards added since the order was saved (e.g. "Air raid alerts") go last;
-                    // Sortable would otherwise leave them in front of the saved ones
-                    sortable.toArray().forEach(function(id) {
-                        if (saved.indexOf(id) < 0) saved.push(id);
-                    });
-                    return saved;
-                },
-                set: function (sortable) {
-                    var order = JSON.stringify(sortable.toArray());
-                    localStorage.setItem('dashboard-cards-order', order);
-                },
-            },
-        });
-    } else if (el) {
-        console.warn('SortableJS not loaded yet, retrying...');
-        setTimeout(arguments.callee, 100);
+// ===== CARD ORDER =====
+// Cards are reordered by dragging them by the header: with a mouse right away,
+// by touch after a short press (a quick swipe on a header still scrolls the
+// page). The order is kept per device in localStorage.
+var CARD_ORDER_KEY = 'dashboard-cards-order';
+var CARD_DRAG_TOUCH_DELAY_MS = 250;
+var CARD_DRAG_MOUSE_START_PX = 5;   // mouse: drag starts after moving this far
+var CARD_DRAG_TOUCH_SLOP_PX = 10;   // touch: moving this far before the delay is a scroll
+var CARD_DRAG_EDGE_PX = 60;         // auto-scroll this close to the top / bottom of the screen
+var CARD_MOVE_MS = 150;
+
+function dashboardCards(container) {
+    return Array.prototype.filter.call(container.children, function(el) {
+        return el.classList.contains('card') && el.getAttribute('data-id');
+    });
+}
+
+function loadCardOrder() {
+    var saved = null;
+    try { saved = JSON.parse(localStorage.getItem(CARD_ORDER_KEY)); } catch (e) {}
+    if (!Array.isArray(saved)) return [];
+    // "Planned outages" replaced "Outage history"; "Consumption" replaced
+    // "Home consumption" + "Load per phase": they keep the old cards' positions
+    var renamed = { 'outage-history-card': 'planned-outages-card', 'load-card': 'consumption-card' };
+    return saved.map(function(id) { return renamed[id] || id; })
+        .filter(function(id) { return id !== 'phase-card'; });
+}
+
+function saveCardOrder(container) {
+    var order = dashboardCards(container).map(function(card) { return card.getAttribute('data-id'); });
+    try { localStorage.setItem(CARD_ORDER_KEY, JSON.stringify(order)); } catch (e) {}
+}
+
+// Saved cards first, in their saved order; cards added since then go last
+function applyCardOrder(container) {
+    var saved = loadCardOrder();
+    if (!saved.length) return;
+    var cards = dashboardCards(container);
+    var byId = {};
+    cards.forEach(function(card) { byId[card.getAttribute('data-id')] = card; });
+    var placed = {};
+    saved.concat(cards.map(function(card) { return card.getAttribute('data-id'); })).forEach(function(id) {
+        if (!byId[id] || placed[id]) return;
+        placed[id] = true;
+        container.appendChild(byId[id]);
+    });
+}
+
+// Moves cards with change(), then slides them from where they were (FLIP);
+// no animation in low power / reduced motion mode (CSS disables transitions)
+function animateCards(cards, change) {
+    var before = cards.map(function(card) { return card.getBoundingClientRect(); });
+    change();
+    cards.forEach(function(card, i) {
+        card.style.transition = 'none';
+        card.style.transform = '';
+        var after = card.getBoundingClientRect();
+        var dx = before[i].left - after.left, dy = before[i].top - after.top;
+        if (!dx && !dy) return;
+        card.style.transform = 'translate(' + dx + 'px, ' + dy + 'px)';
+        void card.offsetWidth;  // apply the start position before the transition
+        card.style.transition = 'transform ' + CARD_MOVE_MS + 'ms ease';
+        card.style.transform = '';
+    });
+}
+
+function initCardDrag(container) {
+    var drag = null;
+    var scrollFrame = null;
+
+    function inside(el, x, y) {
+        var r = el.getBoundingClientRect();
+        return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
     }
+
+    // Keep the dragged card under the pointer, wherever its slot is now
+    function follow() {
+        var card = drag.card;
+        card.style.transform = '';
+        var slot = card.getBoundingClientRect();
+        card.style.transform = 'translate(' + (drag.x - drag.grabX - slot.left) + 'px, ' +
+            (drag.y - drag.grabY - slot.top) + 'px)';
+    }
+
+    function startDrag() {
+        drag.timer = null;
+        drag.active = true;
+        var rect = drag.card.getBoundingClientRect();
+        drag.grabX = drag.x - rect.left;
+        drag.grabY = drag.y - rect.top;
+        drag.card.style.transition = 'none';
+        drag.card.classList.add('card-dragging');
+        document.body.classList.add('cards-dragging');
+        follow();
+    }
+
+    // Over another card: move the dragged one to its place. The card it just
+    // traded places with is ignored until the pointer leaves it, so cards of
+    // different sizes don't swap back and forth.
+    function reorder() {
+        if (drag.lastTarget && inside(drag.lastTarget, drag.x, drag.y)) return;
+        drag.lastTarget = null;
+        var el = document.elementFromPoint(drag.x, drag.y);
+        var target = el && el.closest('.card');
+        if (!target || target === drag.card || target.parentElement !== container) return;
+        drag.lastTarget = target;
+        var cards = dashboardCards(container);
+        var forward = cards.indexOf(target) > cards.indexOf(drag.card);
+        var others = cards.filter(function(card) { return card !== drag.card && card.offsetParent; });
+        animateCards(others, function() {
+            container.insertBefore(drag.card, forward ? target.nextSibling : target);
+        });
+        follow();
+    }
+
+    function autoScroll() {
+        if (scrollFrame) return;
+        scrollFrame = requestAnimationFrame(function step() {
+            scrollFrame = null;
+            if (!drag || !drag.active) return;
+            var bottom = window.innerHeight - CARD_DRAG_EDGE_PX, speed = 0;
+            if (drag.y < CARD_DRAG_EDGE_PX) speed = -Math.ceil((CARD_DRAG_EDGE_PX - drag.y) / 3);
+            else if (drag.y > bottom) speed = Math.ceil((drag.y - bottom) / 3);
+            var scrolled = window.scrollY;
+            if (speed) window.scrollBy(0, speed);
+            if (window.scrollY === scrolled) return;  // not near an edge, or the page ends here
+            follow();
+            reorder();
+            scrollFrame = requestAnimationFrame(step);
+        });
+    }
+
+    function endDrag() {
+        if (!drag) return;
+        var d = drag;
+        drag = null;
+        clearTimeout(d.timer);
+        if (!d.active) return;
+        document.body.classList.remove('cards-dragging');
+        // Settle into the slot from where it was dropped
+        animateCards([d.card], function() { d.card.classList.remove('card-dragging'); });
+        setTimeout(function() {
+            dashboardCards(container).forEach(function(card) { card.style.transition = ''; });
+        }, CARD_MOVE_MS + 50);
+        saveCardOrder(container);
+    }
+
+    container.addEventListener('pointerdown', function(e) {
+        if (drag || (e.pointerType === 'mouse' && e.button !== 0)) return;
+        var header = e.target.closest('.card-header');
+        var card = header && header.parentElement;
+        if (!card || card.parentElement !== container || !card.classList.contains('card')) return;
+        if (e.target.closest('button, a, input, select, textarea, label')) return;
+        drag = { card: card, pointerId: e.pointerId, touch: e.pointerType !== 'mouse',
+                 startX: e.clientX, startY: e.clientY, x: e.clientX, y: e.clientY,
+                 active: false, timer: null, lastTarget: null };
+        if (drag.touch) drag.timer = setTimeout(startDrag, CARD_DRAG_TOUCH_DELAY_MS);
+        else e.preventDefault();  // no text selection while dragging with the mouse
+    });
+
+    document.addEventListener('pointermove', function(e) {
+        if (!drag || e.pointerId !== drag.pointerId) return;
+        drag.x = e.clientX;
+        drag.y = e.clientY;
+        if (!drag.active) {
+            var moved = Math.max(Math.abs(drag.x - drag.startX), Math.abs(drag.y - drag.startY));
+            if (drag.touch) {
+                if (moved > CARD_DRAG_TOUCH_SLOP_PX) endDrag();  // a swipe: the page scrolls
+                return;
+            }
+            if (moved < CARD_DRAG_MOUSE_START_PX) return;
+            startDrag();
+        }
+        follow();
+        reorder();
+        autoScroll();
+    });
+
+    document.addEventListener('pointerup', function(e) {
+        if (drag && e.pointerId === drag.pointerId) endDrag();
+    });
+    // The browser took the touch over (e.g. to scroll), or the window lost focus
+    document.addEventListener('pointercancel', function(e) {
+        if (drag && e.pointerId === drag.pointerId) endDrag();
+    });
+    window.addEventListener('blur', endDrag);
+
+    // While a card is dragged by touch the page must not scroll, and a long
+    // press must not open the context menu. Listening only on the headers keeps
+    // scrolling everywhere else free of non-passive listeners.
+    dashboardCards(container).forEach(function(card) {
+        var header = card.querySelector(':scope > .card-header');
+        if (!header) return;
+        header.addEventListener('touchmove', function(e) {
+            if (drag && drag.active) e.preventDefault();
+        }, { passive: false });
+    });
+    container.addEventListener('contextmenu', function(e) {
+        if (drag) e.preventDefault();
+    });
+}
+
+(function() {
+    var container = document.querySelector('.dashboard');
+    if (!container) return;
+    applyCardOrder(container);
+    initCardDrag(container);
 })();

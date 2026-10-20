@@ -445,23 +445,20 @@ body.fullscreen-mode .battery-runtime-value {
     border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.sortable-ghost {
-    opacity: 0.3;
-    background: rgba(255, 255, 255, 0.1);
+/* A card being dragged by its header (initCardDrag in dashboard.js): it follows
+   the pointer, its slot in the grid stays free as the drop target */
+.card.card-dragging {
+    position: relative;
+    z-index: 20;
+    pointer-events: none;
+    /* Opaque, so the cards it passes over don't show through */
+    background: #2a3149 !important;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.3);
 }
 
-.sortable-chosen {
-    background: rgba(255, 255, 255, 0.15) !important;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-    transform: scale(1.02);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-    z-index: 10;
-}
-
-@media (hover: none) {
-    .sortable-chosen {
-        border: 2px solid rgba(255, 255, 255, 0.3) !important;
-    }
+body.cards-dragging,
+body.cards-dragging * {
+    cursor: grabbing !important;
 }
 
 .card.full-width {
@@ -473,6 +470,10 @@ body.fullscreen-mode .battery-runtime-value {
     align-items: center;
     gap: 10px;
     margin-bottom: 20px;
+    /* The header is the drag handle: a long press starts a drag, not a text selection */
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
 }
 
 .card-header .icon {
@@ -1270,16 +1271,9 @@ body.fullscreen-mode .battery-runtime-value {
         height: 40px;
     }
 
-    .language-btn {
-        top: 12px;
-        right: 58px;
-        width: 40px;
-        height: 40px;
-    }
-
     .settings-toggle-btn {
         top: 12px;
-        right: 104px;
+        right: 58px;
         width: 40px;
         height: 40px;
     }
@@ -1343,9 +1337,7 @@ body.fullscreen-mode {
 
 body.fullscreen-mode .header,
 body.fullscreen-mode .notification-setup,
-body.fullscreen-mode .settings-toggle-btn,
-body.fullscreen-mode .language-btn,
-body.fullscreen-mode .language-menu {
+body.fullscreen-mode .settings-toggle-btn {
     display: none !important;   /* only the fullscreen (exit) button stays */
 }
 
@@ -2101,7 +2093,7 @@ body.fullscreen-mode.page-scrolled .scroll-hint {
 .settings-toggle-btn {
     position: fixed;
     top: 20px;
-    right: 128px;
+    right: 74px;
     width: 44px;
     height: 44px;
     background: rgba(255, 255, 255, 0.1);
@@ -2115,89 +2107,6 @@ body.fullscreen-mode.page-scrolled .scroll-hint {
     display: flex;
     align-items: center;
     justify-content: center;
-}
-
-/* Language switch, next to the fullscreen button */
-.language-btn {
-    position: fixed;
-    top: 20px;
-    right: 74px;
-    width: 44px;
-    height: 44px;
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 10px;
-    color: #94a3b8;
-    cursor: pointer;
-    font-size: 0.8rem;
-    font-weight: 600;
-    letter-spacing: 0.03em;
-    z-index: 100;
-    transition: all 0.3s ease;
-}
-
-.language-btn:hover,
-.language-btn[aria-expanded="true"] {
-    background: rgba(255, 255, 255, 0.2);
-    color: #fff;
-}
-
-/* Language list, opened from the language button (positioned by JS) */
-.language-menu {
-    position: fixed;
-    min-width: 180px;
-    padding: 6px;
-    background: #1e293b;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 10px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
-    z-index: 1001;
-}
-
-.language-menu.hidden {
-    display: none;
-}
-
-.language-option {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    width: 100%;
-    padding: 10px 12px;
-    background: none;
-    border: none;
-    border-radius: 6px;
-    color: #e2e8f0;
-    font-size: 0.9rem;
-    text-align: left;
-    cursor: pointer;
-}
-
-.language-option:hover,
-.language-option:focus-visible {
-    background: rgba(255, 255, 255, 0.1);
-    outline: none;
-}
-
-.language-option-code {
-    width: 28px;
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: #94a3b8;
-}
-
-.language-option-check {
-    margin-left: auto;
-    color: #6ec89b;
-    visibility: hidden;
-}
-
-.language-option[aria-checked="true"] {
-    background: rgba(99, 102, 241, 0.2);
-}
-
-.language-option[aria-checked="true"] .language-option-check {
-    visibility: visible;
 }
 
 .settings-toggle-btn:hover {
@@ -2479,6 +2388,11 @@ button.onboarding-toggle {
     font-size: 0.7rem;
     color: #64748b;
     margin-top: 2px;
+}
+
+/* The one note on which settings stay on this device (shown once) */
+.settings-hint.settings-local-note {
+    margin-top: 12px;
 }
 
 .onboarding-btn-row {

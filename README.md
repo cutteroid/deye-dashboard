@@ -24,7 +24,7 @@ What this fork adds to the original [ivanursul/deye-dashboard](https://github.co
   - grid voltage L2/L3.
 
 **Interface**
-- **Languages:** English, Ukrainian and Russian, with a language menu.
+- **Languages:** English, Ukrainian and Russian, chosen in the settings panel.
 - **Fullscreen kiosk view:** reworked, including a compact layout for 7" tablets (960×600) and emoji that also render on old Android.
 - **Settings:** server settings are protected by a PIN, while local settings (low power mode, language) stay open.
 - **Less clutter:**
@@ -318,7 +318,7 @@ DTEK has no public API, so this provider reads the community feed [outage-data-u
 
 ### Settings PIN
 
-The settings panel (gear button) opens without a PIN for local, per-device settings such as low power mode (the language button is also always available). Server-side settings — Edit Configuration and Factory Reset — are locked behind the settings PIN (**Unlock** in the panel) and lock again when the panel closes. The server enforces the same PIN on the API endpoints behind them: config read/save/reset, inverter discovery and clearing phase statistics. After 5 wrong attempts, PIN checks are locked for 60 seconds.
+The settings panel (gear button) opens without a PIN for local, per-device settings: language and low power mode. Server-side settings — Edit Configuration and Factory Reset — are locked behind the settings PIN (**Unlock** in the panel) and lock again when the panel closes. The server enforces the same PIN on the API endpoints behind them: config read/save/reset, inverter discovery and clearing phase statistics. After 5 wrong attempts, PIN checks are locked for 60 seconds.
 
 | Variable | Description | Default |
 |----------|-------------|---------|
@@ -373,9 +373,9 @@ Without `SMART_METER_MQTT_USER` / `SMART_METER_MQTT_PASSWORD` the broker accepts
 
 ### Language
 
-The dashboard UI is available in English (default), Ukrainian and Russian. Switch with the language button next to the fullscreen button, which opens a list of the available languages; the choice is stored in the browser's local storage, so each device keeps its own language.
+The dashboard UI is available in English (default), Ukrainian and Russian. Switch in the settings panel (gear button), which lists the available languages; the choice is stored in the browser's local storage, so each device keeps its own language.
 
-Translations live in `locales/<lang>.json` (one file per language, nested keys, `{name}` placeholders). To add a language, copy `locales/en.json` to e.g. `locales/pl.json`, translate the values, and restart — the language button picks it up automatically. `tests/test_i18n.py` checks that every locale has the same keys and placeholders as English.
+Translations live in `locales/<lang>.json` (one file per language, nested keys, `{name}` placeholders). To add a language, copy `locales/en.json` to e.g. `locales/pl.json`, translate the values, and restart — the settings panel lists it automatically. `tests/test_i18n.py` checks that every locale has the same keys and placeholders as English.
 
 The Telegram bot is Ukrainian-only and is not affected by this setting.
 

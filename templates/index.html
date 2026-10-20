@@ -11,12 +11,6 @@
             if (localStorage.getItem('dashboard-low-power') === '1') document.documentElement.classList.add('low-power');
         } catch (e) {}
     </script>
-    <!-- SortableJS for dashboard cards. integrity: the browser refuses the file if the
-         CDN ever serves anything else; no-referrer: the CDN isn't told the dashboard's address.
-         Changing the version needs a new hash (sha384 of the file, base64). -->
-    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"
-            integrity="sha384-BSxuMLxX+FCbTdYec3TbXlnMGEEM2QXTFdtDaveen71o+jswm2J36+xFqp8k4VHM"
-            crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 </head>
 <body>
     <div id="battery-overlay"></div>
@@ -37,11 +31,6 @@
             <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/>
         </svg>
     </button>
-
-    <!-- Language Button (next to fullscreen) -->
-    <button class="language-btn" id="language-btn" onclick="toggleLanguageMenu(event)" title="Language"
-            data-i18n-attr="title:toolbar.language" aria-haspopup="menu" aria-expanded="false" aria-controls="language-menu">EN</button>
-    <div class="language-menu hidden" id="language-menu" role="menu"></div>
 
     <!-- Settings Button -->
     <button class="settings-toggle-btn" onclick="toggleSettingsPanel()" title="Settings" data-i18n-attr="title:toolbar.settings">
@@ -726,6 +715,12 @@
         </h3>
 
         <div class="settings-section">
+            <label for="language-select" data-i18n="settings.language">Language</label>
+            <!-- Options filled by renderLanguageOptions() -->
+            <select class="onboarding-select" id="language-select" onchange="setLanguage(this.value)"></select>
+        </div>
+
+        <div class="settings-section">
             <label data-i18n="settings.display">Display</label>
             <div class="onboarding-toggle-row">
                 <span id="low-power-label" data-i18n="settings.low_power">Low power mode</span>
@@ -734,7 +729,8 @@
                     <span class="toggle-knob"></span>
                 </button>
             </div>
-            <div class="settings-hint" data-i18n="settings.low_power_hint">Turns off animations and blur effects. Saved on this device.</div>
+            <div class="settings-hint" data-i18n="settings.low_power_hint">Turns off animations and blur effects.</div>
+            <div class="settings-hint settings-local-note" data-i18n="settings.local_hint">Language and display settings are saved on this device.</div>
         </div>
 
         <!-- Server-side settings: change the server, so they need the settings PIN.
