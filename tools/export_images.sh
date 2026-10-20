@@ -120,6 +120,9 @@ docker compose up -d
   then \`docker compose up -d\`.
 EOF
 
-tar -czf "dist/$NAME.tar.gz" -C dist "$NAME"
+# macOS tar: leave out Apple metadata, which GNU tar on the NAS warns about
+TAR_FLAGS=()
+tar --version 2>/dev/null | grep -q bsdtar && TAR_FLAGS=(--no-xattrs --no-mac-metadata --no-acls)
+COPYFILE_DISABLE=1 tar ${TAR_FLAGS[@]+"${TAR_FLAGS[@]}"} -czf "dist/$NAME.tar.gz" -C dist "$NAME"
 rm -rf "$OUT"
 echo "==> dist/$NAME.tar.gz ($(du -h "dist/$NAME.tar.gz" | cut -f1))"

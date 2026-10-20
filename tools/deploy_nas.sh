@@ -44,9 +44,17 @@ for f in "${FILES[@]}"; do
     [ -d "$f" ] && DIRS+=("${f%/}")
 done
 
-echo "==> Sending $(COPYFILE_DISABLE=1 tar -czf - --exclude='__pycache__' --exclude='*.pyc' --exclude='.DS_Store' "${FILES[@]}" | wc -c | awk '{printf "%.1f MB", $1/1048576}') to $NAS_SSH:$NAS_DIR"
+# macOS tar (bsdtar) would add Apple metadata (._ files, xattrs such as
+# com.apple.provenance) that GNU tar on the NAS warns about for every file
+TAR_FLAGS=()
+tar --version 2>/dev/null | grep -q bsdtar && TAR_FLAGS=(--no-xattrs --no-mac-metadata --no-acls)
+pack() {
+    COPYFILE_DISABLE=1 tar ${TAR_FLAGS[@]+"${TAR_FLAGS[@]}"} -czf - --exclude='__pycache__' --exclude='*.pyc' --exclude='.DS_Store' "${FILES[@]}"
+}
+
+echo "==> Sending $(pack | wc -c | awk '{printf "%.1f MB", $1/1048576}') to $NAS_SSH:$NAS_DIR"
 # Directories are replaced as a whole so files deleted here don't linger there
-COPYFILE_DISABLE=1 tar -czf - --exclude='__pycache__' --exclude='*.pyc' --exclude='.DS_Store' "${FILES[@]}" |
+pack |
     "${SSH[@]}" "$NAS_SSH" "set -e; mkdir -p '$NAS_DIR'; cd '$NAS_DIR'; rm -rf ${DIRS[*]}; mkdir -p data/mosquitto; tar -xzf -"
 
 echo "==> Rebuilding and restarting on the NAS (sudo may ask for your NAS password)"
