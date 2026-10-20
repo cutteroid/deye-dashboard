@@ -9,6 +9,7 @@ Readings returned by InverterDriver.read_all_data() (W, V, A, %, kWh):
     battery_voltage, battery_current (> 0 charging), battery_power (> 0 charging),
     battery_soc, battery_soc_raw, battery_status ("Charging"/"Discharging"/"Idle"/"N/A")
     battery_capacity_ah, battery_shutdown_soc   (optional: battery time estimates)
+    battery_temperature (°C, optional; None when the inverter doesn't report it)
     grid_voltage (L1), grid_power (> 0 importing), grid_status ("Importing"/"Exporting"/"Idle")
     grid_online (house actually on grid power), grid_state (see grid_state())
     load_power

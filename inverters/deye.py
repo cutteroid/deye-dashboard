@@ -53,6 +53,13 @@ def relay_grid_connected(relay):
     return bool(relay & RELAY_GRID_BIT) if relay else None
 
 
+def battery_temperature(raw):
+    """Battery temperature register ((x - 1000) / 10 °C) -> °C, or None when implausible
+    (0 = not reported, i.e. -100 °C)."""
+    celsius = (raw - 1000) / 10
+    return celsius if -40 <= celsius <= 90 else None
+
+
 def device_family(device_type):
     """Family name for a register-0 value ("unknown" if not recognised)."""
     return DEVICE_FAMILIES.get(device_type, "unknown")
@@ -184,6 +191,8 @@ class DeyeInverter(InverterDriver):
                 raw_soc = self.read_register(184)
                 time.sleep(0.05)
                 data["battery_soc_raw"] = raw_soc
+                data["battery_temperature"] = battery_temperature(self.read_register(182))
+                time.sleep(0.05)
 
                 data["battery_capacity"] = self.read_register(107)
                 time.sleep(0.05)
@@ -316,6 +325,8 @@ class DeyeInverter(InverterDriver):
                 raw_soc = self.read_register(588)
                 time.sleep(0.05)
                 data["battery_soc_raw"] = raw_soc
+                data["battery_temperature"] = battery_temperature(self.read_register(586))
+                time.sleep(0.05)
 
                 # For the runtime estimate: 592 = capacity measured by the BMS
                 # ("corrected"), 102 = capacity set on the inverter, 115 = SOC at

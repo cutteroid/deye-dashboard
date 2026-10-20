@@ -210,6 +210,7 @@
     "voltage": "Voltage (V)",
     "current": "Current (A)",
     "power": "Power (W)",
+    "temperature": "Temperature (°C)",
     "status_power": "{status} (W)",
     "status": {
       "charging": "Charging",

@@ -568,6 +568,10 @@ body.fullscreen-mode .battery-runtime-value {
     gap: 16px;
 }
 
+/* Battery card temperature: amber when cold, red when hot */
+.stat .value.battery-temp-cold { color: #fbbf24; }
+.stat .value.battery-temp-hot { color: #f87171; }
+
 .stats-row.stats-row-3 {
     grid-template-columns: repeat(3, 1fr);
     gap: 10px;

@@ -117,3 +117,18 @@ def test_grid_state(inverter, relay, volts, state, missing):
     with patch.object(inverter, "read_register", side_effect=lambda addr: regs.get(addr, 0)):
         data = inverter._read_3p_data_unlocked()
     assert data["grid_state"] == state and data["grid_phases_missing"] == missing
+
+
+@pytest.mark.parametrize("raw,celsius", [(1270, 27.0), (980, -2.0), (0, None), (2500, None)])
+def test_battery_temperature(inverter, raw, celsius):
+    regs = {**REGISTERS, 586: raw}   # live: 1270 = 27.0 °C; 0 = not reported
+    with patch.object(inverter, "read_register", side_effect=lambda addr: regs.get(addr, 0)):
+        data = inverter._read_3p_data_unlocked()
+    assert data["battery_temperature"] == (pytest.approx(celsius) if celsius is not None else None)
+
+
+def test_battery_temperature_single_phase():
+    with patch("inverters.deye.PySolarmanV5"), patch("inverters.deye.time.sleep"):
+        inv = DeyeInverter(ip="192.168.1.1", serial=1, config=InverterConfig(phases=1))
+        with patch.object(inv, "read_register", side_effect=lambda addr: {182: 1255, 183: 5300}.get(addr, 0)):
+            assert inv._read_1p_data_unlocked()["battery_temperature"] == pytest.approx(25.5)

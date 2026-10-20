@@ -899,6 +899,12 @@ function updateDashboard() {
                 document.getElementById('battery-fill').style.width = data.battery_soc + '%';
                 document.getElementById('battery-voltage').textContent = fmt(data.battery_voltage, 1);
                 document.getElementById('battery-current').textContent = fmt(data.battery_current, 1);
+                // LiFePO4: below 5 °C charging slows (below 0 °C it harms the cells), above 45 °C too hot
+                var tempEl = document.getElementById('battery-temperature');
+                var temp = data.battery_temperature;
+                tempEl.textContent = fmt(temp, 1);
+                tempEl.classList.toggle('battery-temp-cold', typeof temp === 'number' && temp < 5);
+                tempEl.classList.toggle('battery-temp-hot', typeof temp === 'number' && temp > 45);
                 document.getElementById('battery-power').textContent = Math.abs(data.battery_power);
                 setI18nText(document.getElementById('battery-status'), 'battery.status_power', { status: batteryStatusText(data.battery_status) });
             }
