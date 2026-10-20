@@ -35,8 +35,8 @@ class TestRegistry:
 class TestFactory:
     def test_create_from_settings(self):
         with patch("inverters.deye.PySolarmanV5"):
-            inv = create_inverter({"INVERTER_IP": "192.168.52.140", "LOGGER_SERIAL": "2712345678"})
-        assert isinstance(inv, DeyeInverter) and (inv.ip, inv.serial) == ("192.168.52.140", 2712345678)
+            inv = create_inverter({"INVERTER_IP": "192.168.1.100", "LOGGER_SERIAL": "1234567890"})
+        assert isinstance(inv, DeyeInverter) and (inv.ip, inv.serial) == ("192.168.1.100", 1234567890)
 
     def test_bad_serial_does_not_crash(self):
         inv = create_inverter({"INVERTER_TYPE": "deye", "INVERTER_IP": "1.2.3.4", "LOGGER_SERIAL": "abc"})
@@ -48,7 +48,7 @@ class TestSettingsProblem:
         ({"INVERTER_IP": "1.2.3.4", "LOGGER_SERIAL": "42"}, ""),
         ({}, "INVERTER_IP and LOGGER_SERIAL are required"),
         ({"INVERTER_IP": "0.0.0.0", "LOGGER_SERIAL": "42"}, "INVERTER_IP is required"),
-        ({"INVERTER_IP": "1.2.3.4", "LOGGER_SERIAL": "23312345678"}, "LOGGER_SERIAL must be"),
+        ({"INVERTER_IP": "1.2.3.4", "LOGGER_SERIAL": "99999999999"}, "LOGGER_SERIAL must be"),
     ])
     def test_deye(self, settings, problem):
         result = DeyeInverter.settings_problem(settings)
