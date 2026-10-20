@@ -25,8 +25,8 @@ What this fork adds to the original [ivanursul/deye-dashboard](https://github.co
 
 **Interface**
 - **Languages:** English, Ukrainian and Russian, chosen in the settings panel.
-- **Fullscreen kiosk view:** reworked, including a compact layout for 7" tablets (960×600) and emoji that also render on old Android.
-- **Settings:** server settings are protected by a PIN, while local settings (low power mode, language) stay open.
+- **Fullscreen kiosk view:** reworked, including a compact layout for 7" tablets (960×600) and emoji that also render on old Android. A clock in the weather banner, and the view scrolls back to the first screen 30 s after the last touch (can be switched off).
+- **Settings:** server settings are protected by a PIN, while local settings (language, low power mode, back to the first screen) stay open.
 - **Less clutter:**
   - removed: sound alerts, the temperature block, the weather background and effects, and the moving card icons;
   - the planned outages and alerts maps no longer have their own timestamps.
@@ -318,7 +318,7 @@ DTEK has no public API, so this provider reads the community feed [outage-data-u
 
 ### Settings PIN
 
-The settings panel (gear button) opens without a PIN for local, per-device settings: language and low power mode. Server-side settings — Edit Configuration and Factory Reset — are locked behind the settings PIN (**Unlock** in the panel) and lock again when the panel closes. The server enforces the same PIN on the API endpoints behind them: config read/save/reset, inverter discovery and clearing phase statistics. After 5 wrong attempts, PIN checks are locked for 60 seconds.
+The settings panel (gear button) opens without a PIN for local, per-device settings: language, low power mode and back to the first screen. Server-side settings — Edit Configuration and Factory Reset — are locked behind the settings PIN (**Unlock** in the panel) and lock again when the panel closes. The server enforces the same PIN on the API endpoints behind them: config read/save/reset, inverter discovery and clearing phase statistics. After 5 wrong attempts, PIN checks are locked for 60 seconds.
 
 | Variable | Description | Default |
 |----------|-------------|---------|
@@ -378,6 +378,10 @@ The dashboard UI is available in English (default), Ukrainian and Russian. Switc
 Translations live in `locales/<lang>.json` (one file per language, nested keys, `{name}` placeholders). To add a language, copy `locales/en.json` to e.g. `locales/pl.json`, translate the values, and restart — the settings panel lists it automatically. `tests/test_i18n.py` checks that every locale has the same keys and placeholders as English.
 
 The Telegram bot is Ukrainian-only and is not affected by this setting.
+
+### Back to the First Screen
+
+In fullscreen mode the dashboard scrolls back to the first screen (weather, grid, battery, outages, alerts) 30 seconds after the last touch, scroll or key press, so a wall tablet isn't left showing the details. Switch it off under **Settings → Display → Back to the first screen**; like low power mode, it is stored per device.
 
 ### Low Power Mode
 

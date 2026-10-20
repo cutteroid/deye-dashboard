@@ -253,6 +253,7 @@ function updateFullscreenIcon() {
         updateGridProgressBar();
     }
     updatePageScrolled();
+    scheduleReturnToTop();
 }
 
 // The fullscreen scroll hint is only for the first screen: hide it once the
@@ -320,6 +321,62 @@ function updateLowPowerToggle() {
 }
 
 updateLowPowerToggle();
+
+// Fullscreen: back to the first screen RETURN_TO_TOP_MS after the last
+// interaction, so a kiosk isn't left scrolled down on the details.
+// Stored per device; on unless switched off.
+var RETURN_TO_TOP_STORAGE_KEY = 'dashboard-return-to-top';
+var RETURN_TO_TOP_MS = 30000;
+var returnToTopOn = (function() {
+    try { return localStorage.getItem(RETURN_TO_TOP_STORAGE_KEY) !== '0'; } catch (e) { return true; }
+})();
+var returnToTopTimer = null;
+var returningToTop = false;  // our own scrolling doesn't count as an interaction
+
+function toggleReturnToTop() {
+    returnToTopOn = !returnToTopOn;
+    try { localStorage.setItem(RETURN_TO_TOP_STORAGE_KEY, returnToTopOn ? '1' : '0'); } catch (e) {}
+    updateReturnToTopToggle();
+    scheduleReturnToTop();
+}
+
+function updateReturnToTopToggle() {
+    var toggle = document.getElementById('return-to-top-toggle');
+    if (!toggle) return;
+    toggle.classList.toggle('on', returnToTopOn);
+    toggle.setAttribute('aria-checked', String(returnToTopOn));
+}
+
+// (Re)start the countdown; nothing to do outside fullscreen or at the top
+function scheduleReturnToTop() {
+    clearTimeout(returnToTopTimer);
+    returnToTopTimer = null;
+    if (!returnToTopOn || !document.body.classList.contains('fullscreen-mode')) return;
+    if (window.scrollY <= SCROLL_HINT_THRESHOLD) return;
+    returnToTopTimer = setTimeout(returnToTop, RETURN_TO_TOP_MS);
+}
+
+function returnToTop() {
+    returnToTopTimer = null;
+    if (!returnToTopOn || !document.body.classList.contains('fullscreen-mode')) return;
+    // A card is still being dragged: wait for the next quiet period
+    if (document.body.classList.contains('cards-dragging')) { scheduleReturnToTop(); return; }
+    returningToTop = true;
+    window.scrollTo({ top: 0, behavior: isLowPower() ? 'auto' : 'smooth' });
+    setTimeout(function() { returningToTop = false; }, 1500);
+}
+
+['pointerdown', 'keydown', 'wheel', 'touchstart'].forEach(function(type) {
+    window.addEventListener(type, function() {
+        returningToTop = false;
+        scheduleReturnToTop();
+    }, { passive: true });
+});
+window.addEventListener('scroll', function() {
+    if (!returningToTop) scheduleReturnToTop();
+}, { passive: true });
+
+updateReturnToTopToggle();
 
 // fetch() for endpoints behind the settings PIN
 // Requests to the dashboard server give up after this long. Without a timeout a

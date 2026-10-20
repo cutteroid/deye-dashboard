@@ -279,6 +279,8 @@
     "display": "Display",
     "low_power": "Low power mode",
     "low_power_hint": "Turns off animations and blur effects.",
+    "return_to_top": "Back to the first screen",
+    "return_to_top_hint": "In fullscreen, scrolls back up {seconds} s after the last touch.",
     "local_hint": "Language and display settings are saved on this device.",
     "configuration": "Configuration",
     "edit_configuration": "Edit Configuration",
