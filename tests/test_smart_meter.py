@@ -34,6 +34,11 @@ def test_waiting_until_first_message(meter):
     assert meter.get_status() == {"status": "waiting"}
 
 
+def test_waiting_before_first_connection_attempt(meter):
+    """Right after a restart the broker connection isn't up yet: not an error."""
+    assert meter.get_status() == {"status": "waiting"}
+
+
 def test_broker_error_reported(meter):
     meter.set_broker_state(False, "Cannot connect to MQTT broker mosquitto:1883")
     assert meter.get_status() == {"status": "error", "error": "Cannot connect to MQTT broker mosquitto:1883"}

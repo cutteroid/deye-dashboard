@@ -159,7 +159,6 @@
     "demo": "Демо-дані",
     "loading": "Завантаження тривог...",
     "unavailable": "Дані про тривоги недоступні",
-    "updated": "Оновлено {time}",
     "legend_alert": "Повітряна тривога",
     "legend_threat": "Загроза",
     "status_alert": "повітряна тривога",
@@ -251,7 +250,8 @@
     "status_error": "MQTT-брокер недоступний",
     "demo": "Демо-дані",
     "no_voltage": "Немає напруги",
-    "disconnected": "Відключено"
+    "disconnected": "Відключено",
+    "status_unreachable": "Немає з'єднання"
   },
   "phase_stats": {
     "title": "Щоденна аналітика фаз",

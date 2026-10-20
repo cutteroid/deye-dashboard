@@ -239,7 +239,15 @@ class InverterPoller:
                             result.get("grid_power", 0))
 
             result["last_updated"] = datetime.now().isoformat()
-            if not result.get("error"):
+            if result.get("error"):
+                # A single failed poll (the logger is often briefly busy) keeps the
+                # last good readings; the error only replaces them once they're
+                # older than INVERTER_CACHE_MAX_AGE
+                with self._lock:
+                    previous = self._cache
+                if previous and not previous.get("error") and self._age(previous) < INVERTER_CACHE_MAX_AGE:
+                    return
+            else:
                 self._add_runtime_estimate(result)
             with self._lock:
                 self._cache = result
@@ -262,6 +270,14 @@ class InverterPoller:
                 )
         except Exception:
             logger.exception("Error polling inverter data")
+
+    @staticmethod
+    def _age(data):
+        """Seconds since the readings were taken (infinite if unknown)."""
+        try:
+            return (datetime.now() - datetime.fromisoformat(data["last_updated"])).total_seconds()
+        except (KeyError, TypeError, ValueError):
+            return float("inf")
 
     def _add_runtime_estimate(self, result):
         """Battery time estimates (minutes) at the average power of recent polls:
@@ -863,6 +879,10 @@ def get_data():
     config = inverter_config.to_dict()
     config["has_outage_schedule"] = outage_poller is not None
     data["config"] = config
+    # How old the readings are (independent of the viewer's clock / time zone)
+    age = InverterPoller._age(data)
+    if age != float("inf"):
+        data["data_age_seconds"] = max(0, int(age))
     return jsonify(data)
 
 

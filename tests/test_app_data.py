@@ -324,3 +324,52 @@ class TestBatteryRuntime:
             poller._add_runtime_estimate(result)
         assert result["battery_charge_minutes"] == app.estimate_battery_charge_time(data, 3000)
         assert result["battery_runtime_minutes"] is None
+
+
+class TestPollerKeepsGoodData:
+    """A failed inverter poll keeps the last good readings (for up to INVERTER_CACHE_MAX_AGE)."""
+
+    def _poller(self, results):
+        import app
+        from unittest.mock import MagicMock
+        inv = MagicMock()
+        inv.read_all_data.side_effect = results
+        return app.InverterPoller(inverter=inv, battery_sampler=None)
+
+    def test_failed_poll_keeps_last_readings(self):
+        poller = self._poller([{"battery_soc": 80, "battery_power": 0}, {"error": "No socket available"}])
+        poller._fetch()
+        poller._fetch()
+        assert poller.data["battery_soc"] == 80 and "error" not in poller.data
+
+    def test_error_shown_once_readings_are_too_old(self):
+        import app
+        from datetime import datetime, timedelta
+        poller = self._poller([{"error": "No socket available"}])
+        old = (datetime.now() - timedelta(seconds=app.INVERTER_CACHE_MAX_AGE + 5)).isoformat()
+        poller._cache = {"battery_soc": 80, "last_updated": old}
+        poller._fetch()
+        assert poller.data["error"] == "No socket available"
+
+    def test_error_without_previous_readings(self):
+        poller = self._poller([{"error": "timeout"}])
+        poller._fetch()
+        assert poller.data["error"] == "timeout"
+
+    def test_api_reports_data_age(self):
+        import app
+        from datetime import datetime, timedelta
+        from unittest.mock import MagicMock, PropertyMock
+        from inverters import InverterConfig
+        app.app.config["TESTING"] = True
+        orig = (app.inverter_poller, app.inverter_config, app._configured)
+        try:
+            poller = MagicMock()
+            type(poller).data = PropertyMock(return_value={
+                "battery_soc": 80, "last_updated": (datetime.now() - timedelta(seconds=42)).isoformat()})
+            app.inverter_poller, app.inverter_config, app._configured = poller, InverterConfig(), True
+            with app.app.test_client() as c:
+                body = c.get("/api/data").get_json()
+            assert 41 <= body["data_age_seconds"] <= 44
+        finally:
+            app.inverter_poller, app.inverter_config, app._configured = orig

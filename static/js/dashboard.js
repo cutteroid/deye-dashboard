@@ -826,6 +826,14 @@ function fmt(value, digits) {
 // One /api/data request at a time: with a slow server, overlapping requests could
 // resolve out of order and replay a stale grid state (false outage/restore alerts)
 var dashboardRequestInFlight = false;
+
+// Requests to the dashboard server fail now and then (tablet Wi-Fi, a busy NAS):
+// keep the last data on screen and only report a problem once nothing has
+// arrived for this long
+var STALE_ERROR_MS = 60000;
+function noDataFor(lastOkAt) { return !lastOkAt || Date.now() - lastOkAt > STALE_ERROR_MS; }
+
+var dashboardOkAt = 0;   // last answer with readings
 var DASHBOARD_REQUEST_TIMEOUT_MS = 15000;
 
 function updateDashboard() {
@@ -851,7 +859,11 @@ function updateDashboard() {
                 return;
             }
 
-            setI18nText(document.getElementById('status'), 'status.online', { time: new Date().toLocaleTimeString(i18nLocale()) });
+            // "Updated" = when the readings were taken (the server keeps the last
+            // good ones through a failed inverter poll)
+            dashboardOkAt = Date.now();
+            var takenAt = new Date(Date.now() - (data.data_age_seconds || 0) * 1000);
+            setI18nText(document.getElementById('status'), 'status.online', { time: takenAt.toLocaleTimeString(i18nLocale()) });
             document.getElementById('status').className = 'status online';
 
             // Apply config once when first received
@@ -1007,9 +1019,12 @@ function updateDashboard() {
 
         })
         .catch(error => {
+            console.error('Error:', error);
+            // A failed request: the last readings and their time stay until
+            // nothing has arrived for a while
+            if (!noDataFor(dashboardOkAt)) return;
             setI18nText(document.getElementById('status'), 'status.connection_failed');
             document.getElementById('status').className = 'status error';
-            console.error('Error:', error);
         })
         .finally(function() {
             if (timeoutId) clearTimeout(timeoutId);
@@ -1427,26 +1442,24 @@ function fetchWeather() {
         });
 }
 
-// Requests to the dashboard server that may fail in a row (Wi-Fi blips) before a
-// card replaces its last data with an error
-var FETCH_FAILURES_BEFORE_ERROR = 3;
-
 // ===== SMART METER =====
 // Read-only readings of the MQTT smart meter (/api/smart-meter); the card stays
 // hidden unless the meter is enabled on the server.
 var SMART_METER_POLL_MS = 5000;
 var smartMeterData = null;
 
-var smartMeterFailures = 0;
+var smartMeterOkAt = 0;
 
 function fetchSmartMeter() {
     fetch('/api/smart-meter')
         .then(function(r) { return r.json(); })
-        .then(function(data) { smartMeterFailures = 0; smartMeterData = data; renderSmartMeter(); })
+        .then(function(data) { smartMeterOkAt = Date.now(); smartMeterData = data; renderSmartMeter(); })
         .catch(function() {
-            // Keep the last readings through a short network blip
-            if (smartMeterData && ++smartMeterFailures < FETCH_FAILURES_BEFORE_ERROR) return;
-            smartMeterData = { status: 'error' };
+            // The request failed (not the meter or its broker): keep the last
+            // readings; after a while say the dashboard can't be reached, with
+            // the last values dimmed
+            if (!noDataFor(smartMeterOkAt) || (smartMeterData && smartMeterData.status === 'disabled')) return;
+            smartMeterData = Object.assign({}, smartMeterData || {}, { status: 'unreachable' });
             renderSmartMeter();
         });
 }
@@ -1471,7 +1484,7 @@ function renderSmartMeter() {
         badge.textContent = t('meter.status_' + (d.status === 'unknown' ? 'waiting' : d.status));
     }
     // Meter or broker unavailable: red badge; readings still on screen are the last known ones, dimmed
-    badge.classList.toggle('meter-status-bad', d.status === 'offline' || d.status === 'error');
+    badge.classList.toggle('meter-status-bad', d.status === 'offline' || d.status === 'error' || d.status === 'unreachable');
     card.classList.toggle('meter-not-live', d.status !== 'ok');
 
     document.getElementById('meter-power').innerHTML =
@@ -1647,15 +1660,15 @@ function alertsDistrictTitle(districtId, regionId) {
     return t('alerts.district_name', { name: name }) + ', ' + regionName;
 }
 
-var alertsFailures = 0;
+var alertsOkAt = 0;
 
 function fetchAlerts() {
     fetch('/api/alerts')
         .then(function(r) { return r.json(); })
-        .then(function(data) { alertsFailures = 0; alertsData = data; renderAlerts(); })
+        .then(function(data) { alertsOkAt = Date.now(); alertsData = data; renderAlerts(); })
         .catch(function() {
-            // Keep the last map through a short network blip
-            if (alertsData && ++alertsFailures < FETCH_FAILURES_BEFORE_ERROR) return;
+            // Keep the last map until nothing has arrived for a while
+            if (!noDataFor(alertsOkAt)) return;
             alertsData = { status: 'error' };
             renderAlerts();
         });
@@ -1693,7 +1706,8 @@ function renderAlerts() {
     var summary;
     if (!d || d.status === 'unknown') summary = t('alerts.loading');
     else if (!ok) summary = t('alerts.unavailable');
-    else summary = t('alerts.updated', { time: new Date(d.updated).toLocaleTimeString(i18nLocale(), { hour: '2-digit', minute: '2-digit' }) });
+    // With data: no own timestamp, the status line's "Updated" covers the dashboard
+    else summary = '';
     document.querySelectorAll('[data-alerts-summary]').forEach(function(el) { el.textContent = summary; });
     // Region shown on the map, next to the title
     var region = window.DASHBOARD_CONFIG.alertsRegion;

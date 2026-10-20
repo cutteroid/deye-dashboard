@@ -159,7 +159,6 @@
     "demo": "Demo data",
     "loading": "Loading alerts...",
     "unavailable": "Alert data unavailable",
-    "updated": "Updated {time}",
     "legend_alert": "Air raid alert",
     "legend_threat": "Threat",
     "status_alert": "air raid alert",
@@ -251,7 +250,8 @@
     "status_error": "MQTT broker unavailable",
     "demo": "Demo data",
     "no_voltage": "No voltage",
-    "disconnected": "Disconnected"
+    "disconnected": "Disconnected",
+    "status_unreachable": "No connection"
   },
   "phase_stats": {
     "title": "Daily Phase Analytics",

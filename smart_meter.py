@@ -223,7 +223,9 @@ class SmartMeter:
             today_generated = self._today("negWh", self._last_totals.get("negWh"))
 
         if updated is None:
-            status = "waiting" if broker_connected else "error"
+            # "error" only after a failed connection attempt; before the first
+            # attempt has finished (e.g. right after a restart) it's just waiting
+            status = "error" if not broker_connected and broker_error else "waiting"
             result = {"status": status}
             if not broker_connected and broker_error:
                 result["error"] = broker_error

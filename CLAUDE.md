@@ -99,6 +99,8 @@ The app runs several daemon threads:
 - `AlertsPoller` — fetches air raid alerts every 30s
 - paho-mqtt network loop (`SmartMeterClient`, when the smart meter is enabled) — handles meter messages as they arrive
 
+Transient failures never replace good data: `InverterPoller` keeps the last good readings through a failed poll (until they're older than `INVERTER_CACHE_MAX_AGE`, 5 min; `/api/data` reports `data_age_seconds`), and the frontend keeps every card's last data through failed requests, reporting a problem only after `STALE_ERROR_MS` (60 s) without an answer (`noDataFor()`). Error texts must name the real cause: a failed request from the browser is "Connection failed" / "No connection", never e.g. "MQTT broker unavailable".
+
 All pollers use thread locks for safe cache access. The inverter connection (the driver's `lock`) is shared between `InverterPoller`, `BatterySampler` and auto-detect. The Telegram bot reads `InverterPoller.data` (no direct inverter reads).
 
 Data files (stats, logs, caches, bot state) go through `storage.py`: `atomic_write_json()` (temp file + fsync + rename, safe across power cuts) and `load_json()` (missing/corrupt file → default; corrupt files are moved to `*.corrupt`). Read-modify-write updates in `app.py` hold `_data_lock`.
