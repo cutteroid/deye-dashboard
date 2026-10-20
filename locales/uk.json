@@ -338,6 +338,11 @@
       "odesa": "Одеса"
     },
     "dtek_group": "Черга (напр. 4.2)",
+    "alerts_title": "Повітряні тривоги",
+    "alerts_subtitle": "Мапа зі статусами тривог у реальному часі (дані: NEPTUN).",
+    "alerts_enabled": "Показувати повітряні тривоги",
+    "alerts_region": "Показувати на мапі",
+    "alerts_whole_ukraine": "Уся Україна",
     "step4_title": "Додаткові функції",
     "step4_subtitle": "Налаштуйте облік роботи генератора та Telegram-бота.",
     "generator_connected": "Генератор підключено",

@@ -130,3 +130,29 @@ class TestInverterPhases:
         path.write_text("INVERTER_IP=1.2.3.4\nINVERTER_PHASES=3\n")
         values, extra = load_existing_env(str(path))
         assert values["INVERTER_PHASES"] == "3" and extra == []
+
+
+class TestAirAlertsSettings:
+    def test_validation(self):
+        from setup import validate_config
+        assert validate_config({"AIR_ALERTS_PROVIDER": "none", "AIR_ALERTS_REGION": "UA-32"}) == {}
+        assert validate_config({"AIR_ALERTS_REGION": ""}) == {}          # whole Ukraine
+        errors = validate_config({"AIR_ALERTS_PROVIDER": "acme", "AIR_ALERTS_REGION": "Kyiv"})
+        assert set(errors) == {"AIR_ALERTS_PROVIDER", "AIR_ALERTS_REGION"}
+
+    def test_written_only_when_set(self, tmp_path):
+        from setup import write_env
+        path = tmp_path / ".env"
+        base = {"INVERTER_IP": "1.2.3.4", "LOGGER_SERIAL": "1"}
+        write_env({**base, "AIR_ALERTS_PROVIDER": "neptun", "AIR_ALERTS_REGION": "UA-32"}, [], str(path))
+        text = path.read_text()
+        assert "AIR_ALERTS_PROVIDER=neptun" in text and "AIR_ALERTS_REGION=UA-32" in text
+        write_env({**base, "AIR_ALERTS_PROVIDER": "neptun", "AIR_ALERTS_REGION": ""}, [], str(path))
+        assert "AIR_ALERTS_REGION" not in path.read_text()
+
+    def test_existing_manual_provider_is_managed(self, tmp_path):
+        from setup import load_existing_env
+        path = tmp_path / ".env"
+        path.write_text("INVERTER_IP=1.2.3.4\nAIR_ALERTS_PROVIDER=mock\n")
+        values, extra = load_existing_env(str(path))
+        assert values["AIR_ALERTS_PROVIDER"] == "mock" and extra == []

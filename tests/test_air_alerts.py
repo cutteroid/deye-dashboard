@@ -244,3 +244,11 @@ class TestAlertsEndpoint:
         assert "alertsMapUrl: \"/static/data/ukraine-regions.json?v=" in html
         assert 'id="alerts-card"' in html and 'id="alerts-banner"' in html
         assert html.count('href="https://neptun.in.ua/"') == 2  # attribution in card + fullscreen banner
+
+    @pytest.mark.parametrize("value,expected", [("UA-32", "UA-32"), ("", ""), ("UA-99", ""), ("Kyiv", "")])
+    def test_page_passes_configured_region(self, client, monkeypatch, value, expected):
+        c, _ = client
+        monkeypatch.setenv("AIR_ALERTS_REGION", value)
+        html = c.get("/").get_data(as_text=True)
+        assert f'alertsRegion: "{expected}"' in html
+        assert '"UA-32"' in html.split("alertsRegionCodes:")[1].split("\n")[0]   # list for the settings step

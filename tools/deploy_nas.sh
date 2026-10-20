@@ -94,6 +94,17 @@ echo "==> Sending $(pack | wc -c | awk '{printf "%.1f MB", $1/1048576}') to $NAS
 pack |
     "${SSH[@]}" "$NAS_SSH" "set -e; mkdir -p '$NAS_DIR'; cd '$NAS_DIR'; rm -rf ${DIRS[*]}; mkdir -p data/mosquitto; tar -xzf -"
 
+# Build progress on the NAS: compose logs each step without a terminal
+# (BuildKit "#13 [svc 10/20] ..." then "#13 DONE"/"CACHED"; classic builder
+# "Step 10/20 :"). This turns finished steps into "10%" ... "100%" lines.
+PROGRESS_AWK='function report(f) { p = int(f * 10 + 1e-9) * 10; while (last < p) { last += 10; print "  " last "%"; fflush() } }
+/^Step [0-9]+\/[0-9]+ :/ { split($2, a, "/"); report((a[1] - 1) / a[2]); next }
+$1 ~ /^#[0-9]+$/ && match($0, /[0-9]+\/[0-9]+\]/) { split(substr($0, RSTART, RLENGTH - 1), a, "/"); total = a[2]; steps[$1] = 1; next }
+($2 == "DONE" || $2 == "CACHED") && ($1 in steps) && !($1 in done) { done[$1] = 1; n++; if (total) report(n / total); next }
+/naming to .* done|Successfully tagged|Image .* Built/ { finished = 1 }
+END { if (finished) report(1) }'
+PROGRESS_AWK=$(printf '%s' "$PROGRESS_AWK" | tr '\n' ' ')
+
 echo "==> Rebuilding and restarting on the NAS"
 # The first stdin line is the sudo password (empty: sudo needs none); every sudo
 # call gets it from there, so nothing prompts again.
@@ -111,10 +122,15 @@ printf '%s\n' "$SUDO_PW" | "${SSH[@]}" "$NAS_SSH" "set -e; cd '$NAS_DIR'
     PROJECT=\$(s \"\$DOCKER\" inspect -f '{{index .Config.Labels \"com.docker.compose.project\"}}' deye-dashboard 2>/dev/null || true)
     case \"\$PROJECT\" in ''|'<no value>') PROJECT=\$(basename \"\$PWD\") ;; esac
     echo \"Compose project: \$PROJECT\"
-    # No terminal on the NAS side (stdin carries the password), so compose would
-    # log every build step on its own line: build quietly (errors still show)
+    # No terminal on the NAS side (stdin carries the password): show the build as
+    # percent lines; the full log is kept and printed if the build fails
     echo 'Building image (seconds; first run or new requirements: several minutes)...'
-    s \$DC -p \"\$PROJECT\" build --quiet
+    LOG=\$(mktemp)
+    { s \$DC -p \"\$PROJECT\" build 2>&1; echo \"__EXIT__\$?\"; } | tee \"\$LOG\" | awk $(printf '%q' "$PROGRESS_AWK")
+    if ! grep -q '^__EXIT__0\$' \"\$LOG\"; then
+        echo 'Build failed:'; grep -v '^__EXIT__' \"\$LOG\" | tail -n 40; rm -f \"\$LOG\"; exit 1
+    fi
+    rm -f \"\$LOG\"
     s \$DC -p \"\$PROJECT\" up -d
     s \"\$DOCKER\" image prune -f >/dev/null   # drop the replaced image
     s \$DC -p \"\$PROJECT\" ps"

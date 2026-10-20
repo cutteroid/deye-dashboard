@@ -160,7 +160,7 @@
         <!-- Air Raid Alerts Banner (visible in fullscreen only) -->
         <div class="alerts-banner" id="alerts-banner">
             <div class="alerts-header">
-                <span class="alerts-title">🚨 <span data-i18n="alerts.title">Air raid alerts</span></span>
+                <span class="alerts-title">🚨 <span data-i18n="alerts.title">Air raid alerts</span><span class="alerts-region-name" data-alerts-region-name hidden></span></span>
                 <span class="alerts-demo-badge" data-i18n="alerts.demo" hidden>Demo data</span>
             </div>
             <div class="alerts-map" data-alerts-map></div>
@@ -416,10 +416,10 @@
         </div>
 
         <!-- Air Raid Alerts -->
-        <div class="card" id="alerts-card" data-id="alerts-card">
+        <div class="card" id="alerts-card" data-id="alerts-card" data-alerts-card>
             <div class="card-header">
                 <span class="icon">🚨</span>
-                <h2 data-i18n="alerts.title">Air raid alerts</h2>
+                <h2><span data-i18n="alerts.title">Air raid alerts</span><span class="alerts-region-name" data-alerts-region-name hidden></span></h2>
                 <span class="alerts-demo-badge" data-i18n="alerts.demo" hidden>Demo data</span>
             </div>
             <div class="alerts-map" data-alerts-map></div>
@@ -491,6 +491,8 @@
                 <div class="step-circle" data-step="3">3</div>
                 <div class="step-line" data-line="3"></div>
                 <div class="step-circle" data-step="4">4</div>
+                <div class="step-line" data-line="4"></div>
+                <div class="step-circle" data-step="5">5</div>
             </div>
 
             <!-- Step 1: Inverter Connection -->
@@ -591,8 +593,29 @@
                 </div>
             </div>
 
-            <!-- Step 4: Optional Features -->
+            <!-- Step 4: Air raid alerts -->
             <div class="onboarding-step" id="onb-step-4">
+                <h2 data-i18n="onboarding.alerts_title">Air Raid Alerts</h2>
+                <p class="subtitle" data-i18n="onboarding.alerts_subtitle">Map with live alert statuses (data: NEPTUN).</p>
+
+                <div class="onboarding-toggle-row">
+                    <span data-i18n="onboarding.alerts_enabled">Show air raid alerts</span>
+                    <div class="onboarding-toggle on" id="onb-alerts-toggle" onclick="toggleOnb(this, 'onb-alerts-fields')">
+                        <div class="toggle-knob"></div>
+                    </div>
+                </div>
+                <div class="onboarding-conditional visible" id="onb-alerts-fields">
+                    <div class="onboarding-field">
+                        <label data-i18n="onboarding.alerts_region">Show on the map</label>
+                        <select class="onboarding-select" id="onb-alerts-region">
+                            <option value="" data-i18n="onboarding.alerts_whole_ukraine">Whole Ukraine</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 5: Optional Features -->
+            <div class="onboarding-step" id="onb-step-5">
                 <h2 data-i18n="onboarding.step4_title">Optional Features</h2>
                 <p class="subtitle" data-i18n="onboarding.step4_subtitle">Configure generator tracking and Telegram bot.</p>
 
@@ -745,7 +768,9 @@
             locales: {{ locales|tojson }},
             defaultLanguage: {{ default_language|tojson }},
             firstRun: {{ first_run|tojson }},
-            alertsMapUrl: {{ alerts_map_url|tojson }}
+            alertsMapUrl: {{ alerts_map_url|tojson }},
+            alertsRegion: {{ alerts_region|tojson }},
+            alertsRegionCodes: {{ alerts_region_codes|tojson }}
         };
     </script>
     <script src="{{ asset_url('js/dashboard.js') }}"></script>

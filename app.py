@@ -11,7 +11,7 @@ from telegram_bot import TelegramBot
 from outage_providers import OutageSchedulePoller, create_outage_provider
 from update_manager import get_current_version, UpdatePoller, UpdateManager
 from storage import atomic_write_json, load_json
-from air_alerts import AlertsPoller, create_alerts_provider
+from air_alerts import AlertsPoller, create_alerts_provider, REGION_CODES
 from smart_meter import create_smart_meter_from_env
 from datetime import datetime, date, timedelta
 from functools import wraps
@@ -849,9 +849,12 @@ def add_no_cache_headers(response):
 @app.route("/")
 def index():
     """Serve the dashboard page."""
+    region = os.environ.get("AIR_ALERTS_REGION", "").strip()
     return render_template("index.html", first_run=not _configured,
                            locales=LOCALES, default_language=DEFAULT_LANGUAGE,
-                           alerts_map_url=asset_version_url("data/ukraine-regions.json"))
+                           alerts_map_url=asset_version_url("data/ukraine-regions.json"),
+                           alerts_region=region if region in REGION_CODES else "",
+                           alerts_region_codes=list(REGION_CODES))
 
 
 @app.route("/api/data")

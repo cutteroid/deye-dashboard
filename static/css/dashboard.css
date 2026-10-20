@@ -1757,6 +1757,40 @@ body.fullscreen-mode #alerts-card {
     display: none;
 }
 
+/* Zoomed-in map (few regions): borders in screen pixels, not scaled up with the map */
+.alerts-map-zoomed .alerts-district,
+.alerts-map-zoomed .alerts-outline {
+    vector-effect: non-scaling-stroke;
+}
+
+.alerts-map-zoomed .alerts-district {
+    stroke-width: 0.8px;
+}
+
+.alerts-map-zoomed .alerts-outline {
+    stroke-width: 1.8px;
+}
+
+/* Zoomed map: neighbouring regions as context (dimmed), the chosen one outlined */
+.alerts-map-zoomed .alerts-district[data-context] {
+    opacity: 0.45;
+}
+
+body.fullscreen-mode .alerts-banner .alerts-map-zoomed svg {
+    border-radius: 10px;
+}
+
+.alerts-map-zoomed .alerts-outline-focus {
+    stroke: #cbd5e1;
+    stroke-width: 2.2px;
+}
+
+/* Some regions are taller than wide: cap the height so the card matches its neighbours */
+.alerts-map-zoomed svg {
+    max-height: 260px;
+    border-radius: 10px;   /* the zoomed view is cut out of the country map: soften its edges */
+}
+
 .alerts-header {
     display: flex;
     align-items: center;
@@ -1767,6 +1801,20 @@ body.fullscreen-mode #alerts-card {
 .alerts-title {
     font-size: 1.1rem;
     color: #94a3b8;
+}
+
+/* "· Kyiv oblast" after the title when the map shows one region */
+.alerts-region-name::before {
+    content: "\00A0\00B7\00A0";
+}
+
+.alerts-region-name {
+    color: #64748b;
+    font-weight: 400;
+}
+
+.alerts-region-name[hidden] {
+    display: none;
 }
 
 .alerts-demo-badge,

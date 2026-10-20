@@ -31,11 +31,13 @@ MANAGED_KEYS = [
     "INVERTER_HAS_GENERATOR", "GENERATOR_FUEL_RATE", "GENERATOR_OIL_CHANGE_DATE",
     "TELEGRAM_ENABLED", "TELEGRAM_BOT_TOKEN", "TELEGRAM_ALLOWED_USERS",
     "TELEGRAM_PUBLIC",
+    "AIR_ALERTS_PROVIDER", "AIR_ALERTS_REGION",
 ]
 
 MAX_LOGGER_SERIAL = 0xFFFFFFFF  # Solarman V5 packs the serial as an unsigned 32-bit int
 OUTAGE_PROVIDERS = ("lvivoblenergo", "yasno", "dtek", "none")
 INVERTER_PHASE_CHOICES = ("1", "3")
+AIR_ALERTS_PROVIDERS = ("neptun", "mock", "none")
 DTEK_REGIONS = ("kyiv-region", "kyiv", "dnipro", "odesa")
 _BOOL_VALUES = ("true", "false", "1", "0", "yes", "no")
 _HOSTNAME_RE = re.compile(
@@ -111,6 +113,9 @@ _VALIDATORS = {
     "TELEGRAM_BOT_TOKEN": _check_token,
     "TELEGRAM_ALLOWED_USERS": _check_regex(r"^[\d,\s]*$", "must be comma-separated numeric user IDs"),
     "TELEGRAM_PUBLIC": _check_choice(_BOOL_VALUES),
+    "AIR_ALERTS_PROVIDER": _check_choice(AIR_ALERTS_PROVIDERS),
+    # ISO 3166-2 region shown on the alerts map; empty = whole Ukraine
+    "AIR_ALERTS_REGION": _check_regex(r"^UA-\d{2}$", "must be a region code like UA-32"),
 }
 _REQUIRED_KEYS = ("INVERTER_IP", "LOGGER_SERIAL")
 
@@ -424,6 +429,14 @@ def write_env(values, extra_lines, path=".env"):
         lines.append(f"TELEGRAM_BOT_TOKEN={values.get('TELEGRAM_BOT_TOKEN', '')}")
         lines.append(f"TELEGRAM_ALLOWED_USERS={values.get('TELEGRAM_ALLOWED_USERS', '')}")
         lines.append(f"TELEGRAM_PUBLIC={values.get('TELEGRAM_PUBLIC', 'false')}")
+
+    # Air raid alerts (only what was set, so defaults stay defaults)
+    alerts_lines = [f"{key}={values[key]}" for key in ("AIR_ALERTS_PROVIDER", "AIR_ALERTS_REGION")
+                    if values.get(key)]
+    if alerts_lines:
+        lines.append("")
+        lines.append("# Air raid alerts")
+        lines.extend(alerts_lines)
 
     # Preserve unrecognized lines (e.g. DEPLOY_* from deploy.sh)
     if extra_lines:

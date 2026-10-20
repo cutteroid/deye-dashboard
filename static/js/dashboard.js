@@ -1518,11 +1518,27 @@ setInterval(fetchSmartMeter, SMART_METER_POLL_MS);
 // ===== AIR RAID ALERTS =====
 // Map of Ukraine's regions (static/data/ukraine-regions.json, ids are ISO 3166-2
 // codes) coloured by /api/alerts. Drawn into every [data-alerts-map]: the
-// dashboard card and the fullscreen banner.
+// dashboard cards and the fullscreen banner. data-alerts-regions="UA-30,UA-32"
+// limits a map to those regions and zooms to them.
 var ALERTS_POLL_MS = 30000;
 var alertsMapData = null;
 var alertsData = null;
 var alertsIntervalId = null;
+
+// Configured region (AIR_ALERTS_REGION): maps show it zoomed in; a region that
+// contains a city-region shows both (Kyiv oblast + Kyiv, Crimea + Sevastopol)
+var ALERTS_REGION_WITH = { 'UA-32': ['UA-30'], 'UA-43': ['UA-40'] };
+
+function applyAlertsRegion() {
+    var region = window.DASHBOARD_CONFIG.alertsRegion;
+    if (!region) return;
+    var regions = [region].concat(ALERTS_REGION_WITH[region] || []);
+    document.querySelectorAll('[data-alerts-map]').forEach(function(el) {
+        if (el.hasAttribute('data-alerts-regions')) return;
+        el.setAttribute('data-alerts-regions', regions.join(','));
+        el.classList.add('alerts-map-zoomed');
+    });
+}
 
 function loadAlertsMap() {
     fetch(window.DASHBOARD_CONFIG.alertsMapUrl)
@@ -1551,15 +1567,50 @@ function buildAlertsMaps() {
         alertsDistrictRegion[d.id] = d.region;
         alertsDistrictNames[d.id] = d.name || {};
     });
-    var svg = '<svg viewBox="' + alertsMapData.viewBox + '" role="img" preserveAspectRatio="xMidYMid meet">' +
+    document.querySelectorAll('[data-alerts-map]').forEach(function(el) {
+        var focus = (el.getAttribute('data-alerts-regions') || '').split(',').filter(Boolean);
+        el.innerHTML = alertsMapSvg(districts, regions, focus);
+    });
+}
+
+// The whole country; with focus regions, zoomed to them (neighbours stay visible
+// around the edges, slightly dimmed, so it reads as a zoomed-in map of Ukraine)
+function alertsMapSvg(districts, regions, focus) {
+    var inFocus = function(regionId) { return !focus.length || focus.indexOf(regionId) >= 0; };
+    var focusRegions = regions.filter(function(r) { return focus.indexOf(r.id) >= 0; });
+    var viewBox = focusRegions.length ? alertsFitViewBox(focusRegions) : alertsMapData.viewBox;
+    return '<svg viewBox="' + viewBox + '" role="img" preserveAspectRatio="xMidYMid meet">' +
         '<g class="alerts-districts">' + districts.map(function(d) {
             return '<path class="alerts-district status-unknown" data-district="' + escapeHtml(d.id) +
-                '" data-region="' + escapeHtml(d.region) + '" d="' + d.d + '"><title></title></path>';
+                '" data-region="' + escapeHtml(d.region) + '"' + (inFocus(d.region) ? '' : ' data-context') +
+                ' d="' + d.d + '"><title></title></path>';
         }).join('') + '</g>' +
         '<g class="alerts-outlines">' + regions.map(function(r) {
             return '<path class="alerts-outline" d="' + r.d + '"/>';
-        }).join('') + '</g></svg>';
-    document.querySelectorAll('[data-alerts-map]').forEach(function(el) { el.innerHTML = svg; });
+        }).join('') + '</g>' +
+        // Focus regions' outline on top, so their border is never hidden by a neighbour's
+        (focusRegions.length ? '<g class="alerts-outlines-focus">' + focusRegions.map(function(r) {
+            return '<path class="alerts-outline alerts-outline-focus" d="' + r.d + '"/>';
+        }).join('') + '</g>' : '') + '</svg>';
+}
+
+// Bounding box of the outlines (paths are absolute M/L/Z) with a margin that
+// brings in a strip of the neighbouring regions (15%). Computed from the data, so it
+// also works while the map is hidden.
+function alertsFitViewBox(regions) {
+    var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    regions.forEach(function(r) {
+        var nums = r.d.match(/-?\d+(\.\d+)?/g) || [];
+        for (var i = 0; i + 1 < nums.length; i += 2) {
+            var x = +nums[i], y = +nums[i + 1];
+            if (x < minX) minX = x; if (x > maxX) maxX = x;
+            if (y < minY) minY = y; if (y > maxY) maxY = y;
+        }
+    });
+    if (!isFinite(minX)) return alertsMapData.viewBox;
+    var pad = Math.max(maxX - minX, maxY - minY) * 0.15;
+    return [minX - pad, minY - pad, maxX - minX + 2 * pad, maxY - minY + 2 * pad]
+        .map(function(v) { return v.toFixed(1); }).join(' ');
 }
 
 // Colour of one district: its own status, or its region's when the region is
@@ -1602,8 +1653,9 @@ function renderAlerts() {
     var d = alertsData;
     var enabled = !(d && d.status === 'disabled');
     document.body.classList.toggle('alerts-enabled', enabled);
-    var card = document.getElementById('alerts-card');
-    if (card) card.style.display = enabled ? '' : 'none';
+    document.querySelectorAll('[data-alerts-card]').forEach(function(card) {
+        card.style.display = enabled ? '' : 'none';
+    });
     if (!enabled) {
         if (alertsIntervalId) { clearInterval(alertsIntervalId); alertsIntervalId = null; }
         return;
@@ -1631,11 +1683,18 @@ function renderAlerts() {
     else if (!ok) summary = t('alerts.unavailable');
     else summary = t('alerts.updated', { time: new Date(d.updated).toLocaleTimeString(i18nLocale(), { hour: '2-digit', minute: '2-digit' }) });
     document.querySelectorAll('[data-alerts-summary]').forEach(function(el) { el.textContent = summary; });
+    // Region shown on the map, next to the title
+    var region = window.DASHBOARD_CONFIG.alertsRegion;
+    document.querySelectorAll('[data-alerts-region-name]').forEach(function(el) {
+        el.hidden = !region;
+        el.textContent = region ? t('alerts.regions.' + region) : '';
+    });
     document.querySelectorAll('.alerts-demo-badge').forEach(function(el) { el.hidden = !(d && d.demo); });
     // NEPTUN data link + disclaimer (their terms of use), whenever real data is shown
     document.querySelectorAll('[data-alerts-credit]').forEach(function(el) { el.hidden = !(d && d.provider === 'NEPTUN'); });
 }
 
+applyAlertsRegion();
 loadAlertsMap();
 fetchAlerts();
 alertsIntervalId = setInterval(fetchAlerts, ALERTS_POLL_MS);
@@ -1882,6 +1941,7 @@ setInterval(fetchOtaStatus, 300000);
 
 // === Onboarding Wizard ===
 var onboardingStep = 1;
+var ONBOARDING_STEPS = 5;   // inverter, weather, outages, air raid alerts, optional features
 var onboardingEditMode = false;
 var selectedOutageProvider = 'lvivoblenergo';
 
@@ -1896,6 +1956,7 @@ function showOnboarding(editMode) {
     onboardingStep = 1;
     var overlay = document.getElementById('onboarding-overlay');
     overlay.classList.remove('hidden');
+    fillAlertsRegionOptions();
     updateOnboardingUI();
 
     if (editMode) {
@@ -1939,6 +2000,14 @@ function showOnboarding(editMode) {
                     var pubToggle = document.getElementById('onb-tg-public-toggle');
                     if (!pubToggle.classList.contains('on')) toggleOnb(pubToggle);
                 }
+
+                // Air raid alerts (no provider set = default NEPTUN, enabled)
+                onbAlertsProvider = (cfg.AIR_ALERTS_PROVIDER || 'neptun').toLowerCase();
+                var alertsToggle = document.getElementById('onb-alerts-toggle');
+                if (alertsToggle.classList.contains('on') !== (onbAlertsProvider !== 'none')) {
+                    toggleOnb(alertsToggle, 'onb-alerts-fields');
+                }
+                document.getElementById('onb-alerts-region').value = cfg.AIR_ALERTS_REGION || '';
             })
             .catch(function() {});
     }
@@ -1964,7 +2033,7 @@ function updateOnboardingUI() {
     });
 
     // Show/hide steps
-    for (var i = 1; i <= 4; i++) {
+    for (var i = 1; i <= ONBOARDING_STEPS; i++) {
         var stepEl = document.getElementById('onb-step-' + i);
         stepEl.classList.toggle('active', i === onboardingStep);
     }
@@ -1972,13 +2041,13 @@ function updateOnboardingUI() {
     // Back button visibility
     document.getElementById('onb-back-btn').style.visibility = onboardingStep > 1 ? 'visible' : 'hidden';
 
-    // Skip button (steps 2, 3)
+    // Skip button (steps 2-4)
     var skipBtn = document.getElementById('onb-skip-btn');
-    skipBtn.style.display = (onboardingStep === 2 || onboardingStep === 3) ? '' : 'none';
+    skipBtn.style.display = (onboardingStep >= 2 && onboardingStep <= 4) ? '' : 'none';
 
     // Next/Finish button text
     var nextBtn = document.getElementById('onb-next-btn');
-    if (onboardingStep === 4) {
+    if (onboardingStep === ONBOARDING_STEPS) {
         setI18nText(nextBtn, onboardingEditMode ? 'onboarding.save_restart' : 'onboarding.finish_start');
     } else {
         setI18nText(nextBtn, 'onboarding.next');
@@ -1987,14 +2056,14 @@ function updateOnboardingUI() {
 
 function onboardingGoTo(step) {
     if (step < 1) step = 1;
-    if (step > 4) step = 4;
+    if (step > ONBOARDING_STEPS) step = ONBOARDING_STEPS;
     onboardingStep = step;
     updateOnboardingUI();
     if (step === 2) useMyLocation();
 }
 
 function onboardingNext() {
-    if (onboardingStep < 4) {
+    if (onboardingStep < ONBOARDING_STEPS) {
         if (onboardingStep === 1 && !validateStep1()) return;
         onboardingGoTo(onboardingStep + 1);
     } else {
@@ -2112,6 +2181,25 @@ function selectOutageProviderByValue(value) {
     document.getElementById('onb-outage-dtek-fields').classList.toggle('visible', value === 'dtek');
 }
 
+// Region list for the alerts step: "Whole Ukraine" first, then regions by translated name
+var onbAlertsProvider = 'neptun';
+
+function fillAlertsRegionOptions() {
+    var select = document.getElementById('onb-alerts-region');
+    var current = select.value;
+    while (select.options.length > 1) select.remove(1);
+    (window.DASHBOARD_CONFIG.alertsRegionCodes || [])
+        .map(function(code) { return { code: code, name: t('alerts.regions.' + code) }; })
+        .sort(function(a, b) { return a.name.localeCompare(b.name, i18nLocale()); })
+        .forEach(function(r) {
+            var option = document.createElement('option');
+            option.value = r.code;
+            option.textContent = r.name;
+            select.appendChild(option);
+        });
+    select.value = current;
+}
+
 function toggleOnb(el, fieldsId) {
     el.classList.toggle('on');
     if (fieldsId) {
@@ -2144,7 +2232,7 @@ function saveConfig() {
         config.OUTAGE_GROUP = document.getElementById('onb-dtek-group').value.trim() || '1.1';
     }
 
-    // Step 4 — Generator
+    // Step 5 — Generator
     var genOn = document.getElementById('onb-gen-toggle').classList.contains('on');
     config.INVERTER_HAS_GENERATOR = genOn ? 'true' : 'false';
     if (genOn) {
@@ -2154,7 +2242,7 @@ function saveConfig() {
         if (oil) config.GENERATOR_OIL_CHANGE_DATE = oil;
     }
 
-    // Step 4 — Telegram
+    // Step 5 — Telegram
     var tgOn = document.getElementById('onb-tg-toggle').classList.contains('on');
     config.TELEGRAM_ENABLED = tgOn ? 'true' : 'false';
     if (tgOn) {
@@ -2162,6 +2250,11 @@ function saveConfig() {
         config.TELEGRAM_ALLOWED_USERS = document.getElementById('onb-tg-users').value.trim();
         config.TELEGRAM_PUBLIC = document.getElementById('onb-tg-public-toggle').classList.contains('on') ? 'true' : 'false';
     }
+
+    // Step 4 — Air raid alerts (keeps a non-default provider such as "mock" when on)
+    var alertsOn = document.getElementById('onb-alerts-toggle').classList.contains('on');
+    config.AIR_ALERTS_PROVIDER = alertsOn ? (onbAlertsProvider !== 'none' ? onbAlertsProvider : 'neptun') : 'none';
+    config.AIR_ALERTS_REGION = document.getElementById('onb-alerts-region').value;
 
     // Validate step 1
     if (!config.INVERTER_IP || !config.LOGGER_SERIAL) {
