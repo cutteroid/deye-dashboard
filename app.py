@@ -22,6 +22,7 @@ import logging
 import subprocess
 import threading
 import time
+import uuid
 import requests
 
 WEATHER_LATITUDE = os.environ.get("WEATHER_LATITUDE", "0.0")
@@ -483,6 +484,10 @@ smart_meter = None
 
 _configured = is_configured()
 
+# New on every start: after saving the settings, the page waits for a new value
+# before reloading, so it doesn't reload from the process that is about to exit
+BOOT_ID = uuid.uuid4().hex[:12]
+
 # Settings PIN: basic protection for the settings panel and the endpoints behind it.
 DEFAULT_SETTINGS_PIN = "0000"
 PIN_MAX_ATTEMPTS = 5
@@ -578,9 +583,12 @@ def init_services():
         smart_meter_client.start()
         logger.info("Smart meter: %s", smart_meter_client.description)
 
-    # Air raid alerts from NEPTUN (no key needed); "mock" for demo data, "none" to hide
-    alerts_provider = create_alerts_provider(os.environ.get("AIR_ALERTS_PROVIDER"))
+    # Air raid alerts: alerts.in.ua with a token, else NEPTUN (no key needed);
+    # "mock" for demo data, "none" to hide
+    alerts_provider = create_alerts_provider(os.environ.get("AIR_ALERTS_PROVIDER"),
+                                             os.environ.get("ALERTS_IN_UA_TOKEN"))
     if alerts_provider is not None:
+        logger.info("Air raid alerts: %s", alerts_provider.display_name)
         alerts_poller = AlertsPoller(alerts_provider)
         alerts_poller.start()
     else:
@@ -1079,20 +1087,30 @@ def verify_settings_pin():
 
 @app.route("/api/config/status")
 def config_status():
-    """Return whether the dashboard is configured."""
-    return jsonify({"configured": _configured, "first_run": not _configured})
+    """Return whether the dashboard is configured (and which start of the server answers)."""
+    return jsonify({"configured": _configured, "first_run": not _configured, "boot": BOOT_ID})
+
+
+# Secrets in .env: the config editor only gets them masked, and a masked value
+# sent back means "keep the saved one"
+SECRET_CONFIG_KEYS = ("TELEGRAM_BOT_TOKEN", "ALERTS_IN_UA_TOKEN")
+SECRET_MASK = "****"
+
+
+def mask_secret(value):
+    """"abcd****wxyz" (enough to recognise it); short values entirely hidden."""
+    return value[:4] + SECRET_MASK + value[-4:] if len(value) > 12 else SECRET_MASK
 
 
 @app.route("/api/config", methods=["GET"])
 @require_settings_pin
 def get_config():
-    """Return current configuration values from .env."""
-    from setup import load_existing_env, MANAGED_KEYS
+    """Return current configuration values from .env (secrets masked)."""
+    from setup import load_existing_env
     values, _ = load_existing_env()
-    # Mask the Telegram bot token
-    token = values.get("TELEGRAM_BOT_TOKEN", "")
-    if token and len(token) > 8:
-        values["TELEGRAM_BOT_TOKEN"] = token[:4] + "****" + token[-4:]
+    for key in SECRET_CONFIG_KEYS:
+        if values.get(key):
+            values[key] = mask_secret(values[key])
     return jsonify(values)
 
 
@@ -1133,10 +1151,13 @@ def save_config():
     # Load existing env to preserve extra lines
     existing, extra_lines = load_existing_env()
 
-    # If the token is masked, keep the existing one
-    new_token = new_values.get("TELEGRAM_BOT_TOKEN", "")
-    if "****" in new_token and "TELEGRAM_BOT_TOKEN" in existing:
-        new_values["TELEGRAM_BOT_TOKEN"] = existing["TELEGRAM_BOT_TOKEN"]
+    # A masked secret is the saved one echoed back: keep it (never save the mask)
+    for key in SECRET_CONFIG_KEYS:
+        if SECRET_MASK in new_values.get(key, ""):
+            if key in existing:
+                new_values[key] = existing[key]
+            else:
+                del new_values[key]
 
     # Merge — new values override existing
     existing.update(new_values)
@@ -1147,10 +1168,12 @@ def save_config():
     if problem:
         return jsonify({"status": "error", "error": f"Invalid configuration — {problem}"}), 400
     write_env(existing, extra_lines)
+    # Names only, never values (tokens, passwords)
+    logger.info("Configuration saved from the settings (%s); restarting", ", ".join(sorted(new_values)))
 
     # Schedule a service restart after 2 seconds
     schedule_restart()
-    return jsonify({"status": "ok", "restarting": True})
+    return jsonify({"status": "ok", "restarting": True, "boot": BOOT_ID})
 
 
 @app.route("/api/config/reset", methods=["POST"])

@@ -6,14 +6,20 @@ Boundaries" (State Scientific Production Enterprise "Kartographia"), licensed
 CC BY-IGO: https://data.humdata.org/dataset/cod-ab-ukr
 Download "ukr_admin_boundaries.geojson.zip" and unzip it.
 
+alerts.in.ua location ids (UIDs) are matched by oblast + raion name from their
+public location list (https://devs.alerts.in.ua/ links the Google Sheet), exported
+as CSV:
+https://docs.google.com/spreadsheets/d/1XnTOzcPHd1LZUrarR1Fk43FUyl8Ae6a6M7pcwDRjNdA/export?format=csv
+
 Usage:
-    python tools/build_ukraine_map.py path/to/unzipped/ocha/folder
+    python tools/build_ukraine_map.py path/to/unzipped/ocha/folder alerts_locations.csv
 
 Output:
     regions:   27 oblasts + Kyiv + Sevastopol + Crimea, id = ISO 3166-2 code (UA-05 ...)
     districts: raions (post-2020 reform), id = OCHA pcode (UA0502 ...), with the
-               ISO code of their region and Ukrainian/English names (alert
-               providers match their data to districts by the Ukrainian name)
+               ISO code of their region and Ukrainian/English names
+    Both carry their alerts.in.ua UID ("alerts_uid"); NEPTUN data is matched to
+    districts by the Ukrainian name instead.
 Region display names live in locales/*.json (alerts.regions.*).
 """
 import json
@@ -30,6 +36,36 @@ MIN_RING_AREA = 2.0   # drop islands smaller than this (output units^2)
 
 # OCHA oblast pcodes that differ from ISO 3166-2; the rest map UAnn -> UA-nn
 PCODE_TO_ISO = {"UA01": "UA-43", "UA44": "UA-09", "UA73": "UA-77", "UA80": "UA-30", "UA85": "UA-40"}
+
+
+def load_alerts_uids(csv_path, region_names_uk, district_regions):
+    """alerts.in.ua UIDs: ({region_iso: uid}, {(region_iso, raion_name): uid}).
+
+    The sheet is roughly hierarchical (oblast row, then its raions and hromadas),
+    but not strictly: e.g. Crimea's row sits between Volyn and Volyn's raions. So a
+    raion is matched by name against the OCHA districts (district_regions:
+    {raion_name: [region_iso, ...]}); the sheet position only breaks ties.
+    """
+    import csv
+    name_to_iso = {name: code for code, name in region_names_uk.items()}
+    region_uids, raion_uids = {}, {}
+    current = None
+    with open(csv_path, encoding="utf-8") as f:
+        for row in csv.reader(f):
+            if len(row) < 3 or not row[0].strip().isdigit():
+                continue
+            uid, name, kind = row[0].strip(), row[1].strip(), row[2].strip()
+            if kind in ("Область", "Місто з спеціальним статусом"):
+                current = name_to_iso.get(name)
+                if current is None:
+                    sys.exit(f"Unknown oblast in alerts list: {name!r}")
+                region_uids[current] = int(uid)
+            elif kind == "Район":
+                raion = name.removesuffix(" район")
+                candidates = district_regions.get(raion, [])
+                region = candidates[0] if len(candidates) == 1 else current
+                raion_uids[(region, raion)] = int(uid)
+    return region_uids, raion_uids
 
 
 def region_iso(pcode):
@@ -103,9 +139,16 @@ def to_path(polygons, transform, tol):
     return "".join(parts)
 
 
-def main(folder):
+def main(folder, alerts_csv):
     admin1 = load(folder, 1)
     admin2 = load(folder, 2)
+    with open("locales/uk.json", encoding="utf-8") as f:
+        region_names_uk = json.load(f)["alerts"]["regions"]
+    district_regions = {}
+    for f in admin2:
+        district_regions.setdefault(f["properties"]["adm2_name1"], []).append(
+            region_iso(f["properties"]["adm1_pcode"]))
+    region_uids, raion_uids = load_alerts_uids(alerts_csv, region_names_uk, district_regions)
 
     region_polys = {region_iso(f["properties"]["adm1_pcode"]): polygons_of(f) for f in admin1}
     all_pts = [p for polys in region_polys.values() for poly in polys for ring in poly for p in ring]
@@ -117,7 +160,8 @@ def main(folder):
     def transform(p):
         return (p[0] - min_x) * scale, (p[1] - min_y) * scale
 
-    regions = [{"id": code, "d": to_path(region_polys[code], transform, REGION_TOLERANCE)}
+    regions = [{"id": code, "alerts_uid": region_uids.get(code),
+                "d": to_path(region_polys[code], transform, REGION_TOLERANCE)}
                for code in sorted(region_polys)]
     districts = []
     for f in sorted(admin2, key=lambda f: f["properties"]["adm2_pcode"]):
@@ -126,6 +170,9 @@ def main(folder):
         districts.append({
             "id": p["adm2_pcode"],
             "region": region,
+            # Kyiv/Sevastopol are a single "district" = the city itself
+            "alerts_uid": raion_uids.get((region, p["adm2_name1"])) or
+                          (region_uids.get(region) if p["adm2_pcode"] in ("UA8000", "UA8500") else None),
             "name": {"uk": p["adm2_name1"], "en": p["adm2_name"]},
             "d": to_path(polygons_of(f), transform, DISTRICT_TOLERANCE),
         })
@@ -143,9 +190,17 @@ def main(folder):
     size = os.path.getsize(OUTPUT)
     print(f"Wrote {OUTPUT}: {len(regions)} regions, {len(districts)} districts, "
           f"viewBox 0 0 {WIDTH} {height}, {size / 1024:.1f} KB")
+    missing_regions = [r["id"] for r in regions if r["alerts_uid"] is None]
+    unmatched = [f"{d['id']} {d['name']['uk']} ({d['region']})" for d in districts
+                 if d["alerts_uid"] is None and d["region"] != "UA-43"]
+    used = {d["alerts_uid"] for d in districts}
+    unused = [f"{name} ({region})" for (region, name), uid in raion_uids.items() if uid not in used]
+    print(f"  alerts.in.ua UIDs: regions without uid: {missing_regions or 'none'}")
+    print(f"  districts without uid (outside Crimea): {unmatched or 'none'}")
+    print(f"  alerts.in.ua raions not matched: {unused or 'none'}")
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
+    if len(sys.argv) != 3:
         sys.exit(__doc__)
-    main(sys.argv[1])
+    main(sys.argv[1], sys.argv[2])

@@ -3,7 +3,7 @@
 What this fork adds to the original [ivanursul/deye-dashboard](https://github.com/ivanursul/deye-dashboard):
 
 **New cards and features**
-- **Air raid alerts map:** Ukraine with oblasts and raions, live from [NEPTUN](https://neptun.in.ua/) (refreshed every 30 s), on a card and on the fullscreen first page. You can show the whole country or zoom to one region, with neighbouring regions dimmed around it (Settings → step 4).
+- **Air raid alerts map:** Ukraine with oblasts and raions, live from [alerts.in.ua](https://alerts.in.ua/) (with a free API token) or [NEPTUN](https://neptun.in.ua/) (no key needed), refreshed every 30 s,, on a card and on the fullscreen first page. You can show the whole country or zoom to one region, with neighbouring regions dimmed around it (Settings → step 4).
 - **Planned outages:** today's and tomorrow's outage windows on a timeline, plus a countdown in the grid banner. Adds a DTEK provider (Kyiv oblast, Kyiv, Dnipro, Odesa). A failed schedule fetch is no longer reported as "No outages today".
 - **Bakler smart meter** (optional): live power, voltage and current per phase over MQTT, with a Mosquitto broker in `docker-compose.yml`. Phases cut by the meter or without supply are highlighted. The relay state is shown read-only. A demo mode is included.
 - **Battery estimates:**
@@ -135,7 +135,7 @@ Raspberry Pi зчитує дані з вашого інвертора кожні
 - **Load analytics** — per-phase power distribution with daily statistics (3-phase systems)
 - **Weather** — current conditions and forecast via Open-Meteo API
 - **Planned outages** — today's and tomorrow's outage windows on a timeline, plus a countdown in the grid banner (Lvivoblenergo, Yasno, or DTEK providers)
-- **Air raid alerts** — map of Ukraine's regions and districts with live alert statuses (NEPTUN)
+- **Air raid alerts** — map of Ukraine's regions and districts with live alert statuses (alerts.in.ua or NEPTUN)
 - **Smart meter** — power, voltage, current and energy from a Bakler Wi-Fi electricity meter over MQTT (optional)
 - **Grid outage detection** — browser notifications when power goes out
 - **Telegram bot** — battery reports, inverter status, and Ukrainian weather poems
@@ -330,16 +330,20 @@ This is basic protection for a kiosk display, not real authentication: the PIN i
 
 The **Air raid alerts** card shows a map of Ukraine's regions and districts (raions) coloured by status: red — air raid alert, yellow — threat (yellow level, e.g. drones). Alerts can cover a whole region or single districts. In fullscreen mode the map sits next to Planned outages on the first screen.
 
-Data comes from [NEPTUN](https://neptun.in.ua/) ([developer docs](https://neptun.in.ua/developers)): free REST API, no key needed. The server requests `GET https://neptun.in.ua/api/v1/alerts` every 30 seconds (their terms allow at most one request per 5 seconds) with `If-None-Match`, so unchanged data isn't re-downloaded. As required by NEPTUN's [terms of use](https://neptun.in.ua/api-terms), the card shows a visible "Source: NEPTUN" link and a note that it is not an official alert system.
+Two data sources; the server polls the chosen one every 30 seconds and the card shows a "Source: …" link and a note that it is not an official alert system:
+
+- **[alerts.in.ua](https://alerts.in.ua/)** ([API docs](https://devs.alerts.in.ua/)), recommended. Needs a personal API token (request it on the API docs page). One request returns the status of every oblast, raion and hromada by its stable location ID, so matching never depends on names; a raion with alerts in only some of its hromadas shows as partial. The token stays on the server: it is sent in a request header, never in URLs, logs or the page, and the configuration editor only shows it masked. The API answers only requests from Ukraine, allows 8–10 requests per minute (the dashboard makes 2) and supports `If-Modified-Since`.
+- **[NEPTUN](https://neptun.in.ua/)** ([developer docs](https://neptun.in.ua/developers)): free, no key needed. The server requests `GET https://neptun.in.ua/api/v1/alerts` (their terms allow at most one request per 5 seconds) with `If-None-Match`. NEPTUN reports oblasts and raions by name, matched to the map by Ukrainian name. Its [terms of use](https://neptun.in.ua/api-terms) require the visible source link and the "not an official alert system" note.
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `AIR_ALERTS_PROVIDER` | `neptun`, `mock` (demo data, marked "Demo data") or `none` to hide the card | `neptun` |
+| `AIR_ALERTS_PROVIDER` | `alerts_in_ua`, `neptun`, `mock` (demo data, marked "Demo data") or `none` to hide the card | `alerts_in_ua` with a token, else `neptun` |
+| `ALERTS_IN_UA_TOKEN` | alerts.in.ua API token (kept on the server) | — |
 | `AIR_ALERTS_REGION` | Zoom the map to one region, with the neighbouring regions dimmed around it (ISO 3166-2 code, e.g. `UA-32` Kyiv oblast — includes Kyiv city; `UA-43` Crimea includes Sevastopol) | whole Ukraine |
 
-Both are also in Settings → Edit configuration, step 4 ("Air raid alerts": on/off and which region the map shows).
+All three are also in Settings → Edit configuration, step 4 ("Air raid alerts": on/off, data source with its token, and which region the map shows).
 
-**Map data:** `static/data/ukraine-regions.json` is generated by `tools/build_ukraine_map.py` from the OCHA Common Operational Dataset *Ukraine – Subnational Administrative Boundaries* (State Scientific Production Enterprise "Kartographia"), licensed [CC BY-IGO](https://creativecommons.org/licenses/by/3.0/igo/), source: [data.humdata.org/dataset/cod-ab-ukr](https://data.humdata.org/dataset/cod-ab-ukr). NEPTUN alerts are matched to it by Ukrainian region/district name (with aliases for raions NEPTUN still lists under their pre-2024 names).
+**Map data:** `static/data/ukraine-regions.json` is generated by `tools/build_ukraine_map.py` from the OCHA Common Operational Dataset *Ukraine – Subnational Administrative Boundaries* (State Scientific Production Enterprise "Kartographia"), licensed [CC BY-IGO](https://creativecommons.org/licenses/by/3.0/igo/), source: [data.humdata.org/dataset/cod-ab-ukr](https://data.humdata.org/dataset/cod-ab-ukr). The script also stores each region's and district's alerts.in.ua location ID, from their public location list (its CSV export is the script's second argument). NEPTUN alerts are matched by Ukrainian region/district name instead (with aliases for raions NEPTUN still lists under their pre-2024 names).
 
 ### Smart Meter (optional)
 

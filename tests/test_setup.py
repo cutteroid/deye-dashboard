@@ -140,6 +140,24 @@ class TestAirAlertsSettings:
         errors = validate_config({"AIR_ALERTS_PROVIDER": "acme", "AIR_ALERTS_REGION": "Kyiv"})
         assert set(errors) == {"AIR_ALERTS_PROVIDER", "AIR_ALERTS_REGION"}
 
+    def test_alerts_in_ua_token(self):
+        from setup import validate_config
+        assert validate_config({"AIR_ALERTS_PROVIDER": "alerts_in_ua",
+                                "ALERTS_IN_UA_TOKEN": "a1b2c3d4e5f6a7b8c9d0e1f2"}) == {}
+        assert validate_config({"ALERTS_IN_UA_TOKEN": "a1b2****e1f2"}) == {}   # masked: keep saved
+        assert validate_config({"ALERTS_IN_UA_TOKEN": ""}) == {}               # optional
+        for bad in ("short", "has space in it", "quote\"d-token-1234", "hash#token-12345"):
+            assert "ALERTS_IN_UA_TOKEN" in validate_config({"ALERTS_IN_UA_TOKEN": bad}), bad
+
+    def test_token_written_with_alerts_settings(self, tmp_path):
+        from setup import load_existing_env, write_env
+        path = tmp_path / ".env"
+        base = {"INVERTER_IP": "1.2.3.4", "LOGGER_SERIAL": "1"}
+        write_env({**base, "AIR_ALERTS_PROVIDER": "alerts_in_ua",
+                   "ALERTS_IN_UA_TOKEN": "a1b2c3d4e5f6a7b8c9d0e1f2"}, [], str(path))
+        values, extra = load_existing_env(str(path))
+        assert values["ALERTS_IN_UA_TOKEN"] == "a1b2c3d4e5f6a7b8c9d0e1f2" and extra == []
+
     def test_written_only_when_set(self, tmp_path):
         from setup import write_env
         path = tmp_path / ".env"

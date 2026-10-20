@@ -31,7 +31,7 @@ MANAGED_KEYS = [
     "INVERTER_HAS_GENERATOR", "GENERATOR_FUEL_RATE", "GENERATOR_OIL_CHANGE_DATE",
     "TELEGRAM_ENABLED", "TELEGRAM_BOT_TOKEN", "TELEGRAM_ALLOWED_USERS",
     "TELEGRAM_PUBLIC",
-    "AIR_ALERTS_PROVIDER", "AIR_ALERTS_REGION",
+    "AIR_ALERTS_PROVIDER", "AIR_ALERTS_REGION", "ALERTS_IN_UA_TOKEN",
 ]
 
 MAX_LOGGER_SERIAL = 0xFFFFFFFF  # Solarman V5 packs the serial as an unsigned 32-bit int
@@ -40,7 +40,7 @@ MAX_LOGGER_SERIAL = 0xFFFFFFFF  # Solarman V5 packs the serial as an unsigned 32
 INVERTER_TYPES = ("deye",)
 OUTAGE_PROVIDERS = ("lvivoblenergo", "yasno", "dtek", "none")
 INVERTER_PHASE_CHOICES = ("1", "3")
-AIR_ALERTS_PROVIDERS = ("neptun", "mock", "none")
+AIR_ALERTS_PROVIDERS = ("alerts_in_ua", "neptun", "mock", "none")
 DTEK_REGIONS = ("kyiv-region", "kyiv", "dnipro", "odesa")
 _BOOL_VALUES = ("true", "false", "1", "0", "yes", "no")
 _HOSTNAME_RE = re.compile(
@@ -91,6 +91,14 @@ def _check_date(v):
         return "must be a date in YYYY-MM-DD format"
 
 
+def _check_api_token(v):
+    """alerts.in.ua token: one word of URL-safe characters (no spaces, quotes or #,
+    which would break the .env line)."""
+    if "****" in v:  # masked value echoed back by the config editor: keep existing
+        return None
+    return None if re.match(r"^[A-Za-z0-9._~:+/=-]{10,256}$", v) else "must be the token from alerts.in.ua"
+
+
 def _check_token(v):
     if "****" in v:  # masked value echoed back by the config editor: keep existing
         return None
@@ -120,6 +128,7 @@ _VALIDATORS = {
     "AIR_ALERTS_PROVIDER": _check_choice(AIR_ALERTS_PROVIDERS),
     # ISO 3166-2 region shown on the alerts map; empty = whole Ukraine
     "AIR_ALERTS_REGION": _check_regex(r"^UA-\d{2}$", "must be a region code like UA-32"),
+    "ALERTS_IN_UA_TOKEN": _check_api_token,
 }
 _REQUIRED_KEYS = ("INVERTER_IP", "LOGGER_SERIAL")
 
@@ -439,7 +448,8 @@ def write_env(values, extra_lines, path=".env"):
         lines.append(f"TELEGRAM_PUBLIC={values.get('TELEGRAM_PUBLIC', 'false')}")
 
     # Air raid alerts (only what was set, so defaults stay defaults)
-    alerts_lines = [f"{key}={values[key]}" for key in ("AIR_ALERTS_PROVIDER", "AIR_ALERTS_REGION")
+    alerts_lines = [f"{key}={values[key]}"
+                    for key in ("AIR_ALERTS_PROVIDER", "AIR_ALERTS_REGION", "ALERTS_IN_UA_TOKEN")
                     if values.get(key)]
     if alerts_lines:
         lines.append("")

@@ -165,10 +165,10 @@
                     <span class="alerts-legend-item"><span class="alerts-swatch status-threat"></span><span data-i18n="alerts.legend_threat">Threat</span></span>
                 </span>
             </div>
-            <!-- Required by NEPTUN's terms of use: data link + "not an official alert system" -->
+            <!-- Data source link + "not an official alert system" (required by NEPTUN's terms of use) -->
             <div class="alerts-credit" data-alerts-credit hidden>
                 <span data-i18n="alerts.source_label">Source:</span>
-                <a href="https://neptun.in.ua/" target="_blank" rel="noopener">NEPTUN</a> ·
+                <a href="https://neptun.in.ua/" target="_blank" rel="noopener" data-alerts-source="NEPTUN">NEPTUN</a><a href="https://alerts.in.ua/" target="_blank" rel="noopener" data-alerts-source="alerts.in.ua">alerts.in.ua</a> ·
                 <span data-i18n="alerts.disclaimer">not an official alert system</span>
             </div>
         </div>
@@ -437,10 +437,10 @@
                     <span class="alerts-legend-item"><span class="alerts-swatch status-threat"></span><span data-i18n="alerts.legend_threat">Threat</span></span>
                 </span>
             </div>
-            <!-- Required by NEPTUN's terms of use: data link + "not an official alert system" -->
+            <!-- Data source link + "not an official alert system" (required by NEPTUN's terms of use) -->
             <div class="alerts-credit" data-alerts-credit hidden>
                 <span data-i18n="alerts.source_label">Source:</span>
-                <a href="https://neptun.in.ua/" target="_blank" rel="noopener">NEPTUN</a> ·
+                <a href="https://neptun.in.ua/" target="_blank" rel="noopener" data-alerts-source="NEPTUN">NEPTUN</a><a href="https://alerts.in.ua/" target="_blank" rel="noopener" data-alerts-source="alerts.in.ua">alerts.in.ua</a> ·
                 <span data-i18n="alerts.disclaimer">not an official alert system</span>
             </div>
         </div>
@@ -609,7 +609,7 @@
             <!-- Step 4: Air raid alerts -->
             <div class="onboarding-step" id="onb-step-4">
                 <h2 data-i18n="onboarding.alerts_title">Air Raid Alerts</h2>
-                <p class="subtitle" data-i18n="onboarding.alerts_subtitle">Map with live alert statuses (data: NEPTUN).</p>
+                <p class="subtitle" data-i18n="onboarding.alerts_subtitle">Map with live alert statuses.</p>
 
                 <div class="onboarding-toggle-row">
                     <span data-i18n="onboarding.alerts_enabled">Show air raid alerts</span>
@@ -618,6 +618,19 @@
                     </div>
                 </div>
                 <div class="onboarding-conditional visible" id="onb-alerts-fields">
+                    <div class="onboarding-field">
+                        <label for="onb-alerts-provider" data-i18n="onboarding.alerts_provider">Data source</label>
+                        <select class="onboarding-select" id="onb-alerts-provider" onchange="updateAlertsProviderFields()">
+                            <option value="neptun" data-i18n="onboarding.alerts_provider_neptun">NEPTUN (no key needed)</option>
+                            <option value="alerts_in_ua" data-i18n="onboarding.alerts_provider_alerts_in_ua">alerts.in.ua (needs a token)</option>
+                            <option value="mock" data-i18n="onboarding.alerts_provider_mock">Demo data</option>
+                        </select>
+                    </div>
+                    <div class="onboarding-field" id="onb-alerts-token-field" hidden>
+                        <label for="onb-alerts-token" data-i18n="onboarding.alerts_token">alerts.in.ua token</label>
+                        <input type="text" class="onboarding-input" id="onb-alerts-token" autocomplete="off" spellcheck="false">
+                        <div class="settings-hint" data-i18n="onboarding.alerts_token_hint">Request one at devs.alerts.in.ua. It stays on the server.</div>
+                    </div>
                     <div class="onboarding-field">
                         <label data-i18n="onboarding.alerts_region">Show on the map</label>
                         <select class="onboarding-select" id="onb-alerts-region">

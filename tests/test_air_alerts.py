@@ -7,8 +7,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from air_alerts import (
-    DISTRICTS, REGION_CODES, STATUS_MAX_AGE, AlertsFetchError, AlertsPoller, AlertsProvider,
-    MockAlertsProvider, NeptunProvider, create_alerts_provider, normalize_name,
+    DISTRICT_PART_OF, DISTRICTS, REGION_CODES, REGION_UIDS, STATUS_MAX_AGE, AlertsFetchError,
+    AlertsInUaProvider, AlertsPoller, AlertsProvider, MockAlertsProvider, NeptunProvider,
+    create_alerts_provider, normalize_name,
 )
 
 MAP_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "data", "ukraine-regions.json")
@@ -65,12 +66,32 @@ def test_map_data():
     assert all(d["name"]["uk"] and d["name"]["en"] for d in data["districts"])
 
 
+def test_map_has_alerts_in_ua_uids():
+    """Every region and district has its alerts.in.ua UID, except Crimea's raions (the
+    source reports Crimea as a whole) and areas that take a raion's status."""
+    assert all(isinstance(uid, int) and uid > 0 for uid in REGION_UIDS.values())
+    missing = [code for code, d in DISTRICTS.items()
+               if d["alerts_uid"] is None and d["region"] != "UA-43" and code not in DISTRICT_PART_OF]
+    assert missing == []
+    uids = [d["alerts_uid"] for d in DISTRICTS.values() if d["alerts_uid"] is not None]
+    assert len(uids) == len(set(uids))                  # no two districts share a UID
+    assert REGION_UIDS["UA-30"] == 31                   # Kyiv (documented UID)
+
+
 def test_factory():
-    assert isinstance(create_alerts_provider(None), NeptunProvider)  # default
+    assert isinstance(create_alerts_provider(None), NeptunProvider)  # default without a token
     assert isinstance(create_alerts_provider("neptun"), NeptunProvider)
     assert isinstance(create_alerts_provider("mock"), MockAlertsProvider)
     assert create_alerts_provider("none") is None
     assert create_alerts_provider("acme") is None  # unknown: disabled, not a crash
+
+
+def test_factory_with_token():
+    provider = create_alerts_provider(None, " secret ")       # a token selects alerts.in.ua
+    assert isinstance(provider, AlertsInUaProvider) and provider.token == "secret"
+    assert isinstance(create_alerts_provider("alerts_in_ua", "t"), AlertsInUaProvider)
+    assert isinstance(create_alerts_provider("neptun", "t"), NeptunProvider)   # explicit choice wins
+    assert create_alerts_provider("none", "t") is None
 
 
 def test_normalize_name():
@@ -213,6 +234,100 @@ class TestNeptunProvider:
                 provider.fetch()
 
 
+class TestAlertsInUaProvider:
+    @staticmethod
+    def _status_string(chars):
+        """Status string as the API sends it: 'N' everywhere except {uid: char}."""
+        size = max(max(REGION_UIDS.values()), max(d["alerts_uid"] or 0 for d in DISTRICTS.values())) + 1
+        s = ["N"] * size
+        s[0] = s[1] = s[2] = " "        # unused UIDs
+        for uid, ch in chars.items():
+            s[uid] = ch
+        return "".join(s)
+
+    @staticmethod
+    def _response(status_code=200, body=None, headers=None, text=None):
+        resp = MagicMock(status_code=status_code, ok=status_code < 400, headers=headers or {})
+        if text is None:
+            resp.json.return_value = body
+        else:
+            resp.json.side_effect = ValueError("not JSON")
+            resp.text = text
+        return resp
+
+    def test_parses_levels(self):
+        provider = AlertsInUaProvider("secret-token")
+        kharkivskyi, bakhmutskyi = DISTRICTS["UA6312"]["alerts_uid"], DISTRICTS[_district("Бахмутський")]["alerts_uid"]
+        body = self._status_string({REGION_UIDS["UA-30"]: "R", REGION_UIDS["UA-63"]: "P",
+                                    REGION_UIDS["UA-46"]: "Y", kharkivskyi: "R", bakhmutskyi: "P"})
+        with patch.object(provider._session, "get", return_value=self._response(body=body)) as get:
+            result = provider.fetch()
+        assert result["regions"]["UA-30"] == {"status": "alert", "since": None}
+        assert result["regions"]["UA-63"]["status"] == "partial"
+        assert result["regions"]["UA-46"]["status"] == "threat"
+        assert result["regions"]["UA-05"]["status"] == "none"
+        assert result["districts"]["UA6312"]["status"] == "alert"
+        assert result["districts"][_district("Бахмутський")]["status"] == "partial"   # some hromadas
+        url = get.call_args[0][0]
+        assert "/v2/iot/active_air_raid_alerts.json" in url
+        assert "secret-token" not in url                      # the token only in the header
+        assert get.call_args[1]["headers"]["Authorization"] == "Bearer secret-token"
+
+    def test_bare_string_accepted(self):
+        provider = AlertsInUaProvider("t")
+        text = self._status_string({REGION_UIDS["UA-30"]: "R"})
+        with patch.object(provider._session, "get", return_value=self._response(text=text)):
+            assert provider.fetch()["regions"]["UA-30"]["status"] == "alert"
+
+    def test_poller_marks_region_partial_from_district(self):
+        provider = AlertsInUaProvider("t")
+        body = self._status_string({DISTRICTS["UA6312"]["alerts_uid"]: "R"})
+        with patch.object(provider._session, "get", return_value=self._response(body=body)):
+            poller = AlertsPoller(provider)
+            poller._fetch()
+        status = poller.get_status()
+        assert status["provider"] == "alerts.in.ua" and status["demo"] is False
+        assert status["regions"]["UA-63"]["status"] == "partial"
+        assert list(status["districts"]) == ["UA6312"]
+
+    def test_not_modified_reuses_last_result(self):
+        provider = AlertsInUaProvider("t")
+        first = self._response(body=self._status_string({REGION_UIDS["UA-30"]: "R"}),
+                               headers={"Last-Modified": "Wed, 21 Oct 2026 06:00:00 GMT"})
+        with patch.object(provider._session, "get", side_effect=[first, self._response(304)]) as get:
+            a = provider.fetch()
+            b = provider.fetch()
+        assert a == b
+        assert get.call_args[1]["headers"]["If-Modified-Since"] == "Wed, 21 Oct 2026 06:00:00 GMT"
+
+    @pytest.mark.parametrize("code,fragment", [(401, "token"), (403, "outside Ukraine"),
+                                               (429, "rate limit"), (500, "HTTP 500")])
+    def test_http_errors(self, code, fragment):
+        provider = AlertsInUaProvider("t")
+        with patch.object(provider._session, "get", return_value=self._response(code)):
+            with pytest.raises(AlertsFetchError, match=fragment):
+                provider.fetch()
+
+    def test_missing_token(self):
+        with pytest.raises(AlertsFetchError, match="ALERTS_IN_UA_TOKEN"):
+            AlertsInUaProvider("").fetch()
+
+    @pytest.mark.parametrize("body", [{"alerts": []}, "", "NNX?N", ["N"]])
+    def test_unexpected_format(self, body):
+        provider = AlertsInUaProvider("t")
+        with patch.object(provider._session, "get", return_value=self._response(body=body)):
+            with pytest.raises(AlertsFetchError, match="unexpected"):
+                provider.fetch()
+
+    def test_error_never_contains_token(self):
+        provider = AlertsInUaProvider("secret-token")
+        for resp in (self._response(401), self._response(403), self._response(body={"x": 1})):
+            with patch.object(provider._session, "get", return_value=resp):
+                with pytest.raises(AlertsFetchError) as err:
+                    provider.fetch()
+            assert "secret-token" not in str(err.value)
+
+
 class TestAlertsEndpoint:
     @pytest.fixture
     def client(self):
@@ -257,6 +372,7 @@ class TestAlertsEndpoint:
         assert "alertsMapUrl: \"/static/data/ukraine-regions.json?v=" in html
         assert 'id="alerts-card"' in html and 'id="alerts-banner"' in html
         assert html.count('href="https://neptun.in.ua/"') == 2  # attribution in card + fullscreen banner
+        assert html.count('data-alerts-source="alerts.in.ua"') == 2
 
     @pytest.mark.parametrize("value,expected", [("UA-32", "UA-32"), ("", ""), ("UA-99", ""), ("Kyiv", "")])
     def test_page_passes_configured_region(self, client, monkeypatch, value, expected):

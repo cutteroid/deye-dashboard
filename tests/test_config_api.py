@@ -77,6 +77,22 @@ class TestConfigStatus:
         assert data["configured"] is False
         assert data["first_run"] is True
 
+    def test_boot_id_matches_save_response(self, client):
+        """The restart overlay reloads only once the status comes from a new start."""
+        c, app_module = client
+        boot = c.get("/api/config/status").get_json()["boot"]
+        assert boot == app_module.BOOT_ID and len(boot) == 12
+        with patch("setup.load_existing_env", return_value=({"INVERTER_IP": "1.2.3.4", "LOGGER_SERIAL": "1"}, [])), \
+             patch("setup.write_env"), patch("threading.Timer"):
+            assert c.post("/api/config", json={"INVERTER_IP": "1.2.3.5"}).get_json()["boot"] == boot
+
+    def test_save_logs_key_names_not_values(self, client, caplog):
+        c, _ = client
+        with patch("setup.load_existing_env", return_value=({"INVERTER_IP": "1.2.3.4", "LOGGER_SERIAL": "1"}, [])), \
+             patch("setup.write_env"), patch("threading.Timer"), caplog.at_level("INFO"):
+            c.post("/api/config", json={"ALERTS_IN_UA_TOKEN": "a1b2c3d4e5f6a7b8c9d0e1f2"})
+        assert "ALERTS_IN_UA_TOKEN" in caplog.text and "a1b2c3d4e5f6" not in caplog.text
+
 
 class TestGetConfig:
     def test_returns_env_values(self, client):
@@ -105,13 +121,20 @@ class TestGetConfig:
         assert token.endswith("wxYZ")
         assert "****" in token
 
-    def test_short_token_not_masked(self, client):
+    def test_short_token_fully_masked(self, client):
         c, _ = client
         mock_values = {"TELEGRAM_BOT_TOKEN": "short"}
         with patch("setup.load_existing_env", return_value=(mock_values, [])):
             resp = c.get("/api/config")
         data = resp.get_json()
-        assert data["TELEGRAM_BOT_TOKEN"] == "short"
+        assert data["TELEGRAM_BOT_TOKEN"] == "****"
+
+    def test_masks_alerts_in_ua_token(self, client):
+        c, _ = client
+        mock_values = {"ALERTS_IN_UA_TOKEN": "a1b2c3d4e5f6a7b8c9d0e1f2"}
+        with patch("setup.load_existing_env", return_value=(mock_values, [])):
+            data = c.get("/api/config").get_json()
+        assert data["ALERTS_IN_UA_TOKEN"] == "a1b2****e1f2"
 
 
 class TestSaveConfig:
@@ -151,6 +174,29 @@ class TestSaveConfig:
         assert resp.status_code == 200
         written_values = mock_write.call_args[0][0]
         assert written_values["TELEGRAM_BOT_TOKEN"] == "realtoken12345678"
+
+    def test_preserves_masked_alerts_token(self, client):
+        c, _ = client
+        mock_existing = {"INVERTER_IP": "192.168.1.1", "LOGGER_SERIAL": "2712345678",
+                         "ALERTS_IN_UA_TOKEN": "a1b2c3d4e5f6a7b8c9d0e1f2"}
+        with patch("setup.load_existing_env", return_value=(mock_existing, [])), \
+             patch("setup.write_env") as mock_write, \
+             patch("threading.Timer"):
+            resp = c.post("/api/config", json={"AIR_ALERTS_PROVIDER": "alerts_in_ua",
+                                               "ALERTS_IN_UA_TOKEN": "a1b2****e1f2"})
+        assert resp.status_code == 200
+        written = mock_write.call_args[0][0]
+        assert written["ALERTS_IN_UA_TOKEN"] == "a1b2c3d4e5f6a7b8c9d0e1f2"
+        assert written["AIR_ALERTS_PROVIDER"] == "alerts_in_ua"
+
+    def test_mask_without_saved_token_is_not_saved(self, client):
+        c, _ = client
+        mock_existing = {"INVERTER_IP": "192.168.1.1", "LOGGER_SERIAL": "2712345678"}
+        with patch("setup.load_existing_env", return_value=(mock_existing, [])), \
+             patch("setup.write_env") as mock_write, \
+             patch("threading.Timer"):
+            c.post("/api/config", json={"ALERTS_IN_UA_TOKEN": "a1b2****e1f2"})
+        assert "ALERTS_IN_UA_TOKEN" not in mock_write.call_args[0][0]
 
     def test_rejects_invalid_body(self, client):
         c, _ = client

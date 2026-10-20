@@ -1775,8 +1775,15 @@ function renderAlerts() {
         el.textContent = region ? t('alerts.regions.' + region) : '';
     });
     document.querySelectorAll('.alerts-demo-badge').forEach(function(el) { el.hidden = !(d && d.demo); });
-    // NEPTUN data link + disclaimer (their terms of use), whenever real data is shown
-    document.querySelectorAll('[data-alerts-credit]').forEach(function(el) { el.hidden = !(d && d.provider === 'NEPTUN'); });
+    // Data source link + disclaimer whenever real data is shown (NEPTUN's terms require them)
+    document.querySelectorAll('[data-alerts-credit]').forEach(function(el) {
+        var shown = false;
+        el.querySelectorAll('[data-alerts-source]').forEach(function(link) {
+            link.hidden = !(d && link.getAttribute('data-alerts-source') === d.provider);
+            shown = shown || !link.hidden;
+        });
+        el.hidden = !shown;
+    });
 }
 
 applyAlertsRegion();
@@ -1955,12 +1962,16 @@ function showOnboarding(editMode) {
                     if (!pubToggle.classList.contains('on')) toggleOnb(pubToggle);
                 }
 
-                // Air raid alerts (no provider set = default NEPTUN, enabled)
-                onbAlertsProvider = (cfg.AIR_ALERTS_PROVIDER || 'neptun').toLowerCase();
+                // Air raid alerts. No provider set: alerts.in.ua with a token, else NEPTUN.
+                // The token comes masked; sent back unchanged, the server keeps it.
+                var alertsProvider = (cfg.AIR_ALERTS_PROVIDER || (cfg.ALERTS_IN_UA_TOKEN ? 'alerts_in_ua' : 'neptun')).toLowerCase();
                 var alertsToggle = document.getElementById('onb-alerts-toggle');
-                if (alertsToggle.classList.contains('on') !== (onbAlertsProvider !== 'none')) {
+                if (alertsToggle.classList.contains('on') !== (alertsProvider !== 'none')) {
                     toggleOnb(alertsToggle, 'onb-alerts-fields');
                 }
+                if (alertsProvider !== 'none') document.getElementById('onb-alerts-provider').value = alertsProvider;
+                document.getElementById('onb-alerts-token').value = cfg.ALERTS_IN_UA_TOKEN || '';
+                updateAlertsProviderFields();
                 document.getElementById('onb-alerts-region').value = cfg.AIR_ALERTS_REGION || '';
             })
             .catch(function() {});
@@ -2019,6 +2030,7 @@ function onboardingGoTo(step) {
 function onboardingNext() {
     if (onboardingStep < ONBOARDING_STEPS) {
         if (onboardingStep === 1 && !validateStep1()) return;
+        if (onboardingStep === 4 && !validateAlertsStep()) return;
         onboardingGoTo(onboardingStep + 1);
     } else {
         saveConfig();
@@ -2150,8 +2162,24 @@ function fillInverterTypeOptions() {
     });
 }
 
+// Alerts step: the token field only for alerts.in.ua
+function updateAlertsProviderFields() {
+    var needsToken = document.getElementById('onb-alerts-provider').value === 'alerts_in_ua';
+    document.getElementById('onb-alerts-token-field').hidden = !needsToken;
+    if (!needsToken) document.getElementById('onb-alerts-token').classList.remove('error');
+}
+
+// alerts.in.ua needs its token
+function validateAlertsStep() {
+    var alertsOn = document.getElementById('onb-alerts-toggle').classList.contains('on');
+    var tokenInput = document.getElementById('onb-alerts-token');
+    var valid = !alertsOn || document.getElementById('onb-alerts-provider').value !== 'alerts_in_ua' ||
+        tokenInput.value.trim() !== '';
+    tokenInput.classList.toggle('error', !valid);
+    return valid;
+}
+
 // Region list for the alerts step: "Whole Ukraine" first, then regions by translated name
-var onbAlertsProvider = 'neptun';
 
 function fillAlertsRegionOptions() {
     var select = document.getElementById('onb-alerts-region');
@@ -2222,10 +2250,11 @@ function saveConfig() {
         config.TELEGRAM_PUBLIC = document.getElementById('onb-tg-public-toggle').classList.contains('on') ? 'true' : 'false';
     }
 
-    // Step 4 — Air raid alerts (keeps a non-default provider such as "mock" when on)
+    // Step 4 — Air raid alerts (the token is kept even while another source is chosen)
     var alertsOn = document.getElementById('onb-alerts-toggle').classList.contains('on');
-    config.AIR_ALERTS_PROVIDER = alertsOn ? (onbAlertsProvider !== 'none' ? onbAlertsProvider : 'neptun') : 'none';
+    config.AIR_ALERTS_PROVIDER = alertsOn ? document.getElementById('onb-alerts-provider').value : 'none';
     config.AIR_ALERTS_REGION = document.getElementById('onb-alerts-region').value;
+    config.ALERTS_IN_UA_TOKEN = document.getElementById('onb-alerts-token').value.trim();
 
     // Validate step 1
     if (!config.INVERTER_IP || !config.LOGGER_SERIAL) {
@@ -2233,21 +2262,21 @@ function saveConfig() {
         validateStep1();
         return;
     }
+    if (!validateAlertsStep()) {
+        onboardingGoTo(4);
+        validateAlertsStep();
+        return;
+    }
 
     var nextBtn = document.getElementById('onb-next-btn');
     nextBtn.disabled = true;
     setI18nText(nextBtn, 'onboarding.saving');
 
-    settingsFetch('/api/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config),
-    })
-    .then(function(r) { return r.json(); })
+    postConfig(config)
     .then(function(data) {
         if (data.status === 'ok') {
             hideOnboarding();
-            showRestartOverlay();
+            showRestartOverlay(data.boot);
         } else {
             nextBtn.disabled = false;
             setI18nText(nextBtn, 'onboarding.retry');
@@ -2257,11 +2286,34 @@ function saveConfig() {
     .catch(function(e) {
         nextBtn.disabled = false;
         setI18nText(nextBtn, 'onboarding.retry');
-        alert(t('onboarding.save_failed', { message: e }));
+        // No answer from the server (network error, timeout): say so in words
+        var noAnswer = e && (e.name === 'TypeError' || e.name === 'AbortError');
+        alert(t('onboarding.save_failed', { message: noAnswer ? t('status.connection_failed') : e }));
     });
 }
 
-function showRestartOverlay() {
+// POST the settings. A request that gets no answer at all (a Wi-Fi blip, or a
+// kept-alive connection the server closed just then) is sent once more after a
+// second; saving twice is harmless, the same .env is written again.
+var SAVE_CONFIG_RETRY_MS = 1000;
+
+function postConfig(config, retried) {
+    return settingsFetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
+    })
+    .then(function(r) { return r.json(); })
+    .catch(function(e) {
+        if (retried || !e || (e.name !== 'TypeError' && e.name !== 'AbortError')) throw e;
+        return new Promise(function(resolve) { setTimeout(resolve, SAVE_CONFIG_RETRY_MS); })
+            .then(function() { return postConfig(config, true); });
+    });
+}
+
+// Wait for the restarted server (a new boot id; the old process answers for
+// up to 2 s after saving), then reload the page
+function showRestartOverlay(oldBoot) {
     var overlay = document.getElementById('restart-overlay');
     overlay.classList.remove('hidden');
     var textEl = document.getElementById('restart-text');
@@ -2271,7 +2323,7 @@ function showRestartOverlay() {
         apiFetch('/api/config/status')
             .then(function(r) { return r.json(); })
             .then(function(data) {
-                if (data.configured) {
+                if (data.configured && !(oldBoot && data.boot === oldBoot)) {
                     clearInterval(pollInterval);
                     setI18nText(textEl, 'onboarding.ready');
                     setTimeout(function() { window.location.reload(); }, 500);

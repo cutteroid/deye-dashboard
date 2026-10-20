@@ -1999,7 +1999,7 @@ body.fullscreen-mode .alerts-banner .alerts-map svg {
     border-radius: 2px;
 }
 
-/* Required by NEPTUN's terms: visible data link + "not an official alert system" */
+/* Data source link + "not an official alert system" (required by NEPTUN's terms) */
 .alerts-credit {
     margin-top: 4px;
     font-size: 0.6rem;
@@ -2013,6 +2013,10 @@ body.fullscreen-mode .alerts-banner .alerts-map svg {
 
 .alerts-credit a {
     color: #64748b;
+}
+
+.alerts-credit a[hidden] {
+    display: none;
 }
 
 .scroll-hint {
