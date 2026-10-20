@@ -378,28 +378,35 @@
             </div>
         </div>
 
-        <!-- Phase Daily Analytics -->
+        <!-- Phase balance: today per phase + one bar per day (last 7 days) -->
         <div class="card" id="phase-analytics-card" data-id="phase-analytics-card">
             <div class="card-header">
                 <span class="icon">📈</span>
-                <h2 data-i18n="phase_stats.title">Daily Phase Analytics</h2>
-                <button class="btn" onclick="clearPhaseStats()" data-i18n="common.clear">Clear</button>
+                <h2 data-i18n="phase_stats.title">Phase balance</h2>
+                <button type="button" class="phase-clear-btn" onclick="clearPhaseStats()" data-i18n="common.clear">Clear</button>
             </div>
             <div id="phase-stats-container">
-                <table class="phase-stats-table">
-                    <thead>
-                        <tr>
-                            <th data-i18n="phase_stats.date">Date</th>
-                            <th>L1</th>
-                            <th>L2</th>
-                            <th>L3</th>
-                            <th data-i18n="phase_stats.total">Total</th>
-                        </tr>
-                    </thead>
-                    <tbody id="phase-stats-body">
-                        <tr><td colspan="5" style="text-align:center; color:#64748b;" data-i18n="common.loading">Loading...</td></tr>
-                    </tbody>
-                </table>
+                <div class="phase-today-label">
+                    <span data-i18n="phase_stats.today">Today</span>, <span data-i18n="units.kwh">kWh</span>
+                </div>
+                <div class="phase-today" id="phase-today">
+                    <div class="phase-today-item"><span class="phase-label l1">L1</span><span class="phase-today-value" id="phase-today-l1">--</span></div>
+                    <div class="phase-today-item"><span class="phase-label l2">L2</span><span class="phase-today-value" id="phase-today-l2">--</span></div>
+                    <div class="phase-today-item"><span class="phase-label l3">L3</span><span class="phase-today-value" id="phase-today-l3">--</span></div>
+                </div>
+                <div class="phase-days-head">
+                    <span data-i18n="phase_stats.last_days">Last 7 days</span>
+                    <span data-i18n="units.kwh">kWh</span>
+                </div>
+                <div class="phase-days" id="phase-days">
+                    <div class="phase-days-empty" data-i18n="common.loading">Loading...</div>
+                </div>
+                <div class="phase-stats-legend">
+                    <span class="phase-legend-item"><span class="phase-swatch l1"></span>L1</span>
+                    <span class="phase-legend-item"><span class="phase-swatch l2"></span>L2</span>
+                    <span class="phase-legend-item"><span class="phase-swatch l3"></span>L3</span>
+                    <span class="phase-legend-hint" data-i18n="phase_stats.hint">tap a day for details</span>
+                </div>
             </div>
         </div>
 

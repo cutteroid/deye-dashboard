@@ -155,7 +155,7 @@ function refreshTranslatedContent() {
         function() { if (typeof cachedWeatherData !== 'undefined' && cachedWeatherData) updateWeatherForecastBanner(cachedWeatherData); },
         function() { renderPlannedOutages(); },
         function() { updateOutageInfo(); },
-        function() { loadPhaseStats(); },
+        function() { renderPhaseStats(phaseStatsData); },
         function() { fetchOtaStatus(); },
         function() { if (typeof generatorData !== 'undefined' && generatorData) { updateGeneratorBanner(generatorData); updateGeneratorCard(generatorData); } },
         function() { updateOnboardingUI(); },
@@ -520,38 +520,52 @@ async function loadPhaseStats() {
     }
 }
 
-function renderPhaseStats(stats) {
-    const tbody = document.getElementById('phase-stats-body');
+// Phase balance card: today's kWh per phase, then one bar per day — length =
+// the day's total (relative to the biggest day), coloured parts = each phase's share
+var PHASE_DAYS_SHOWN = 7;
+var phaseStatsData = [];
 
-    if (stats.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#64748b;">' + t('phase_stats.no_data') + '</td></tr>';
+// kWh with 2 decimals below 1 kWh (low loads: 0.03, not 0.0), else 1 decimal
+function fmtKwh(value) {
+    return fmt(value, (value || 0) < 1 ? 2 : 1);
+}
+
+function localDateString(date) {
+    return date.getFullYear() + '-' + ('0' + (date.getMonth() + 1)).slice(-2) + '-' + ('0' + date.getDate()).slice(-2);
+}
+
+function renderPhaseStats(stats) {
+    phaseStatsData = stats || [];
+    var days = phaseStatsData.slice(0, PHASE_DAYS_SHOWN);   // newest first
+    var todayKey = localDateString(new Date());
+    var today = days[0] && days[0].date === todayKey ? days[0] : null;
+    ['l1', 'l2', 'l3'].forEach(function(p) {
+        document.getElementById('phase-today-' + p).textContent = today ? fmtKwh(today[p + '_kwh']) : '--';
+    });
+
+    var list = document.getElementById('phase-days');
+    if (!days.length) {
+        list.innerHTML = '<div class="phase-days-empty">' + escapeHtml(t('phase_stats.no_data')) + '</div>';
         return;
     }
-
-    tbody.innerHTML = stats.map(day => {
-        const maxPct = Math.max(day.l1_pct, day.l2_pct, day.l3_pct);
-        const l1Highest = day.l1_pct === maxPct ? 'highest' : '';
-        const l2Highest = day.l2_pct === maxPct ? 'highest' : '';
-        const l3Highest = day.l3_pct === maxPct ? 'highest' : '';
-
-        return `
-            <tr>
-                <td>${escapeHtml(day.date)}</td>
-                <td>
-                    <span class="phase-pct l1 ${l1Highest}">${day.l1_pct}%</span>
-                    <br><small style="color:#64748b">${day.l1_kwh} ${t('units.kwh')}</small>
-                </td>
-                <td>
-                    <span class="phase-pct l2 ${l2Highest}">${day.l2_pct}%</span>
-                    <br><small style="color:#64748b">${day.l2_kwh} ${t('units.kwh')}</small>
-                </td>
-                <td>
-                    <span class="phase-pct l3 ${l3Highest}">${day.l3_pct}%</span>
-                    <br><small style="color:#64748b">${day.l3_kwh} ${t('units.kwh')}</small>
-                </td>
-                <td><strong>${day.total_kwh}</strong> ${t('units.kwh')}</td>
-            </tr>
-        `;
+    var maxTotal = Math.max.apply(null, days.map(function(d) { return d.total_kwh || 0; })) || 1;
+    list.innerHTML = days.map(function(d) {
+        var label = d.date === todayKey ? t('phase_stats.today')
+            : new Date(d.date + 'T00:00:00').toLocaleDateString(i18nLocale(), { weekday: 'short', day: 'numeric' });
+        var width = Math.max(2, (d.total_kwh || 0) / maxTotal * 100);
+        var parts = ['l1', 'l2', 'l3'].map(function(p) {
+            return '<span class="phase-day-part ' + p + '" style="width:' + (d[p + '_pct'] || 0) + '%"></span>';
+        }).join('');
+        var details = ['l1', 'l2', 'l3'].map(function(p, i) {
+            return '<span><span class="phase-label ' + p + '">L' + (i + 1) + '</span> ' +
+                escapeHtml(t('phase_stats.detail', { kwh: fmt(d[p + '_kwh'], 2), pct: fmt(d[p + '_pct'], 0), peak: d[p + '_max'] || 0 })) +
+                '</span>';
+        }).join('');
+        return '<div class="phase-day' + (d.date === todayKey ? ' today' : '') + '" onclick="this.classList.toggle(\'open\')">' +
+            '<span class="phase-day-label">' + escapeHtml(label) + '</span>' +
+            '<span class="phase-day-track"><span class="phase-day-bar" style="width:' + width.toFixed(1) + '%">' + parts + '</span></span>' +
+            '<span class="phase-day-total">' + fmtKwh(d.total_kwh) + '</span>' +
+            '<span class="phase-day-details">' + details + '</span></div>';
     }).join('');
 }
 

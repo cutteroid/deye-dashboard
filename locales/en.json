@@ -254,11 +254,13 @@
     "status_unreachable": "No connection"
   },
   "phase_stats": {
-    "title": "Daily Phase Analytics",
-    "date": "Date",
-    "total": "Total",
+    "title": "Phase balance",
     "no_data": "No data yet. Keep the dashboard running to collect data.",
-    "confirm_clear": "Clear all phase statistics?"
+    "confirm_clear": "Clear all phase statistics?",
+    "today": "Today",
+    "last_days": "Last 7 days",
+    "hint": "tap a day for details",
+    "detail": "{kwh} kWh · {pct}% · peak {peak} W"
   },
   "pin": {
     "title": "Enter settings PIN",

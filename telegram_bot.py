@@ -141,7 +141,10 @@ MESSAGES_OUTAGE_UNKNOWN = [
 ]
 
 
-BATTERY_REPORT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "battery_reports")
+_APP_DIR = os.path.dirname(os.path.abspath(__file__))
+# In data/ when it exists (persistent Docker volume), like the other data files
+BATTERY_REPORT_DIR = os.path.join(_APP_DIR, "data", "battery_reports") if os.path.isdir(os.path.join(_APP_DIR, "data")) \
+    else os.path.join(_APP_DIR, "battery_reports")
 BATTERY_REPORTS_KEEP = 50  # newest report files kept; older ones are deleted
 
 # Low-battery alert fires below LOW and re-arms only at/above REARM, so a SOC

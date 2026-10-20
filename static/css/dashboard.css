@@ -940,44 +940,161 @@ body.fullscreen-mode .battery-runtime-value {
     font-size: 0.95rem;
 }
 
-/* Phase daily stats table */
-.phase-stats-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.85rem;
-}
-
-.phase-stats-table th {
-    text-align: left;
-    padding: 8px 4px;
-    border-bottom: 1px solid rgba(255,255,255,0.1);
-    color: #64748b;
-    font-weight: 500;
-}
-
-.phase-stats-table td {
-    padding: 8px 4px;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
-}
-
-.phase-stats-table tr:hover {
-    background: rgba(255,255,255,0.02);
-}
-
-.phase-pct {
-    display: inline-block;
-    padding: 2px 6px;
-    border-radius: 4px;
+/* Phase balance card */
+.phase-today-label,
+.phase-days-head {
     font-size: 0.75rem;
+    color: #64748b;
+}
+
+.phase-today {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin: 6px 0 18px;
+}
+
+.phase-today-item {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+}
+
+.phase-today-value {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: #f1f5f9;
+    font-variant-numeric: tabular-nums;
+}
+
+.phase-days-head {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 4px;
+}
+
+.phase-day {
+    display: grid;
+    grid-template-columns: 58px 1fr 40px;
+    gap: 4px 8px;
+    align-items: center;
+    padding: 5px 0;
+    font-size: 0.82rem;
+    cursor: pointer;
+}
+
+.phase-day-label {
+    color: #94a3b8;
+    white-space: nowrap;
+}
+
+.phase-day.today .phase-day-label {
+    color: #e2e8f0;
     font-weight: 600;
 }
 
-.phase-pct.l1 { background: rgba(239, 68, 68, 0.2); color: #f87171; }
-.phase-pct.l2 { background: rgba(251, 191, 36, 0.2); color: #fbbf24; }
-.phase-pct.l3 { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+.phase-day-track {
+    height: 12px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.04);
+    overflow: hidden;
+}
 
-.phase-pct.highest {
-    box-shadow: 0 0 8px currentColor;
+.phase-day-bar {
+    display: flex;
+    height: 100%;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.phase-day-part {
+    height: 100%;
+}
+
+.phase-day-part.l1 { background: #ef4444; }
+.phase-day-part.l2 { background: #fbbf24; }
+.phase-day-part.l3 { background: #3b82f6; }
+
+.phase-day-total {
+    text-align: right;
+    color: #e2e8f0;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Tap a day: exact kWh / share / peak per phase */
+.phase-day-details {
+    display: none;
+    grid-column: 1 / -1;
+    flex-direction: column;
+    gap: 2px;
+    padding: 4px 0 4px 8px;
+    font-size: 0.75rem;
+    color: #94a3b8;
+    white-space: nowrap;
+}
+
+.phase-day.open .phase-day-details {
+    display: flex;
+}
+
+.phase-days-empty {
+    padding: 12px 0;
+    color: #64748b;
+    font-size: 0.85rem;
+    text-align: center;
+}
+
+/* One-line legend under the bars: colour swatches + tap hint */
+.phase-stats-legend {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    font-size: 0.72rem;
+    color: #64748b;
+    white-space: nowrap;
+}
+
+.phase-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.phase-swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+}
+
+.phase-swatch.l1 { background: #ef4444; }
+.phase-swatch.l2 { background: #fbbf24; }
+.phase-swatch.l3 { background: #3b82f6; }
+
+.phase-legend-hint {
+    margin-left: auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Clear: small muted pill in the card header (rarely used, PIN-protected) */
+.phase-clear-btn {
+    margin-left: auto;
+    padding: 3px 10px;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 999px;
+    color: #64748b;
+    font-size: 0.72rem;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.phase-clear-btn:hover {
+    color: #cbd5e1;
+    border-color: rgba(255, 255, 255, 0.25);
 }
 
 .phase-voltage {

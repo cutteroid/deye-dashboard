@@ -181,11 +181,14 @@ tools/export_images.sh amd64    # cross-build for an Intel/AMD machine
 
 ### Data Persistence
 
-The container mounts a `data` volume at `/app/data` for persistent storage of:
+The container mounts a `data` volume at `/app/data`. Everything the dashboard stores lives there, so it survives rebuilds and deploys:
 - Configuration (`.env`)
-- Phase statistics (`phase_stats.json`)
-- Phase history (`phase_history.json`)
+- Phase statistics and history (`phase_stats.json`, `phase_history.json`)
+- Grid import log, generator log, last inverter readings, detected inverter model (`grid_daily_log.json`, `generator_log.json`, `inverter_cache.json`, `inverter_config.json`)
+- Telegram bot state and battery reports (`bot_state.json`, `battery_reports/`)
 - Smart meter daily counter (`smart_meter_daily.json`) and Mosquitto broker files (`mosquitto/`)
+
+Without a `data` folder (plain installs) the files are kept next to the app, as before. Each path can be overridden with its `*_FILE` variable.
 
 ### Health Checks
 

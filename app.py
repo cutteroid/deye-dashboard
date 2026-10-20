@@ -10,7 +10,7 @@ from inverters import BatterySampler, DRIVERS, InverterConfig, create_inverter, 
 from telegram_bot import TelegramBot
 from outage_providers import OutageSchedulePoller, create_outage_provider
 from update_manager import get_current_version, UpdatePoller, UpdateManager
-from storage import atomic_write_json, load_json
+from storage import atomic_write_json, data_path, load_json
 from air_alerts import AlertsPoller, create_alerts_provider, REGION_CODES
 from smart_meter import create_smart_meter_from_env
 from datetime import datetime, date, timedelta
@@ -133,7 +133,8 @@ class WeatherPoller:
         t.start()
 
 
-INVERTER_CACHE_FILE = os.environ.get("INVERTER_CACHE_FILE", "inverter_cache.json")
+# Data files default to data/ (persistent Docker volume) — see storage.data_path()
+INVERTER_CACHE_FILE = os.environ.get("INVERTER_CACHE_FILE") or data_path("inverter_cache.json")
 # Overrides the capacity the inverter reports (for the battery runtime estimate)
 BATTERY_CAPACITY_KWH = env_float("BATTERY_CAPACITY_KWH", 0.0)
 RUNTIME_AVERAGE_SAMPLES = 10  # polls (~10 min) of discharge power behind the estimate
@@ -361,15 +362,15 @@ def inject_asset_url():
     return {"asset_url": asset_version_url}
 
 # Configuration - can be overridden with environment variables
-PHASE_STATS_FILE = os.environ.get("PHASE_STATS_FILE", "phase_stats.json")
-PHASE_HISTORY_FILE = os.environ.get("PHASE_HISTORY_FILE", "phase_history.json")
-GRID_DAILY_LOG_FILE = os.environ.get("GRID_DAILY_LOG_FILE", "grid_daily_log.json")
-GENERATOR_LOG_FILE = os.environ.get("GENERATOR_LOG_FILE", "generator_log.json")
+PHASE_STATS_FILE = os.environ.get("PHASE_STATS_FILE") or data_path("phase_stats.json")
+PHASE_HISTORY_FILE = os.environ.get("PHASE_HISTORY_FILE") or data_path("phase_history.json")
+GRID_DAILY_LOG_FILE = os.environ.get("GRID_DAILY_LOG_FILE") or data_path("grid_daily_log.json")
+GENERATOR_LOG_FILE = os.environ.get("GENERATOR_LOG_FILE") or data_path("generator_log.json")
 GENERATOR_FUEL_RATE = env_float("GENERATOR_FUEL_RATE", 0.0)
 GENERATOR_OIL_CHANGE_DATE = os.environ.get("GENERATOR_OIL_CHANGE_DATE", "")
 
 
-INVERTER_CONFIG_FILE = os.environ.get("INVERTER_CONFIG_FILE", "inverter_config.json")
+INVERTER_CONFIG_FILE = os.environ.get("INVERTER_CONFIG_FILE") or data_path("inverter_config.json")
 _CONFIG_ENV_KEYS = ("INVERTER_PHASES", "INVERTER_HAS_BATTERY", "INVERTER_PV_STRINGS", "INVERTER_HAS_GENERATOR")
 
 
@@ -1287,7 +1288,7 @@ def start_telegram_bot():
         if uid.isdigit():
             user_ids.add(int(uid))
 
-    state_file = os.environ.get("BOT_STATE_FILE", "bot_state.json")
+    state_file = os.environ.get("BOT_STATE_FILE") or data_path("bot_state.json")
     bot = TelegramBot(
         token=token, allowed_users=user_ids, inverter=inverter,
         battery_sampler=battery_sampler, outage_poller=outage_poller,

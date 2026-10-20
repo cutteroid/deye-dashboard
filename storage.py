@@ -10,6 +10,15 @@ import os
 
 logger = logging.getLogger(__name__)
 
+DATA_DIR = "data"
+
+
+def data_path(name):
+    """Default location of a data file: data/<name> when the data folder exists
+    (in Docker it's the mounted volume, so files survive rebuilds and deploys),
+    else <name> next to the app as before (plain installs)."""
+    return os.path.join(DATA_DIR, name) if os.path.isdir(DATA_DIR) else name
+
 
 def atomic_write_json(path, data, **dump_kwargs):
     """Write data as JSON to path atomically (temp file + fsync + rename)."""

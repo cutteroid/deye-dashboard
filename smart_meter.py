@@ -27,7 +27,7 @@ import threading
 import time
 from datetime import datetime, timedelta
 
-from storage import atomic_write_json, load_json
+from storage import atomic_write_json, data_path, load_json
 
 logger = logging.getLogger(__name__)
 
@@ -450,7 +450,7 @@ def default_broker_host():
 
 def default_daily_file():
     """Keep today's baseline in data/ when it exists (the Docker volume survives rebuilds)."""
-    return os.path.join("data", "smart_meter_daily.json") if os.path.isdir("data") else "smart_meter_daily.json"
+    return data_path("smart_meter_daily.json")
 
 
 def create_smart_meter_from_env(environ=os.environ):
