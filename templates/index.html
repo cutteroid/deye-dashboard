@@ -11,8 +11,12 @@
             if (localStorage.getItem('dashboard-low-power') === '1') document.documentElement.classList.add('low-power');
         } catch (e) {}
     </script>
-    <!-- SortableJS for dashboard cards -->
-    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+    <!-- SortableJS for dashboard cards. integrity: the browser refuses the file if the
+         CDN ever serves anything else; no-referrer: the CDN isn't told the dashboard's address.
+         Changing the version needs a new hash (sha384 of the file, base64). -->
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"
+            integrity="sha384-BSxuMLxX+FCbTdYec3TbXlnMGEEM2QXTFdtDaveen71o+jswm2J36+xFqp8k4VHM"
+            crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 </head>
 <body>
     <div id="battery-overlay"></div>
