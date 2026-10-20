@@ -731,36 +731,10 @@
         <div class="settings-server locked" id="settings-server">
             <div class="settings-section settings-lock">
                 <label data-i18n="settings.server_settings">Server settings</label>
-                <div class="settings-hint" data-i18n="settings.server_locked_hint">Updates and configuration change the server. Enter the settings PIN to unlock.</div>
+                <div class="settings-hint" data-i18n="settings.server_locked_hint">Configuration changes the server. Enter the settings PIN to unlock.</div>
                 <button class="settings-btn" style="margin-top: 8px;" onclick="unlockServerSettings()">🔒 <span data-i18n="settings.unlock">Unlock</span></button>
             </div>
             <div class="settings-server-content">
-                <div class="settings-section" id="settings-ota-section">
-                    <label data-i18n="settings.ota_title">OTA Updates</label>
-                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
-                        <span style="color: #94a3b8; font-size: 0.8rem;" data-i18n="settings.version">Version:</span>
-                        <span class="settings-version-badge" id="ota-version">...</span>
-                    </div>
-                    <div class="settings-update-available" id="ota-update-notice" style="display: none;">
-                        <span class="pulse-dot"></span>
-                        <span id="ota-update-text" data-i18n="settings.update_available">Update available</span>
-                    </div>
-                    <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px;">
-                        <button class="settings-btn" onclick="otaCheckNow()" data-i18n="settings.check_updates">Check for Updates</button>
-                        <button class="settings-btn update-btn" id="ota-apply-btn" style="display: none;" onclick="otaApplyUpdate()" data-i18n="settings.update">Update</button>
-                    </div>
-                    <div style="margin-top: 8px;">
-                        <label style="font-size: 0.75rem; color: #94a3b8;" data-i18n="settings.rollback_to">Rollback to:</label>
-                        <div style="display: flex; gap: 6px; margin-top: 4px;">
-                            <select class="settings-select" id="ota-rollback-select">
-                                <option value="" data-i18n="settings.select_tag">Select tag...</option>
-                            </select>
-                            <button class="settings-btn rollback-btn" onclick="otaRollback()" data-i18n="settings.rollback">Rollback</button>
-                        </div>
-                    </div>
-                    <div class="update-status-text state-idle" id="ota-status" data-i18n="settings.idle">Idle</div>
-                </div>
-
                 <div class="settings-section">
                     <label data-i18n="settings.configuration">Configuration</label>
                     <button class="settings-btn" onclick="openConfigEditor()" data-i18n="settings.edit_configuration">Edit Configuration</button>

@@ -156,7 +156,6 @@ function refreshTranslatedContent() {
         function() { renderPlannedOutages(); },
         function() { updateOutageInfo(); },
         function() { renderPhaseStats(phaseStatsData); },
-        function() { fetchOtaStatus(); },
         function() { if (typeof generatorData !== 'undefined' && generatorData) { updateGeneratorBanner(generatorData); updateGeneratorCard(generatorData); } },
         function() { updateOnboardingUI(); },
         function() { renderAlerts(); },
@@ -345,7 +344,6 @@ function lockServerSettings() {
 function unlockServerSettings() {
     showPinPrompt(function() {
         document.getElementById('settings-server').classList.remove('locked');
-        fetchOtaStatus();
     });
 }
 
@@ -1830,154 +1828,6 @@ function updateGeneratorCard(data) {
         }
     }
 }
-
-// === OTA Update Functions ===
-let otaStatusInterval = null;
-
-function fetchOtaStatus() {
-    fetch('/api/update/status')
-        .then(r => r.json())
-        .then(data => updateOtaUI(data))
-        .catch(() => {});
-}
-
-function updateOtaUI(data) {
-    // Version badge
-    const versionEl = document.getElementById('ota-version');
-    if (versionEl) versionEl.textContent = data.current_version || t('common.unknown');
-
-    // Update available notice
-    const noticeEl = document.getElementById('ota-update-notice');
-    const applyBtn = document.getElementById('ota-apply-btn');
-    const updateTextEl = document.getElementById('ota-update-text');
-    if (data.update_available && data.latest_tag) {
-        if (noticeEl) noticeEl.style.display = 'flex';
-        if (updateTextEl) setI18nText(updateTextEl, 'settings.update_available_tag', { tag: data.latest_tag });
-        if (applyBtn) {
-            applyBtn.style.display = '';
-            setI18nText(applyBtn, 'settings.update_to', { tag: data.latest_tag });
-            applyBtn.setAttribute('data-tag', data.latest_tag);
-        }
-    } else {
-        if (noticeEl) noticeEl.style.display = 'none';
-        if (applyBtn) applyBtn.style.display = 'none';
-    }
-
-    // Rollback dropdown
-    const selectEl = document.getElementById('ota-rollback-select');
-    if (selectEl && data.available_tags) {
-        const currentVal = selectEl.value;
-        selectEl.innerHTML = '<option value="" data-i18n="settings.select_tag">' + t('settings.select_tag') + '</option>';
-        data.available_tags.forEach(function(tag) {
-            const opt = document.createElement('option');
-            opt.value = tag;
-            opt.textContent = tag === data.current_version ? t('settings.current_tag', { tag: tag }) : tag;
-            selectEl.appendChild(opt);
-        });
-        if (currentVal) selectEl.value = currentVal;
-    }
-
-    // Status display
-    const statusEl = document.getElementById('ota-status');
-    if (statusEl) {
-        const state = data.manager_state || 'idle';
-        statusEl.className = 'update-status-text state-' + state;
-        if (state === 'error') {
-            setI18nText(statusEl, 'common.error', { message: data.manager_error || t('common.unknown') });
-        } else if (state === 'updating' || state === 'restarting') {
-            setPlainText(statusEl, data.manager_message || state);
-        } else {
-            if (data.last_checked) {
-                setI18nText(statusEl, 'settings.last_checked', { time: new Date(data.last_checked).toLocaleTimeString(i18nLocale()) });
-            } else {
-                setI18nText(statusEl, 'settings.not_checked');
-            }
-        }
-    }
-
-    // Show message if not a git repo
-    const section = document.getElementById('settings-ota-section');
-    if (section && data.is_git_repo === false) {
-        section.innerHTML = '<label data-i18n="settings.ota_title">' + t('settings.ota_title') + '</label><div style="color: #64748b; font-size: 0.8rem;" data-i18n="settings.not_git_repo">' + t('settings.not_git_repo') + '</div>';
-    }
-}
-
-function otaCheckNow() {
-    settingsFetch('/api/update/check', { method: 'POST' })
-        .then(() => setTimeout(fetchOtaStatus, 2000))
-        .catch(() => {});
-}
-
-function otaApplyUpdate() {
-    const btn = document.getElementById('ota-apply-btn');
-    const tag = btn ? btn.getAttribute('data-tag') : null;
-    if (!tag) return;
-    if (!confirm(t('settings.confirm_update', { tag: tag }))) return;
-
-    fetch('/api/update/preflight')
-        .then(r => r.json())
-        .then(data => {
-            if (!data.ok) {
-                alert(t('settings.preflight_failed', { issues: data.issues.join('\n- ') }));
-                return;
-            }
-            settingsFetch('/api/update/apply', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ tag: tag }),
-            }).then(() => startOtaStatusPolling());
-        })
-        .catch(e => alert(t('common.error', { message: e })));
-}
-
-function otaRollback() {
-    const selectEl = document.getElementById('ota-rollback-select');
-    const tag = selectEl ? selectEl.value : '';
-    if (!tag) { alert(t('settings.select_tag_first')); return; }
-    if (!confirm(t('settings.confirm_rollback', { tag: tag }))) return;
-
-    fetch('/api/update/preflight')
-        .then(r => r.json())
-        .then(data => {
-            if (!data.ok) {
-                alert(t('settings.preflight_failed', { issues: data.issues.join('\n- ') }));
-                return;
-            }
-            settingsFetch('/api/update/rollback', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ tag: tag }),
-            }).then(() => startOtaStatusPolling());
-        })
-        .catch(e => alert(t('common.error', { message: e })));
-}
-
-function startOtaStatusPolling() {
-    if (otaStatusInterval) clearInterval(otaStatusInterval);
-    otaStatusInterval = setInterval(function() {
-        fetch('/api/update/status')
-            .then(r => r.json())
-            .then(data => {
-                updateOtaUI(data);
-                if (data.manager_state === 'idle' || data.manager_state === 'error') {
-                    clearInterval(otaStatusInterval);
-                    otaStatusInterval = null;
-                }
-            })
-            .catch(() => {
-                // Server likely restarting, keep polling
-                const statusEl = document.getElementById('ota-status');
-                if (statusEl) {
-                    statusEl.className = 'update-status-text state-restarting';
-                    setI18nText(statusEl, 'settings.server_restarting');
-                }
-            });
-    }, 2000);
-}
-
-// Initial OTA fetch and periodic refresh
-fetchOtaStatus();
-setInterval(fetchOtaStatus, 300000);
 
 // === Onboarding Wizard ===
 var onboardingStep = 1;

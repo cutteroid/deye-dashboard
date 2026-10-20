@@ -33,7 +33,6 @@ COPY outage_providers/ ./outage_providers/
 COPY templates/ ./templates/
 COPY static/ ./static/
 COPY locales/ ./locales/
-COPY update_manager.py .
 COPY storage.py .
 COPY air_alerts.py .
 COPY smart_meter.py .

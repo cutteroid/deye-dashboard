@@ -271,14 +271,6 @@ class TestFirstRunGuards:
         data = resp.get_json()
         assert data["enabled"] is False
 
-    def test_update_status_returns_defaults_when_unconfigured(self, unconfigured_client):
-        c, _ = unconfigured_client
-        resp = c.get("/api/update/status")
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert data["update_available"] is False
-        assert data["manager_state"] == "idle"
-
     def test_index_serves_page_when_unconfigured(self, unconfigured_client):
         c, _ = unconfigured_client
         resp = c.get("/")
@@ -362,9 +354,6 @@ class TestSettingsPin:
         ("post", "/api/config"),
         ("post", "/api/config/reset"),
         ("get", "/api/config/discover"),
-        ("post", "/api/update/check"),
-        ("post", "/api/update/apply"),
-        ("post", "/api/update/rollback"),
         ("post", "/api/phase-stats/clear"),
     ])
     def test_settings_endpoints_require_pin(self, client, method, url):

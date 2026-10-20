@@ -1,4 +1,6 @@
-## Changes compared to `main`
+## Changes compared to the original project
+
+What this fork adds to the original [ivanursul/deye-dashboard](https://github.com/ivanursul/deye-dashboard):
 
 **New cards and features**
 - **Air raid alerts map:** Ukraine with oblasts and raions, live from [NEPTUN](https://neptun.in.ua/) (refreshed every 30 s), on a card and on the fullscreen first page. You can show the whole country or zoom to one region, with neighbouring regions dimmed around it (Settings → step 4).
@@ -35,6 +37,7 @@
   - runs on waitress;
   - config and all data files live in the `data/` volume, so they survive rebuilds and deploys;
   - `docker compose up` also starts the MQTT broker.
+- **Update checker removed:** the built-in OTA updater looked for releases of the original project. On a first deploy to a plain server, `deploy.sh` even replaced the copied files with the original's latest release. Updates now go through `git pull` + Docker / `deploy_nas.sh` / `deploy.sh`.
 - **Synology NAS** (e.g. DS223j):
   - `tools/export_images.sh` builds a ready-to-load image bundle;
   - `tools/deploy_nas.sh` pushes updates in seconds (one password prompt, build progress).
@@ -148,8 +151,8 @@ Raspberry Pi зчитує дані з вашого інвертора кожні
 ## Quick Start
 
 ```bash
-git clone https://github.com/ivanursul/deye-dashboard.git
-cd deye-dashboard
+git clone https://github.com/cutteroid/kiosk-dashboard.git
+cd kiosk-dashboard
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -186,18 +189,21 @@ You can also run the dashboard using Docker, which is the recommended approach f
 ### Using Docker Compose (Recommended)
 
 ```bash
-# Create and configure .env file
-cp .env.example .env
-# Edit .env with your inverter IP, logger serial, etc.
+git clone https://github.com/cutteroid/kiosk-dashboard.git
+cd kiosk-dashboard
 
-# Build and start the dashboard
-docker-compose up -d
+# Build and start the dashboard (and the MQTT broker for the smart meter)
+docker compose up -d
+
+# Open http://localhost:8080 — without a configuration the setup wizard starts
+# and saves it to data/.env. Or prepare it yourself first:
+#   mkdir -p data && cp .env.example data/.env   (then edit data/.env)
 
 # View logs
-docker-compose logs -f
+docker compose logs -f
 
 # Stop the dashboard
-docker-compose down
+docker compose down
 ```
 
 ### Using Docker CLI
@@ -206,15 +212,16 @@ docker-compose down
 # Build the image
 docker build -t deye-dashboard:latest .
 
-# Run the container
+# Run the container (configuration and data live in ./data, see Data Persistence)
 docker run -d \
   --name deye-dashboard \
   -p 8080:8080 \
-  --env-file .env \
   -v $(pwd)/data:/app/data \
   --restart unless-stopped \
   deye-dashboard:latest
 ```
+
+Don't pass the settings with `--env-file` / `-e`: environment variables take precedence over `data/.env`, so changes saved from the dashboard's settings would be ignored.
 
 ### Running on Another Machine Without Building (e.g. Synology NAS)
 
@@ -307,7 +314,7 @@ DTEK has no public API, so this provider reads the community feed [outage-data-u
 
 ### Settings PIN
 
-The settings panel (gear button) opens without a PIN for local, per-device settings such as low power mode (the language button is also always available). Server-side settings — OTA update/rollback, Edit Configuration and Factory Reset — are locked behind the settings PIN (**Unlock** in the panel) and lock again when the panel closes. The server enforces the same PIN on the API endpoints behind them: config read/save/reset, inverter discovery, OTA check/update/rollback and clearing phase statistics. After 5 wrong attempts, PIN checks are locked for 60 seconds.
+The settings panel (gear button) opens without a PIN for local, per-device settings such as low power mode (the language button is also always available). Server-side settings — Edit Configuration and Factory Reset — are locked behind the settings PIN (**Unlock** in the panel) and lock again when the panel closes. The server enforces the same PIN on the API endpoints behind them: config read/save/reset, inverter discovery and clearing phase statistics. After 5 wrong attempts, PIN checks are locked for 60 seconds.
 
 | Variable | Description | Default |
 |----------|-------------|---------|

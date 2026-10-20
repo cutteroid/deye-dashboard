@@ -9,7 +9,6 @@ from flask import Flask, render_template, jsonify, request, url_for
 from inverters import BatterySampler, DRIVERS, InverterConfig, create_inverter, driver_class
 from telegram_bot import TelegramBot
 from outage_providers import OutageSchedulePoller, create_outage_provider
-from update_manager import get_current_version, UpdatePoller, UpdateManager
 from storage import atomic_write_json, data_path, load_json
 from air_alerts import AlertsPoller, create_alerts_provider, REGION_CODES
 from smart_meter import create_smart_meter_from_env
@@ -479,8 +478,6 @@ battery_sampler = None
 outage_poller = None
 weather_poller = None
 inverter_poller = None
-update_poller = None
-update_manager = None
 alerts_poller = None
 smart_meter = None
 
@@ -545,7 +542,7 @@ def init_services():
     """Initialise all background services (inverter, pollers, etc.)."""
     global inverter, inverter_config, battery_sampler
     global outage_poller, weather_poller, inverter_poller
-    global update_poller, update_manager, alerts_poller, smart_meter
+    global alerts_poller, smart_meter
 
     inverter = create_inverter(os.environ)
     inverter_config = initial_inverter_config()
@@ -595,12 +592,6 @@ def init_services():
                                     cache_file=INVERTER_CACHE_FILE)
     inverter_poller.start()
 
-    # OTA update system
-    github_repo = os.environ.get("GITHUB_REPO", "ivanursul/deye-dashboard")
-    update_check_interval = int(env_float("UPDATE_CHECK_INTERVAL", 600))
-    update_poller = UpdatePoller(repo=github_repo, poll_interval=update_check_interval)
-    update_manager = UpdateManager()
-    update_poller.start()
 
 
 # Read-modify-write of the data files happens from the poller thread and from
@@ -1075,74 +1066,6 @@ def get_generator():
     return jsonify(result)
 
 
-@app.route("/api/update/status")
-def get_update_status():
-    """Get current version, update availability, and manager state."""
-    if not _configured:
-        return jsonify({
-            "current_version": get_current_version(),
-            "latest_tag": None, "update_available": False,
-            "available_tags": [], "last_checked": None,
-            "manager_state": "idle", "manager_message": "",
-            "manager_error": None, "is_git_repo": False,
-        })
-    data = update_poller.data or {}
-    mgr_status = update_manager.status
-    return jsonify({
-        "current_version": data.get("current_version", get_current_version()),
-        "latest_tag": data.get("latest_tag"),
-        "update_available": data.get("update_available", False),
-        "available_tags": data.get("available_tags", []),
-        "last_checked": data.get("last_checked"),
-        "manager_state": mgr_status["state"],
-        "manager_message": mgr_status["message"],
-        "manager_error": mgr_status["error"],
-        "is_git_repo": update_manager.is_git_repo(),
-    })
-
-
-@app.route("/api/update/check", methods=["POST"])
-@require_settings_pin
-def check_for_updates():
-    """Force an immediate check for updates."""
-    update_poller.force_check()
-    return jsonify({"status": "ok"})
-
-
-def _start_update(action):
-    """Start an update/rollback to a tag the update poller has seen on GitHub."""
-    tag = (request.get_json(silent=True) or {}).get("tag")
-    if not tag:
-        return jsonify({"status": "error", "error": "Missing 'tag' parameter"}), 400
-    known_tags = ((update_poller.data if update_poller else None) or {}).get("available_tags", [])
-    if tag not in known_tags:
-        return jsonify({"status": "error", "error": f"Unknown tag: {tag}"}), 400
-    if not update_manager.update_to_tag(tag):
-        return jsonify({"status": "error", "error": f"{action} already in progress"}), 409
-    return jsonify({"status": "ok", "message": f"{action} to {tag} started"})
-
-
-@app.route("/api/update/apply", methods=["POST"])
-@require_settings_pin
-def apply_update():
-    """Apply an update to the specified tag."""
-    return _start_update("Update")
-
-
-@app.route("/api/update/rollback", methods=["POST"])
-@require_settings_pin
-def rollback_update():
-    """Rollback to the specified tag (same mechanism as update)."""
-    return _start_update("Rollback")
-
-
-@app.route("/api/update/preflight")
-def update_preflight():
-    """Run preflight checks before update."""
-    ok, issues = update_manager.preflight_check()
-    return jsonify({"ok": ok, "issues": issues})
-
-
 @app.route("/api/settings/verify-pin", methods=["POST"])
 def verify_settings_pin():
     """Check the PIN entered to open the settings panel."""
@@ -1312,7 +1235,6 @@ def main():
 
     # Log startup configuration
     logger.info("=== Dashboard starting ===")
-    logger.info("Version: %s", get_current_version())
     try:
         driver = driver_class(os.environ.get("INVERTER_TYPE"))
         logger.info("Inverter driver: %s  %s", driver.name,
