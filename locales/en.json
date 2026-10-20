@@ -245,7 +245,8 @@
     "status_stale": "No recent data",
     "status_error": "MQTT broker unavailable",
     "demo": "Demo data",
-    "no_voltage": "No voltage"
+    "no_voltage": "No voltage",
+    "disconnected": "Disconnected"
   },
   "phase_stats": {
     "title": "Daily Phase Analytics",

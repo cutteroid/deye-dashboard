@@ -772,7 +772,10 @@ class TelegramBot:
                 self.battery_low_notified = False
 
         # --- Grid monitoring with 2-minute debounce ---
-        grid_is_down = grid_voltage < 50
+        # grid_online: from the inverter's grid relay (on battery although a phase
+        # may still show voltage); older data without it: voltage
+        grid_online = data.get("grid_online")
+        grid_is_down = (not grid_online) if isinstance(grid_online, bool) else grid_voltage < 50
         soc_for_grid = data.get("battery_soc", 0) if has_battery else 0
 
         if grid_is_down:

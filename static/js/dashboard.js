@@ -613,6 +613,13 @@ function batteryPowerHtml(watts) {
         escapeHtml(t(kw ? 'units.kw' : 'units.w'));
 }
 
+// Grid power actually in use: the server decides from the inverter's grid relay
+// (falls back to voltage for older data)
+function gridIsOnline(data) {
+    if (typeof data.grid_online === 'boolean') return data.grid_online;
+    return (data.grid_voltage || 0) > 100;
+}
+
 function updateBatteryBanner(data) {
     const banner = document.getElementById('battery-banner');
     const valueEl = document.getElementById('battery-banner-value');
@@ -639,7 +646,7 @@ function updateBatteryBanner(data) {
     if (flow === 'charging' && typeof data.battery_charge_minutes === 'number') {
         minutes = data.battery_charge_minutes;
         labelKey = 'battery_banner.charge_label';
-    } else if (flow === 'discharging' && (data.grid_voltage || 0) < 100 &&
+    } else if (flow === 'discharging' && !gridIsOnline(data) &&
                typeof data.battery_runtime_minutes === 'number') {
         minutes = data.battery_runtime_minutes;
         labelKey = 'battery_banner.runtime_label';
@@ -688,7 +695,7 @@ function updateEnergyFlow(data) {
     const loadPower = data.load_power || 0;
     const gridPower = data.grid_power || 0;
     const batterySoc = data.battery_soc || 0;
-    const gridVoltage = data.grid_voltage || 0;
+    const gridOnline = gridIsOnline(data);
 
     // Calculate total through inverter
     const inverterPower = solarPower + Math.abs(batteryPower) + Math.abs(gridPower);
@@ -769,7 +776,7 @@ function updateEnergyFlow(data) {
     }
 
     // Grid: Show importing/exporting
-    if (gridVoltage > 100) {
+    if (gridOnline) {
         if (gridPower > 50) {
             // Importing from grid
             gridComp.classList.add('active', 'grid-importing');
@@ -940,7 +947,7 @@ function updateDashboard() {
             const gridBanner = document.getElementById('grid-banner');
             const gridStatusValue = document.getElementById('grid-status-value');
             const gridStatusLabel = document.getElementById('grid-status-label');
-            const isOnline = data.grid_voltage > 100;
+            const isOnline = gridIsOnline(data);
 
             if (isOnline) {
                 gridBanner.classList.remove('offline');
@@ -1381,10 +1388,9 @@ function updateBatteryOverlay(data) {
         return;
     }
 
-    var gridVoltage = data.grid_voltage || 0;
     var soc = data.battery_soc || 0;
 
-    if (gridVoltage < 100 && soc < 50) {
+    if (!gridIsOnline(data) && soc < 50) {
         // More aggressive: 0.1 at SOC 45%, up to 0.6 at SOC 0%
         var opacity = Math.min(((50 - soc) / 50) * 0.5 + 0.1, 0.6);
         overlay.style.background = 'rgba(120, 15, 15, ' + opacity.toFixed(3) + ')';
@@ -1463,18 +1469,32 @@ function renderSmartMeter() {
     document.getElementById('meter-single-phase').style.display = threePhase ? 'none' : '';
     document.getElementById('meter-phases').hidden = !threePhase;
     if (threePhase) {
+        // Per phase: cut by the meter's relay, without supply, or normal
+        var state = [0, 1, 2].map(function(i) {
+            if (d.phases_connected && d.phases_connected[i] === false) return 'cut';
+            if (d.phases_on && d.phases_on[i] === false) return 'no_voltage';
+            return 'ok';
+        });
+        var anyOk = state.indexOf('ok') >= 0;
         var rows = '';
         for (var i = 0; i < 3; i++) {
             var pick = function(list) { return list && list.length > i ? list[i] : null; };
             var label = '<td><span class="phase-label l' + (i + 1) + '">L' + (i + 1) + '</span></td>';
-            if (pick(d.phases_on) === false) {
-                // Phase without supply (voltage ~0)
-                rows += '<tr class="meter-phase-off">' + label + '<td class="meter-no-voltage" colspan="3">' +
-                    t('meter.no_voltage') + '</td></tr>';
+            if (state[i] === 'ok') {
+                rows += '<tr>' + label + '<td>' + fmt(pick(d.voltage), 0) + '</td><td>' +
+                    fmt(pick(d.current), 1) + '</td><td>' + fmt(pick(d.power_phases), 0) + '</td></tr>';
                 continue;
             }
-            rows += '<tr>' + label + '<td>' + fmt(pick(d.voltage), 0) + '</td><td>' +
-                fmt(pick(d.current), 1) + '</td><td>' + fmt(pick(d.power_phases), 0) + '</td></tr>';
+            // A lost phase stands out while the meter is live and other phases still work
+            var cls = 'meter-phase-off' + (d.status === 'ok' && anyOk ? ' meter-phase-alert' : '');
+            if (state[i] === 'cut') {
+                // Keep the voltage: it's usually why the meter tripped (e.g. over 255 V)
+                rows += '<tr class="' + cls + '">' + label + '<td class="meter-phase-v">' + fmt(pick(d.voltage), 0) +
+                    '</td><td class="meter-phase-state" colspan="2">' + t('meter.disconnected') + '</td></tr>';
+            } else {
+                rows += '<tr class="' + cls + '">' + label + '<td class="meter-phase-state" colspan="3">' +
+                    t('meter.no_voltage') + '</td></tr>';
+            }
         }
         document.getElementById('meter-phases-body').innerHTML = rows;
     } else {
@@ -1485,8 +1505,9 @@ function renderSmartMeter() {
     var freq = d.frequency_max != null ? d.frequency_max : d.frequency_min;
     document.getElementById('meter-frequency').textContent =
         typeof freq === 'number' ? t('meter.frequency', { value: freq.toFixed(1) }) : '';
+    // One relay per phase: its state is in the phase rows; otherwise relay 1 here
     var relays = d.relays || [];
-    document.getElementById('meter-relay').textContent = relays.length
+    document.getElementById('meter-relay').textContent = relays.length && !(threePhase && d.phases_connected)
         ? t('meter.relay', { state: t(relays[0] > 0 ? 'meter.relay_on' : 'meter.relay_off') })
         : '';
 }

@@ -89,3 +89,17 @@ def test_capacity_and_shutdown_soc_for_runtime(inverter):
     regs[592] = 280                                   # BMS-measured capacity wins
     with patch.object(inverter, "read_register", side_effect=lambda addr: regs.get(addr, 0)):
         assert inverter._read_3p_data_unlocked()["battery_capacity_ah"] == 280
+
+
+@pytest.mark.parametrize("relay,volts,online", [
+    (0x05, (227.6, 225.1, 215.4), True),    # inverter + grid relay closed
+    (0x01, (238.0, 255.7, 239.0), False),   # grid relay open (phase over limit), voltage still present
+    (0x01, (238.0, 0.0, 239.0), False),     # one phase cut
+    (0x00, (227.6, 225.1, 215.4), True),    # relay register not supported: voltages decide
+    (0x00, (227.6, 0.0, 215.4), False),     #   ... and every phase must have supply
+])
+def test_grid_online_from_relay_and_voltages(inverter, relay, volts, online):
+    regs = {**REGISTERS, 552: relay, 598: int(volts[0] * 10), 599: int(volts[1] * 10), 600: int(volts[2] * 10)}
+    with patch.object(inverter, "read_register", side_effect=lambda addr: regs.get(addr, 0)):
+        data = inverter._read_3p_data_unlocked()
+    assert data["grid_online"] is online and data["grid_relay"] == relay

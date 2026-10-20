@@ -268,6 +268,12 @@ class SmartMeter:
             "today_generated_kwh": None if today_generated is None else today_generated / 1000,
             "relays": [relays[k] for k in sorted(relays, key=lambda r: int(r[1:]) if r[1:].isdigit() else 0)],
         }
+        # Three-phase meters with one relay per phase (r1..r3 = L1..L3): a phase
+        # with its relay off is cut by the meter (it still measures the grid-side
+        # voltage, e.g. the overvoltage that made it trip)
+        relay_list = result["relays"]
+        result["phases_connected"] = ([r > 0 for r in relay_list]
+                                      if phases == 3 and len(relay_list) == 3 else None)
         # Without instantaneous P (only dataJson received so far), fall back to the
         # minute's max power so the card isn't empty
         if result["power_w"] is None and total("Pmax") is not None:

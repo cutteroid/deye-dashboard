@@ -127,3 +127,23 @@ class TestStateWrites:
             bot.battery_low_notified = True
             bot._save_state()
             assert write.call_count == 2
+
+
+class TestGridRelay:
+    """grid_online (inverter's grid relay) wins over the L1 voltage."""
+
+    def test_relay_open_with_voltage_counts_as_down(self, bot):
+        _poller_data(bot, grid_voltage=240, grid_online=False)  # e.g. a phase cut by the smart meter
+        bot._broadcast_grid_down = MagicMock()
+        with patch("telegram_bot.time.time", return_value=1000.0):
+            bot.check_inverter()
+        with patch("telegram_bot.time.time", return_value=1000.0 + 121):
+            bot.check_inverter()
+        bot._broadcast_grid_down.assert_called_once()
+
+    def test_without_grid_online_falls_back_to_voltage(self, bot):
+        _poller_data(bot, grid_voltage=230)
+        bot._broadcast_grid_down = MagicMock()
+        with patch("telegram_bot.time.time", return_value=1000.0):
+            bot.check_inverter()
+        assert bot.grid_down_since is None

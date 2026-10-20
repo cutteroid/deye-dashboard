@@ -23,6 +23,25 @@ FAMILY_PHASES = {"hybrid_1p": 1, "hybrid_3p_lv": 3, "hybrid_3p_hv": 3}
 UNSUPPORTED_FAMILIES = ("string", "micro")  # different register maps, not implemented
 
 
+GRID_ONLINE_MIN_VOLTAGE = 100  # a phase below this has no grid supply
+RELAY_GRID_BIT = 0x04          # register 552 (3-phase): bit 0 inverter, bit 2 grid, bit 3 generator relay
+
+
+def grid_online(relay, voltages):
+    """Is the house actually on grid power?
+
+    The inverter's grid relay is the ground truth: when it disconnects (e.g. a
+    phase out of range, or cut by a smart meter), the house runs on battery even
+    though the other phases still show voltage. relay=0 ("all relays off", also
+    what firmware without this register returns) or None: fall back to the
+    voltages, where every phase must have supply.
+    """
+    if relay:
+        return bool(relay & RELAY_GRID_BIT)
+    present = [v for v in voltages if v is not None]
+    return bool(present) and all(v >= GRID_ONLINE_MIN_VOLTAGE for v in present)
+
+
 def device_family(device_type):
     """Family name for a register-0 value ("unknown" if not recognised)."""
     return DEVICE_FAMILIES.get(device_type, "unknown")
@@ -198,6 +217,7 @@ class DeyeInverter:
 
             # Grid
             data["grid_voltage"] = self.read_register(150) / 10
+            data["grid_online"] = grid_online(None, [data["grid_voltage"]])
             time.sleep(0.05)
             raw_grid_power = self.read_register(169)
             data["grid_power"] = to_signed(raw_grid_power)
@@ -331,6 +351,10 @@ class DeyeInverter:
                 time.sleep(0.05)
                 data["grid_voltage_l3"] = self.read_register(600) / 10
                 time.sleep(0.05)
+            data["grid_relay"] = self.read_register(552)
+            time.sleep(0.05)
+            data["grid_online"] = grid_online(data["grid_relay"], [
+                data["grid_voltage"], data.get("grid_voltage_l2"), data.get("grid_voltage_l3")])
             raw_grid_power = self.read_register(607)
             data["grid_power"] = to_signed(raw_grid_power)
             time.sleep(0.05)

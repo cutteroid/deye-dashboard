@@ -76,6 +76,20 @@ def test_phase_status_from_voltage(meter):
     assert meter.get_status()["phases_on"] == [True, False, True]
 
 
+def test_phase_cut_by_meter_relay(meter):
+    """3 relays on a 3-phase meter = one per phase; the meter still measures the grid side."""
+    meter.handle_message("buckler/3366/dataJson", json.dumps({**THREE_PHASE_JSON, "V": [246.2, 256.4, 241.1],
+                                                               "relay": [100, 0, 100]}))
+    status = meter.get_status()
+    assert status["phases_connected"] == [True, False, True]
+    assert status["phases_on"] == [True, True, True]   # voltage alone wouldn't show it
+
+
+def test_relays_not_per_phase(meter):
+    meter.handle_message("buckler/64/dataJson", json.dumps(THREE_PHASE_JSON))  # 6 relays
+    assert meter.get_status()["phases_connected"] is None
+
+
 def test_phase_status_unknown_without_voltage(meter):
     meter.handle_message("buckler/1/data/P", "100")
     assert meter.get_status()["phases_on"] is None

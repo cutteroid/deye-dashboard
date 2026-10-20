@@ -177,7 +177,7 @@ tools/export_images.sh          # this machine's architecture
 tools/export_images.sh amd64    # cross-build for an Intel/AMD machine
 ```
 
-**Updates:** `tools/deploy_nas.sh` sends only the files the image is built from (~0.2 MB) to the NAS over SSH and rebuilds there (`docker compose up -d --build`); Docker reuses its cached layers, so a code-only update takes seconds. The first run asks for the SSH login and the dashboard folder on the NAS (saved to `tools/.deploy_nas.env`, not committed) and is slow once, because the NAS downloads the Python base image and installs the packages. `data/` on the NAS is never touched. `sudo` asks for the NAS password on each run; set up an SSH key (`ssh-copy-id user@nas`) to skip the login prompt. `tools/deploy_nas.sh --setup` changes the saved address.
+**Updates:** `tools/deploy_nas.sh` sends only the files the image is built from (~0.2 MB) to the NAS over SSH and rebuilds there (`docker compose up -d --build`); Docker reuses its cached layers, so a code-only update takes seconds. The first run asks for the SSH login and the dashboard folder on the NAS (saved to `tools/.deploy_nas.env`, not committed) and is slow once, because the NAS downloads the Python base image and installs the packages. `data/` on the NAS is never touched. The script asks for the NAS password once at the start of each run and uses it for both the SSH login and `sudo` (on DSM they're the same; it only asks again if `sudo` rejects it). With an SSH key (`ssh-copy-id user@nas`) the login needs no password, and if `sudo` needs none either, the script doesn't ask at all. `tools/deploy_nas.sh --setup` changes the saved address.
 
 ### Data Persistence
 

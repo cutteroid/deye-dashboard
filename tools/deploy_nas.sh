@@ -4,7 +4,8 @@
 # and restarts there. Docker reuses its cached layers, so a code-only update
 # takes seconds; only the first run (base image + Python packages) is slow.
 #
-#   tools/deploy_nas.sh            deploy (asks for the NAS address on first run)
+#   tools/deploy_nas.sh            deploy (asks for the NAS address on first run;
+#                                  then at most one password prompt per run)
 #   tools/deploy_nas.sh --setup    change the saved NAS address / folder
 #
 # Settings are kept in tools/.deploy_nas.env (not committed). The NAS folder's
@@ -29,11 +30,47 @@ fi
 . "$CONF"
 case "$NAS_DIR" in /*/*) ;; *) echo "NAS_DIR must be an absolute path like /volume1/docker/..." >&2; exit 1 ;; esac
 
-SSH=(ssh -p "$NAS_PORT" -o ConnectTimeout=10)
-# One connection for all steps (one login / key prompt)
+# One SSH connection for all steps, opened first; every later step reuses it.
+# Login: an SSH key if there is one (ssh-copy-id user@nas), otherwise the NAS
+# password, asked once here and reused for sudo below (on DSM it's the same).
 SOCKET_DIR=$(mktemp -d)
 trap 'ssh -p "$NAS_PORT" -o ControlPath="$SOCKET_DIR/s" -O exit "$NAS_SSH" 2>/dev/null; rm -rf "$SOCKET_DIR"' EXIT
-SSH+=(-o ControlMaster=auto -o ControlPath="$SOCKET_DIR/s" -o ControlPersist=60)
+SSH=(ssh -p "$NAS_PORT" -o ConnectTimeout=10 -o ControlPath="$SOCKET_DIR/s")
+# accept-new: a NAS seen for the first time is remembered (instead of a yes/no
+# question the password helper would answer); a changed host key is still refused
+MASTER=("${SSH[@]}" -fN -o ControlMaster=yes -o ControlPersist=300 -o StrictHostKeyChecking=accept-new)
+echo "==> Connecting to $NAS_SSH"
+NAS_PW=""
+if ! "${MASTER[@]}" -o BatchMode=yes "$NAS_SSH" 2>/dev/null; then
+    read -rsp "    NAS password for $NAS_SSH: " NAS_PW; echo
+    # OpenSSH takes the password from this helper instead of the keyboard
+    # (SSH_ASKPASS_REQUIRE needs OpenSSH 8.4+; older versions just ask themselves)
+    ASKPASS="$SOCKET_DIR/askpass"
+    printf '#!/bin/sh\nprintf "%%s\\n" "$NAS_DEPLOY_PW"\n' > "$ASKPASS"
+    chmod 700 "$ASKPASS"
+    NAS_DEPLOY_PW="$NAS_PW" SSH_ASKPASS="$ASKPASS" SSH_ASKPASS_REQUIRE=force \
+        "${MASTER[@]}" -o NumberOfPasswordPrompts=1 "$NAS_SSH" ||
+        { echo "    Login failed" >&2; exit 1; }
+fi
+
+# sudo password: none needed, else the login password, else asked (up to 3 tries).
+# It reaches the NAS over the SSH connection's stdin (never on a command line,
+# where `ps` would show it).
+sudo_ok() { printf '%s\n' "$1" | "${SSH[@]}" "$NAS_SSH" "sudo -S -p '' -v" 2>/dev/null; }
+SUDO_PW=""
+if ! "${SSH[@]}" -n "$NAS_SSH" "sudo -n true" 2>/dev/null; then
+    if [ -n "$NAS_PW" ] && sudo_ok "$NAS_PW"; then
+        SUDO_PW=$NAS_PW
+    else
+        for attempt in 1 2 3; do
+            read -rsp "    NAS password for sudo ($NAS_SSH): " SUDO_PW; echo
+            sudo_ok "$SUDO_PW" && break
+            echo "    Wrong password" >&2
+            [ "$attempt" = 3 ] && exit 1
+        done
+    fi
+fi
+unset NAS_PW
 
 # What the image is built from: Dockerfile COPY sources + compose + broker entrypoint
 FILES=(Dockerfile .dockerignore docker-compose.yml mosquitto/entrypoint.sh)
@@ -57,20 +94,29 @@ echo "==> Sending $(pack | wc -c | awk '{printf "%.1f MB", $1/1048576}') to $NAS
 pack |
     "${SSH[@]}" "$NAS_SSH" "set -e; mkdir -p '$NAS_DIR'; cd '$NAS_DIR'; rm -rf ${DIRS[*]}; mkdir -p data/mosquitto; tar -xzf -"
 
-echo "==> Rebuilding and restarting on the NAS (sudo may ask for your NAS password)"
+echo "==> Rebuilding and restarting on the NAS"
+# The first stdin line is the sudo password (empty: sudo needs none); every sudo
+# call gets it from there, so nothing prompts again.
 # Synology: docker lives in /usr/local/bin, which sudo's PATH may not include;
 # older DSM only has the standalone docker-compose
-"${SSH[@]}" -t "$NAS_SSH" "set -e; cd '$NAS_DIR'
+printf '%s\n' "$SUDO_PW" | "${SSH[@]}" "$NAS_SSH" "set -e; cd '$NAS_DIR'
+    IFS= read -r PW
+    s() { if [ -n \"\$PW\" ]; then printf '%s\\n' \"\$PW\" | sudo -S -p '' \"\$@\"; else sudo -n \"\$@\"; fi; }
     DOCKER=\$(command -v docker || echo /usr/local/bin/docker)
-    if sudo \"\$DOCKER\" compose version >/dev/null 2>&1; then DC=\"\$DOCKER compose\"
+    if s \"\$DOCKER\" compose version >/dev/null 2>&1; then DC=\"\$DOCKER compose\"
     else DC=\$(command -v docker-compose || echo /usr/local/bin/docker-compose); fi
     # Reuse the compose project of the running containers (Container Manager names
     # it after the Project, not the folder); otherwise compose would try to create
     # a second set with the same container names
-    PROJECT=\$(sudo \"\$DOCKER\" inspect -f '{{index .Config.Labels \"com.docker.compose.project\"}}' deye-dashboard 2>/dev/null || true)
+    PROJECT=\$(s \"\$DOCKER\" inspect -f '{{index .Config.Labels \"com.docker.compose.project\"}}' deye-dashboard 2>/dev/null || true)
     case \"\$PROJECT\" in ''|'<no value>') PROJECT=\$(basename \"\$PWD\") ;; esac
     echo \"Compose project: \$PROJECT\"
-    sudo \$DC -p \"\$PROJECT\" up -d --build
-    sudo \"\$DOCKER\" image prune -f >/dev/null   # drop the replaced image
-    sudo \$DC -p \"\$PROJECT\" ps"
+    # No terminal on the NAS side (stdin carries the password), so compose would
+    # log every build step on its own line: build quietly (errors still show)
+    echo 'Building image (seconds; first run or new requirements: several minutes)...'
+    s \$DC -p \"\$PROJECT\" build --quiet
+    s \$DC -p \"\$PROJECT\" up -d
+    s \"\$DOCKER\" image prune -f >/dev/null   # drop the replaced image
+    s \$DC -p \"\$PROJECT\" ps"
+unset SUDO_PW
 echo "==> Done: http://${NAS_SSH#*@}:8080"

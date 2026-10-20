@@ -1374,30 +1374,31 @@ body.fullscreen-mode .battery-banner-bar {
     margin-top: auto;
 }
 
-/* Battery banner: charge / discharge power stands out (green in, amber out) */
-body.fullscreen-mode .battery-banner-status.battery-flow-charging,
-body.fullscreen-mode .battery-banner-status.battery-flow-discharging {
+/* Battery banner (normal and fullscreen view): charge / discharge power stands
+   out (green in, amber out) */
+.battery-banner-status.battery-flow-charging,
+.battery-banner-status.battery-flow-discharging {
     font-weight: 600;
     opacity: 1;
 }
 
-body.fullscreen-mode .battery-banner-status.battery-flow-charging {
+.battery-banner-status.battery-flow-charging {
     color: #4ade80;
 }
 
-body.fullscreen-mode .battery-banner-status.battery-flow-discharging {
+.battery-banner-status.battery-flow-discharging {
     color: #fbbf24;
 }
 
-body.fullscreen-mode .battery-banner-status.battery-flow-charging::before {
+.battery-banner-status.battery-flow-charging::before {
     content: "\25B2\00A0";   /* ▲ — a basic shape, renders on old Android too */
 }
 
-body.fullscreen-mode .battery-banner-status.battery-flow-discharging::before {
+.battery-banner-status.battery-flow-discharging::before {
     content: "\25BC\00A0";   /* ▼ */
 }
 
-body.fullscreen-mode .battery-flow-power {
+.battery-flow-power {
     font-size: 1.6em;
     font-weight: 800;
     font-variant-numeric: tabular-nums;
@@ -1674,9 +1675,41 @@ body.fullscreen-mode.alerts-enabled:not(.has-generator):not(.outages-disabled) .
     opacity: 0.5;
 }
 
-.meter-phases .meter-no-voltage {
+.meter-phases .meter-phase-state {
     color: #f87171;
     font-weight: 600;
+}
+
+/* Lost phase while the others work: red row, ⚠, label at full strength */
+.meter-phases .meter-phase-alert td {
+    background: rgba(239, 68, 68, 0.16);
+}
+
+.meter-phases .meter-phase-alert td:first-child {
+    box-shadow: inset 3px 0 0 #ef4444;
+    border-radius: 4px 0 0 4px;
+}
+
+.meter-phases .meter-phase-alert td:last-child {
+    border-radius: 0 4px 4px 0;
+}
+
+.meter-phases .meter-phase-alert .phase-label {
+    opacity: 1;
+}
+
+.meter-phases .meter-phase-alert .meter-phase-state {
+    color: #fca5a5;
+    font-weight: 700;
+}
+
+.meter-phases .meter-phase-alert .meter-phase-state::before {
+    content: "\26A0\FE0E\00A0";   /* ⚠ as a text symbol (renders on old Android too) */
+}
+
+.meter-phases .meter-phase-alert .meter-phase-v {
+    color: #fca5a5;
+    font-weight: 700;
 }
 
 .meter-footer {

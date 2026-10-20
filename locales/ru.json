@@ -245,7 +245,8 @@
     "status_stale": "Нет свежих данных",
     "status_error": "MQTT-брокер недоступен",
     "demo": "Демо-данные",
-    "no_voltage": "Нет напряжения"
+    "no_voltage": "Нет напряжения",
+    "disconnected": "Отключено"
   },
   "phase_stats": {
     "title": "Ежедневная аналитика фаз",
