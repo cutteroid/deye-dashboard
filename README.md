@@ -1,3 +1,51 @@
+## Changes compared to `main`
+
+**New cards and features**
+- **Air raid alerts map:** Ukraine with oblasts and raions, live from [NEPTUN](https://neptun.in.ua/) (refreshed every 30 s), on a card and on the fullscreen first page. You can show the whole country or zoom to one region, with neighbouring regions dimmed around it (Settings → step 4).
+- **Planned outages:** today's and tomorrow's outage windows on a timeline, plus a countdown in the grid banner. Adds a DTEK provider (Kyiv oblast, Kyiv, Dnipro, Odesa). A failed schedule fetch is no longer reported as "No outages today".
+- **Bakler smart meter** (optional): live power, voltage and current per phase over MQTT, with a Mosquitto broker in `docker-compose.yml`. Phases cut by the meter or without supply are highlighted. The relay state is shown read-only. A demo mode is included.
+- **Battery estimates:**
+  - "Lasts about …" during an outage, counting down to the inverter's shutdown level;
+  - "Full in …" while charging;
+  - both based on a ~10-minute average power, with an optional `BATTERY_CAPACITY_KWH`.
+- **Grid status that matches reality:** taken from the inverter's grid relay. A partial outage (e.g. "L2 DOWN" / "НЕМАЄ ФАЗИ L2") and "grid out of range" are shown separately from a total outage. Grid voltage is shown per phase.
+- **Weather:** tomorrow's forecast in the fullscreen weather banner.
+- **Phase balance card** (was "Daily Phase Analytics"): today's kWh per phase plus one bar per day for the last 7 days. Tap a day for details.
+- **Consumption card:** home consumption and load per phase merged into one card.
+
+**Inverter support and accuracy**
+- **Inverter driver system** (`inverters/`). Deye / Sunsynk via a Solarman logger is the first driver; other brands can be added (`INVERTER_TYPE`). The UI no longer names a brand.
+- **Model detection** from the inverter's device type: single-phase, 3-phase low-voltage and 3-phase high-voltage hybrids (with HV scaling handled), plus a warning for unsupported string or micro inverters. The phase count can be set in the setup wizard.
+- **Fixed 3-phase readings:**
+  - battery power and current (was reading the battery temperature);
+  - PV power and today's PV (were reading the battery's daily counters);
+  - grid voltage L2/L3.
+
+**Interface**
+- **Languages:** English, Ukrainian and Russian, with a language menu.
+- **Fullscreen kiosk view:** reworked, including a compact layout for 7" tablets (960×600) and emoji that also render on old Android.
+- **Settings:** server settings are protected by a PIN, while local settings (low power mode, language) stay open.
+- **Less clutter:**
+  - removed: sound alerts, the temperature block, the weather background and effects, and the moving card icons;
+  - the planned outages and alerts maps no longer have their own timestamps.
+- **Robust against brief failures:** a dropped request or a busy logger keeps the last data on screen. Errors are only shown when data is really unavailable, and always with the real cause.
+
+**Running it**
+- **Docker:**
+  - runs on waitress;
+  - config and all data files live in the `data/` volume, so they survive rebuilds and deploys;
+  - `docker compose up` also starts the MQTT broker.
+- **Synology NAS** (e.g. DS223j):
+  - `tools/export_images.sh` builds a ready-to-load image bundle;
+  - `tools/deploy_nas.sh` pushes updates in seconds (one password prompt, build progress).
+- **Isolated IoT network:** firewall rules for reaching the logger and the meter on a separate IoT network (see [Devices on a Separate IoT Network](#devices-on-a-separate-iot-network)).
+- **Under the hood:**
+  - CSS, JS and HTML split into their own files;
+  - crash-safe data files;
+  - validated settings;
+  - background services that only start in `main()`;
+  - a test suite of 395 tests.
+
 # Extended Dashboard
 
 A web dashboard for monitoring Deye solar inverters in real-time. Supports both single-phase (e.g. SUN-6K-SG03LP1) and 3-phase hybrid models. Displays solar production, battery status, grid power, home consumption, weather conditions, and power outage schedules.
