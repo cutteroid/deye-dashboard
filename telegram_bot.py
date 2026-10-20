@@ -9,6 +9,7 @@ from calendar import monthrange
 import requests
 
 from outage_providers import BATTERY_CAPACITY_KWH
+from storage import atomic_write_json, load_json
 try:
     from poems import get_poem
 except ImportError:
@@ -140,17 +141,31 @@ MESSAGES_OUTAGE_UNKNOWN = [
 ]
 
 
-BATTERY_REPORT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "battery_reports")
+_APP_DIR = os.path.dirname(os.path.abspath(__file__))
+# In data/ when it exists (persistent Docker volume), like the other data files
+BATTERY_REPORT_DIR = os.path.join(_APP_DIR, "data", "battery_reports") if os.path.isdir(os.path.join(_APP_DIR, "data")) \
+    else os.path.join(_APP_DIR, "battery_reports")
+BATTERY_REPORTS_KEEP = 50  # newest report files kept; older ones are deleted
+
+# Low-battery alert fires below LOW and re-arms only at/above REARM, so a SOC
+# hovering around the threshold doesn't send the alert again and again
+BATTERY_LOW_SOC = 30
+BATTERY_LOW_REARM_SOC = 35
+
+
+# Inverter data older than this (from the dashboard's poller) is treated as unavailable
+INVERTER_DATA_MAX_AGE = 180  # seconds
 
 
 class TelegramBot:
     def __init__(self, token, allowed_users, inverter, battery_sampler=None,
                  outage_poller=None, state_file=None, grid_daily_log_file=None,
-                 weather_poller=None, is_public=False):
+                 weather_poller=None, is_public=False, inverter_poller=None):
         self.token = token
         self.allowed_users = set(allowed_users)
         self.is_public = is_public
         self.inverter = inverter
+        self.inverter_poller = inverter_poller
         self.battery_sampler = battery_sampler
         self.outage_poller = outage_poller
         self.grid_daily_log_file = grid_daily_log_file
@@ -175,8 +190,7 @@ class TelegramBot:
         if not self.state_file or not os.path.exists(self.state_file):
             return
         try:
-            with open(self.state_file, "r") as f:
-                state = json.load(f)
+            state = load_json(self.state_file, {})
             self.grid_confirmed_down = state.get("grid_confirmed_down", False)
             self.battery_low_notified = state.get("battery_low_notified", False)
             self.grid_down_since = state.get("grid_down_since")
@@ -197,9 +211,12 @@ class TelegramBot:
             "grid_up_since": self.grid_up_since,
             "last_update_id": self.last_update_id,
         }
+        # Called every few seconds; only write when something changed (SD card wear)
+        if state == getattr(self, "_last_saved_state", None):
+            return
         try:
-            with open(self.state_file, "w") as f:
-                json.dump(state, f, indent=2)
+            atomic_write_json(self.state_file, state, indent=2)
+            self._last_saved_state = state
         except Exception:
             logger.exception("Failed to save bot state to %s", self.state_file)
 
@@ -220,11 +237,20 @@ class TelegramBot:
             with self.battery_sampler._lock:
                 report["sampler_buffer"] = list(self.battery_sampler._buffer)
         try:
-            with open(filepath, "w") as f:
-                json.dump(report, f, indent=2, default=str)
+            atomic_write_json(filepath, report, indent=2, default=str)
             logger.info("Battery report saved to %s", filepath)
         except Exception:
             logger.exception("Failed to save battery report to %s", filepath)
+        self._prune_battery_reports()
+
+    def _prune_battery_reports(self):
+        """Keep only the newest BATTERY_REPORTS_KEEP report files (names sort by time)."""
+        try:
+            reports = sorted(f for f in os.listdir(BATTERY_REPORT_DIR) if f.endswith(".json"))
+            for old in reports[:-BATTERY_REPORTS_KEEP]:
+                os.remove(os.path.join(BATTERY_REPORT_DIR, old))
+        except OSError:
+            logger.exception("Failed to prune battery reports")
 
     def _get_provider_name(self):
         """Return human-readable name of the outage provider."""
@@ -271,6 +297,7 @@ class TelegramBot:
             payload["reply_markup"] = reply_markup
 
         for attempt in range(4):  # up to 4 attempts: 0s, 2s, 4s, 8s
+            backoff = 2 ** attempt
             try:
                 resp = requests.post(
                     f"{self.api_url}/sendMessage",
@@ -279,11 +306,20 @@ class TelegramBot:
                 )
                 if resp.ok:
                     return True
-                logger.error("Failed to send message (attempt %d): %s", attempt + 1, resp.text)
-            except Exception:
-                logger.warning("Error sending Telegram message (attempt %d)", attempt + 1)
+                logger.error("Failed to send message (attempt %d): %s %s",
+                             attempt + 1, resp.status_code, resp.text[:200])
+                if resp.status_code == 429:
+                    # Rate limited: Telegram says how long to wait
+                    try:
+                        backoff = int(resp.json()["parameters"]["retry_after"])
+                    except (ValueError, KeyError, TypeError):
+                        pass
+                elif 400 <= resp.status_code < 500:
+                    # Bad request, bot blocked by the user, etc.: retrying won't help
+                    return False
+            except requests.RequestException as e:
+                logger.warning("Error sending Telegram message (attempt %d): %s", attempt + 1, type(e).__name__)
             if attempt < 3:
-                backoff = 2 ** attempt
                 logger.info("Retrying send_message in %ds (attempt %d/4)", backoff, attempt + 2)
                 time.sleep(backoff)
 
@@ -321,24 +357,33 @@ class TelegramBot:
 
         for update in updates:
             self.last_update_id = update["update_id"]
-            message = update.get("message")
-            if not message or not message.get("text"):
-                continue
+            try:
+                self._dispatch_update(update)
+            except Exception:
+                # Log and move on: the offset above is already advanced (and saved
+                # by the loop), so a message that crashes a handler isn't replayed
+                logger.exception("Error handling Telegram update %s", update.get("update_id"))
 
-            chat_id = message["chat"]["id"]
-            user_id = message["from"]["id"]
-            text = message["text"].strip()
+    def _dispatch_update(self, update):
+        """Route one Telegram update to its command handler."""
+        message = update.get("message")
+        if not message or not message.get("text"):
+            return
 
-            if text == "/start":
-                self._handle_start(chat_id, user_id)
-            elif text == "/test":
-                self._handle_test(chat_id, user_id)
-            elif text in ("/battery", "⚡ Сховище енергії"):
-                self._handle_battery(chat_id, user_id)
-            elif text in ("/outage", "💡 Коли включать світло?"):
-                self._handle_outage(chat_id, user_id)
-            elif text in ("/grid", "📊 Спожито з мережі"):
-                self._handle_grid_consumption(chat_id, user_id)
+        chat_id = message["chat"]["id"]
+        user_id = message["from"]["id"]
+        text = message["text"].strip()
+
+        if text == "/start":
+            self._handle_start(chat_id, user_id)
+        elif text == "/test":
+            self._handle_test(chat_id, user_id)
+        elif text in ("/battery", "⚡ Сховище енергії"):
+            self._handle_battery(chat_id, user_id)
+        elif text in ("/outage", "💡 Коли включать світло?"):
+            self._handle_outage(chat_id, user_id)
+        elif text in ("/grid", "📊 Спожито з мережі"):
+            self._handle_grid_consumption(chat_id, user_id)
 
     def _main_keyboard(self):
         """Return the persistent reply keyboard."""
@@ -402,7 +447,7 @@ class TelegramBot:
             return
 
         try:
-            data = self.inverter.read_all_data(battery_sampler=self.battery_sampler)
+            data = self._get_inverter_data()
         except Exception:
             self.send_message(chat_id, "Не вдалося зчитати дані з інвертора.")
             return
@@ -474,9 +519,7 @@ class TelegramBot:
             load = 0
             if self.inverter.config.has_battery:
                 try:
-                    data = self.inverter.read_all_data(
-                        battery_sampler=self.battery_sampler
-                    )
+                    data = self._get_inverter_data()
                     if not data.get("error"):
                         soc = data.get("battery_soc", 0)
                         load = data.get("load_power", 0)
@@ -532,11 +575,10 @@ class TelegramBot:
 
     def _load_grid_daily_log(self):
         """Load grid daily import log from file."""
-        if not self.grid_daily_log_file or not os.path.exists(self.grid_daily_log_file):
+        if not self.grid_daily_log_file:
             return {}
         try:
-            with open(self.grid_daily_log_file, "r") as f:
-                return json.load(f)
+            return load_json(self.grid_daily_log_file, {})
         except Exception:
             logger.exception("Failed to load grid daily log")
             return {}
@@ -674,10 +716,30 @@ class TelegramBot:
         )
         self.broadcast(self._append_poem(msg))
 
+    def _get_inverter_data(self):
+        """Latest inverter data from the dashboard's poller (no extra inverter reads).
+
+        The poller already reads the inverter every minute; reading it again from
+        the bot would hold the inverter lock and add load on the logger. Falls back
+        to a direct read only when no poller is wired in.
+        """
+        if self.inverter_poller is None:
+            return self.inverter.read_all_data(battery_sampler=self.battery_sampler)
+        data = self.inverter_poller.data
+        if not data:
+            return {"error": "no inverter data yet"}
+        try:
+            age = (datetime.now() - datetime.fromisoformat(data["last_updated"])).total_seconds()
+        except (KeyError, TypeError, ValueError):
+            age = None
+        if age is None or age > INVERTER_DATA_MAX_AGE:
+            return {"error": "inverter data is stale"}
+        return data
+
     def check_inverter(self):
         """Read inverter data and check alert conditions."""
         try:
-            data = self.inverter.read_all_data(battery_sampler=self.battery_sampler)
+            data = self._get_inverter_data()
         except Exception:
             logger.exception("Error reading inverter data for Telegram bot")
             return
@@ -703,17 +765,20 @@ class TelegramBot:
                 )
                 return
 
-            if soc < 30 and not self.battery_low_notified:
+            if soc < BATTERY_LOW_SOC and not self.battery_low_notified:
                 self._save_battery_report(data, "battery_low_alert")
                 msg = self._pick_message(MESSAGES_BATTERY_LOW, soc=soc)
                 self.broadcast(self._append_poem(msg))
                 self.battery_low_notified = True
                 logger.info("Battery low notification sent (SOC=%s%%)", soc)
-            elif soc >= 30 and self.battery_low_notified:
+            elif soc >= BATTERY_LOW_REARM_SOC and self.battery_low_notified:
                 self.battery_low_notified = False
 
         # --- Grid monitoring with 2-minute debounce ---
-        grid_is_down = grid_voltage < 50
+        # grid_online: from the inverter's grid relay (on battery although a phase
+        # may still show voltage); older data without it: voltage
+        grid_online = data.get("grid_online")
+        grid_is_down = (not grid_online) if isinstance(grid_online, bool) else grid_voltage < 50
         soc_for_grid = data.get("battery_soc", 0) if has_battery else 0
 
         if grid_is_down:
@@ -755,16 +820,26 @@ class TelegramBot:
             # Normal: every command_interval. After failures: up to 60s
             poll_backoff = min(command_interval * (2 ** self._poll_failures), 60)
             if now - last_poll >= poll_backoff:
-                self.poll_commands()
-                self._save_state()
                 last_poll = now
+                self._run_step(self.poll_commands)
 
             if now - last_inverter_check >= inverter_interval:
-                self.check_inverter()
-                self._save_state()
                 last_inverter_check = now
+                self._run_step(self.check_inverter)
 
             time.sleep(1)
+
+    def _run_step(self, step):
+        """Run one loop step; an exception is logged instead of killing the bot thread."""
+        try:
+            step()
+        except Exception:
+            logger.exception("Telegram bot: %s failed", step.__name__)
+        finally:
+            try:
+                self._save_state()
+            except Exception:
+                logger.exception("Telegram bot: saving state failed")
 
     def start(self, inverter_interval=120):
         """Start the bot in a background thread."""

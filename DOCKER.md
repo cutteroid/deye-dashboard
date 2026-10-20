@@ -113,7 +113,6 @@ All configuration is done through environment variables in your `.env` file:
 
 The container mounts a `data` volume at `/app/data` for persistent storage of:
 
-- Outage history (`outage_history.json`)
 - Phase statistics (`phase_stats.json`)
 - Phase history (`phase_history.json`)
 

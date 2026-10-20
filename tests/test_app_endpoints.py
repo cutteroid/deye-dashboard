@@ -4,7 +4,7 @@ import pytest
 from unittest.mock import patch, MagicMock, PropertyMock
 from datetime import datetime, timedelta
 
-from inverter import InverterConfig
+from inverters import InverterConfig
 
 
 @pytest.fixture
@@ -19,6 +19,7 @@ def client():
     orig_outage_poller = app_module.outage_poller
     orig_weather_poller = app_module.weather_poller
     orig_inverter_config = app_module.inverter_config
+    orig_configured = app_module._configured
 
     # Create mock pollers
     mock_inv_poller = MagicMock()
@@ -27,6 +28,7 @@ def client():
     app_module.inverter_poller = mock_inv_poller
     app_module.weather_poller = mock_weather_poller
     app_module.inverter_config = InverterConfig(phases=3, has_battery=True, pv_strings=2, has_generator=False)
+    app_module._configured = True  # endpoints return 503/defaults when unconfigured
 
     with app_module.app.test_client() as c:
         yield c, mock_inv_poller, app_module
@@ -36,6 +38,7 @@ def client():
     app_module.outage_poller = orig_outage_poller
     app_module.weather_poller = orig_weather_poller
     app_module.inverter_config = orig_inverter_config
+    app_module._configured = orig_configured
 
 
 class TestGetData:
@@ -121,6 +124,7 @@ class TestGetOutageSchedule:
             "end_time": now + timedelta(minutes=30),
             "remaining_minutes": 30,
         }
+        mock_poller.provider.display_name = "ДТЕК"
         app_module.outage_poller = mock_poller
         resp = c.get("/api/outage_schedule")
         data = resp.get_json()
@@ -128,42 +132,45 @@ class TestGetOutageSchedule:
         assert "start_time" in data
         assert "end_time" in data
         assert data["remaining_minutes"] == 30
+        assert data["provider"] == "ДТЕК"
 
-
-class TestAddOutage:
-    def test_start_event_appended(self, client):
+    def test_days_are_serialized(self, client):
         c, _, app_module = client
-        with patch.object(app_module, "load_outage_history", return_value=[]), \
-             patch.object(app_module, "save_outage_history") as mock_save:
-            resp = c.post("/api/outages", json={
-                "type": "start",
-                "timestamp": "2025-01-15T10:00:00",
-                "voltage": 0,
-            })
-        assert resp.status_code == 200
-        saved = mock_save.call_args[0][0]
-        assert len(saved) == 1
-        assert saved[0]["type"] == "start"
+        today = datetime(2026, 10, 17)
+        tomorrow = datetime(2026, 10, 18)
+        mock_poller = MagicMock()
+        mock_poller.get_outage_status.return_value = {
+            "status": "clear",
+            "days": [
+                {"date": today.date(), "windows": []},
+                {"date": tomorrow.date(), "windows": [
+                    (tomorrow.replace(hour=8), tomorrow.replace(hour=12)),
+                ]},
+            ],
+        }
+        mock_poller.provider.display_name = "ДТЕК"
+        app_module.outage_poller = mock_poller
+        data = c.get("/api/outage_schedule").get_json()
+        assert data["days"] == [
+            {"date": "2026-10-17", "windows": []},
+            {"date": "2026-10-18", "windows": [
+                {"start": "2026-10-18T08:00:00", "end": "2026-10-18T12:00:00"},
+            ]},
+        ]
 
-    def test_end_event_calculates_duration(self, client):
+    def test_error_returns_message(self, client):
         c, _, app_module = client
-        existing = [{
-            "id": 1,
-            "type": "start",
-            "timestamp": "2025-01-15T10:00:00",
-            "voltage": 0,
-        }]
-        with patch.object(app_module, "load_outage_history", return_value=existing), \
-             patch.object(app_module, "save_outage_history") as mock_save:
-            resp = c.post("/api/outages", json={
-                "type": "end",
-                "timestamp": "2025-01-15T11:00:00",
-                "voltage": 230,
-            })
-        assert resp.status_code == 200
-        saved = mock_save.call_args[0][0]
-        # The start event should have been updated with duration
-        assert saved[0]["duration"] == 3600  # 1 hour in seconds
+        mock_poller = MagicMock()
+        mock_poller.get_outage_status.return_value = {
+            "status": "error",
+            "error": "YASNO API returned HTTP 500",
+        }
+        mock_poller.provider.display_name = "YASNO"
+        app_module.outage_poller = mock_poller
+        resp = c.get("/api/outage_schedule")
+        assert resp.get_json() == {
+            "status": "error", "error": "YASNO API returned HTTP 500", "provider": "YASNO",
+        }
 
 
 class TestGetGenerator:
@@ -208,16 +215,43 @@ class TestGetWeather:
         assert data["temperature"] == 22.5
 
 
+class TestParseWeather:
+    RAW = {
+        "current": {"temperature_2m": 11.4, "weather_code": 3},
+        "daily": {
+            "time": ["2026-10-19", "2026-10-20"],
+            "sunrise": ["2026-10-19T07:21", "2026-10-20T07:23"],
+            "sunset": ["2026-10-19T17:58", "2026-10-20T17:56"],
+            "temperature_2m_max": [13.2, 9.6],
+            "temperature_2m_min": [4.1, 2.8],
+            "precipitation_sum": [0.0, 3.4],
+            "weather_code": [3, 61],
+        },
+    }
+
+    def test_today_and_tomorrow(self):
+        from app import parse_weather
+        result = parse_weather(self.RAW)
+        assert result["temperature"] == 11.4 and result["temp_max"] == 13.2
+        assert result["sunrise"] == "2026-10-19T07:21"
+        assert result["tomorrow"] == {"date": "2026-10-20", "weather_code": 61,
+                                      "temp_max": 9.6, "temp_min": 2.8, "precipitation": 3.4}
+
+    def test_no_tomorrow_in_response(self):
+        from app import parse_weather
+        raw = {"current": {}, "daily": {k: v[:1] for k, v in self.RAW["daily"].items()}}
+        result = parse_weather(raw)
+        assert result["tomorrow"] is None and result["temp_min"] == 4.1
+        assert parse_weather({})["tomorrow"] is None
+
+
 class TestClearEndpoints:
-    def test_clear_outages_and_phase_stats(self, client):
+    def test_clear_phase_stats(self, client):
         c, _, app_module = client
-        with patch.object(app_module, "save_outage_history") as mock_outage, \
-             patch.object(app_module, "save_phase_stats") as mock_phase, \
+        with patch.object(app_module, "save_phase_stats") as mock_phase, \
              patch.object(app_module, "save_phase_history") as mock_hist:
-            resp1 = c.post("/api/outages/clear")
-            resp2 = c.post("/api/phase-stats/clear")
-        assert resp1.status_code == 200
-        assert resp2.status_code == 200
-        mock_outage.assert_called_once_with([])
+            app_module._pin_failures, app_module._pin_locked_until = 0, 0.0
+            resp = c.post("/api/phase-stats/clear", headers={"X-Settings-Pin": "0000"})
+        assert resp.status_code == 200
         mock_phase.assert_called_once_with({})
         mock_hist.assert_called_once_with({})

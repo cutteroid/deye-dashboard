@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Interactive setup script for Deye Dashboard .env configuration.
+"""Interactive setup script for the dashboard's .env configuration.
 
 Guides the user through configuring inverter, weather, outage provider,
 and Telegram settings. Preserves unrecognized .env lines on re-run.
@@ -8,6 +8,8 @@ Uses only Python stdlib — no external dependencies required.
 """
 
 import os
+import re
+from datetime import datetime
 import subprocess
 import sys
 import json
@@ -22,13 +24,132 @@ NC = "\033[0m"  # No Color
 
 # Keys managed by this script (order matters for output)
 MANAGED_KEYS = [
-    "INVERTER_IP", "LOGGER_SERIAL",
+    "INVERTER_TYPE", "INVERTER_IP", "LOGGER_SERIAL", "INVERTER_PHASES",
     "WEATHER_LATITUDE", "WEATHER_LONGITUDE",
     "OUTAGE_PROVIDER", "OUTAGE_GROUP", "OUTAGE_REGION_ID", "OUTAGE_DSO_ID",
+    "OUTAGE_DTEK_REGION",
     "INVERTER_HAS_GENERATOR", "GENERATOR_FUEL_RATE", "GENERATOR_OIL_CHANGE_DATE",
     "TELEGRAM_ENABLED", "TELEGRAM_BOT_TOKEN", "TELEGRAM_ALLOWED_USERS",
     "TELEGRAM_PUBLIC",
+    "AIR_ALERTS_PROVIDER", "AIR_ALERTS_REGION",
 ]
+
+MAX_LOGGER_SERIAL = 0xFFFFFFFF  # Solarman V5 packs the serial as an unsigned 32-bit int
+# Inverter drivers (inverters.DRIVERS; this script uses the stdlib only, so it can't
+# import them — tests keep both lists in sync)
+INVERTER_TYPES = ("deye",)
+OUTAGE_PROVIDERS = ("lvivoblenergo", "yasno", "dtek", "none")
+INVERTER_PHASE_CHOICES = ("1", "3")
+AIR_ALERTS_PROVIDERS = ("neptun", "mock", "none")
+DTEK_REGIONS = ("kyiv-region", "kyiv", "dnipro", "odesa")
+_BOOL_VALUES = ("true", "false", "1", "0", "yes", "no")
+_HOSTNAME_RE = re.compile(
+    r"^(?=.{1,253}$)[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$")
+
+
+def _check_host(v):
+    parts = v.split(".")
+    if all(p.isdigit() for p in parts):
+        if len(parts) != 4 or any(int(p) > 255 for p in parts):
+            return "must be a valid IPv4 address"
+        return None
+    return None if _HOSTNAME_RE.match(v) else "must be an IPv4 address or hostname"
+
+
+def _check_int_range(lo, hi):
+    def check(v):
+        if not v.isdigit() or not lo <= int(v) <= hi:
+            return f"must be a whole number from {lo} to {hi}"
+        return None
+    return check
+
+
+def _check_float_range(lo, hi):
+    def check(v):
+        try:
+            f = float(v)
+        except ValueError:
+            return "must be a number"
+        return None if lo <= f <= hi else f"must be between {lo} and {hi}"
+    return check
+
+
+def _check_choice(choices):
+    return lambda v: None if v in choices else f"must be one of: {', '.join(choices)}"
+
+
+def _check_regex(pattern, message):
+    rx = re.compile(pattern)
+    return lambda v: None if rx.match(v) else message
+
+
+def _check_date(v):
+    try:
+        datetime.strptime(v, "%Y-%m-%d")
+        return None
+    except ValueError:
+        return "must be a date in YYYY-MM-DD format"
+
+
+def _check_token(v):
+    if "****" in v:  # masked value echoed back by the config editor: keep existing
+        return None
+    return None if re.match(r"^\d+:[A-Za-z0-9_-]{20,}$", v) else "must look like 123456:ABC-DEF..."
+
+
+# Validators per managed key; empty values are allowed for optional keys.
+_VALIDATORS = {
+    "INVERTER_TYPE": _check_choice(INVERTER_TYPES),   # empty = default driver
+    "INVERTER_IP": _check_host,
+    "LOGGER_SERIAL": _check_int_range(1, MAX_LOGGER_SERIAL),
+    "INVERTER_PHASES": _check_choice(INVERTER_PHASE_CHOICES),  # empty = auto-detect
+    "WEATHER_LATITUDE": _check_float_range(-90, 90),
+    "WEATHER_LONGITUDE": _check_float_range(-180, 180),
+    "OUTAGE_PROVIDER": _check_choice(OUTAGE_PROVIDERS),
+    "OUTAGE_GROUP": _check_regex(r"^(GPV)?\d{1,2}\.\d{1,2}$", "must look like 4.2"),
+    "OUTAGE_REGION_ID": _check_int_range(1, 100000),
+    "OUTAGE_DSO_ID": _check_int_range(1, 100000),
+    "OUTAGE_DTEK_REGION": _check_choice(DTEK_REGIONS),
+    "INVERTER_HAS_GENERATOR": _check_choice(_BOOL_VALUES),
+    "GENERATOR_FUEL_RATE": _check_float_range(0, 100),
+    "GENERATOR_OIL_CHANGE_DATE": _check_date,
+    "TELEGRAM_ENABLED": _check_choice(_BOOL_VALUES),
+    "TELEGRAM_BOT_TOKEN": _check_token,
+    "TELEGRAM_ALLOWED_USERS": _check_regex(r"^[\d,\s]*$", "must be comma-separated numeric user IDs"),
+    "TELEGRAM_PUBLIC": _check_choice(_BOOL_VALUES),
+    "AIR_ALERTS_PROVIDER": _check_choice(AIR_ALERTS_PROVIDERS),
+    # ISO 3166-2 region shown on the alerts map; empty = whole Ukraine
+    "AIR_ALERTS_REGION": _check_regex(r"^UA-\d{2}$", "must be a region code like UA-32"),
+}
+_REQUIRED_KEYS = ("INVERTER_IP", "LOGGER_SERIAL")
+
+
+def validate_config(values):
+    """Validate config values (as submitted by the config editor).
+
+    Returns {key: error message}; empty when everything is valid. Rejects unknown
+    keys, non-string values and line breaks (which would inject extra .env lines).
+    """
+    errors = {}
+    for key, value in values.items():
+        if key not in _VALIDATORS:
+            errors[key] = "unknown setting"
+            continue
+        if not isinstance(value, str):
+            errors[key] = "must be a string"
+            continue
+        if any(c in value for c in "\r\n\0"):
+            errors[key] = "must not contain line breaks"
+            continue
+        value = value.strip()
+        if not value:
+            if key in _REQUIRED_KEYS:
+                errors[key] = "is required"
+            continue
+        message = _VALIDATORS[key](value)
+        if message:
+            errors[key] = message
+    return errors
 
 
 def ask(prompt, default=""):
@@ -107,7 +228,7 @@ def section_inverter(defaults):
     print(f"{YELLOW}Inverter Settings{NC}")
 
     # Try auto-discovery
-    print("  Scanning local network for Deye/Solarman inverters...")
+    print("  Scanning local network for inverters...")
     print()
     devices = try_discover()
 
@@ -141,8 +262,14 @@ def section_inverter(defaults):
         ip = ask("Inverter IP address", defaults.get("INVERTER_IP", ""))
         serial = ask("Logger serial number", defaults.get("LOGGER_SERIAL", ""))
 
+    phases = ask("Phases: 1, 3, or empty to auto-detect", defaults.get("INVERTER_PHASES", ""))
+    while phases not in ("",) + INVERTER_PHASE_CHOICES:
+        phases = ask("Phases: 1, 3, or empty to auto-detect", "")
+
     print()
-    return {"INVERTER_IP": ip, "LOGGER_SERIAL": serial}
+    # Only one driver so far: keep whatever type was set (empty = default)
+    return {"INVERTER_TYPE": defaults.get("INVERTER_TYPE", ""), "INVERTER_IP": ip,
+            "LOGGER_SERIAL": serial, "INVERTER_PHASES": phases}
 
 
 def section_weather(defaults):
@@ -159,11 +286,12 @@ def section_outage(defaults):
     print(f"{YELLOW}Outage Schedule Provider{NC}")
 
     prev = defaults.get("OUTAGE_PROVIDER", "lvivoblenergo")
-    default_choice = {"lvivoblenergo": 1, "yasno": 2, "none": 3}.get(prev, 1)
+    default_choice = {"lvivoblenergo": 1, "yasno": 2, "dtek": 3, "none": 4}.get(prev, 1)
 
     provider = ask_choice(
         "Choose",
-        [("lvivoblenergo", "lvivoblenergo"), ("yasno", "yasno"), ("none (disable)", "none")],
+        [("lvivoblenergo", "lvivoblenergo"), ("yasno", "yasno"),
+         ("dtek (Kyiv oblast, Kyiv, Dnipro, Odesa)", "dtek"), ("none (disable)", "none")],
         default=default_choice,
     )
 
@@ -175,6 +303,12 @@ def section_outage(defaults):
         result["OUTAGE_REGION_ID"] = ask("YASNO region ID (e.g. 25 = Kyiv)", defaults.get("OUTAGE_REGION_ID", "25"))
         result["OUTAGE_DSO_ID"] = ask("YASNO DSO ID (e.g. 902 = DTEK Kyiv)", defaults.get("OUTAGE_DSO_ID", "902"))
         result["OUTAGE_GROUP"] = ask("Queue/group number (e.g. 2.1)", defaults.get("OUTAGE_GROUP", "2.1"))
+    elif provider == "dtek":
+        result["OUTAGE_DTEK_REGION"] = ask(
+            "DTEK region (kyiv-region, kyiv, dnipro, odesa)",
+            defaults.get("OUTAGE_DTEK_REGION", "kyiv-region"),
+        )
+        result["OUTAGE_GROUP"] = ask("Queue/group number (e.g. 4.2)", defaults.get("OUTAGE_GROUP", "1.1"))
 
     print()
     return result
@@ -251,9 +385,14 @@ def write_env(values, extra_lines, path=".env"):
     """Write .env file from collected values and preserved extra lines."""
     lines = []
 
-    lines.append("# Deye Inverter Configuration")
+    lines.append("# Inverter")
+    if values.get("INVERTER_TYPE"):
+        lines.append(f"INVERTER_TYPE={values['INVERTER_TYPE']}")
     lines.append(f"INVERTER_IP={values.get('INVERTER_IP', '')}")
     lines.append(f"LOGGER_SERIAL={values.get('LOGGER_SERIAL', '')}")
+    # Not written = auto-detected at startup
+    if values.get("INVERTER_PHASES") in INVERTER_PHASE_CHOICES:
+        lines.append(f"INVERTER_PHASES={values['INVERTER_PHASES']}")
     lines.append("")
 
     lines.append("# Weather (coordinates for Open-Meteo API)")
@@ -271,6 +410,11 @@ def write_env(values, extra_lines, path=".env"):
             lines.append(f"OUTAGE_REGION_ID={values['OUTAGE_REGION_ID']}")
         if "OUTAGE_DSO_ID" in values:
             lines.append(f"OUTAGE_DSO_ID={values['OUTAGE_DSO_ID']}")
+        if "OUTAGE_GROUP" in values:
+            lines.append(f"OUTAGE_GROUP={values['OUTAGE_GROUP']}")
+    elif provider == "dtek":
+        if "OUTAGE_DTEK_REGION" in values:
+            lines.append(f"OUTAGE_DTEK_REGION={values['OUTAGE_DTEK_REGION']}")
         if "OUTAGE_GROUP" in values:
             lines.append(f"OUTAGE_GROUP={values['OUTAGE_GROUP']}")
     lines.append("")
@@ -294,6 +438,14 @@ def write_env(values, extra_lines, path=".env"):
         lines.append(f"TELEGRAM_ALLOWED_USERS={values.get('TELEGRAM_ALLOWED_USERS', '')}")
         lines.append(f"TELEGRAM_PUBLIC={values.get('TELEGRAM_PUBLIC', 'false')}")
 
+    # Air raid alerts (only what was set, so defaults stay defaults)
+    alerts_lines = [f"{key}={values[key]}" for key in ("AIR_ALERTS_PROVIDER", "AIR_ALERTS_REGION")
+                    if values.get(key)]
+    if alerts_lines:
+        lines.append("")
+        lines.append("# Air raid alerts")
+        lines.extend(alerts_lines)
+
     # Preserve unrecognized lines (e.g. DEPLOY_* from deploy.sh)
     if extra_lines:
         lines.append("")
@@ -309,7 +461,7 @@ def write_env(values, extra_lines, path=".env"):
 def main():
     print()
     print(f"{CYAN}{BOLD}========================================{NC}")
-    print(f"{CYAN}{BOLD}  Deye Dashboard — Setup{NC}")
+    print(f"{CYAN}{BOLD}  Dashboard — Setup{NC}")
     print(f"{CYAN}{BOLD}========================================{NC}")
     print()
 

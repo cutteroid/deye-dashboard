@@ -1,69 +1,123 @@
-"""Deye inverter data reader module."""
-from dataclasses import dataclass
-from pysolarmanv5 import PySolarmanV5
-import time
-import threading
+"""Deye / Sunsynk hybrid inverters through a Solarman V5 Wi-Fi logger (Modbus over TCP 8899).
+
+Register maps: single-phase hybrid (Sunsynk-style, registers ~60-300) and
+three-phase hybrid (registers ~500-700; high-voltage models scale some values).
+Register 0 (device type) tells the family.
+"""
 import logging
+import time
+
+from pysolarmanv5 import PySolarmanV5
+
+from .base import (InverterConfig, InverterDriver, grid_online, grid_phases_missing,
+                   grid_state, to_signed)
+
+MAX_LOGGER_SERIAL = 0xFFFFFFFF  # Solarman V5 packs the serial as an unsigned 32-bit int
+
+
+def parse_logger_serial(raw):
+    """Logger serial as int, or 0 if missing/invalid (must fit in 32 bits)."""
+    try:
+        serial = int(str(raw).strip())
+    except (TypeError, ValueError):
+        return 0
+    return serial if 0 < serial <= MAX_LOGGER_SERIAL else 0
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class InverterConfig:
-    """Configuration describing the inverter's capabilities."""
-    phases: int = 3         # 1 or 3
-    has_battery: bool = True
-    pv_strings: int = 2     # 1 or 2
-    has_generator: bool = False
-
-    def to_dict(self):
-        return {
-            "phases": self.phases,
-            "has_battery": self.has_battery,
-            "pv_strings": self.pv_strings,
-            "has_generator": self.has_generator,
-        }
+# Register 0 ("device type") -> inverter family; codes as used by ha-solarman's
+# Deye autodetection (custom_components/solarman/const.py). Each family has its
+# own register map; high-voltage 3-phase models also scale some values.
+DEVICE_FAMILIES = {
+    0x0002: "string", 0x0200: "string",
+    0x0003: "hybrid_1p", 0x0300: "hybrid_1p", 0x0103: "hybrid_1p", 0x0104: "hybrid_1p",
+    0x0004: "micro", 0x0400: "micro",
+    0x0005: "hybrid_3p_lv", 0x0500: "hybrid_3p_lv",
+    0x0006: "hybrid_3p_hv", 0x0007: "hybrid_3p_hv", 0x0008: "hybrid_3p_hv",
+    0x0600: "hybrid_3p_hv", 0x0601: "hybrid_3p_hv",
+}
+FAMILY_PHASES = {"hybrid_1p": 1, "hybrid_3p_lv": 3, "hybrid_3p_hv": 3}
+UNSUPPORTED_FAMILIES = ("string", "micro")  # different register maps, not implemented
 
 
-def to_signed(value):
-    """Convert unsigned 16-bit to signed."""
-    if value >= 32768:
-        return value - 65536
-    return value
+RELAY_GRID_BIT = 0x04  # register 552 (3-phase): bit 0 inverter, bit 2 grid, bit 3 generator relay
 
 
-LIFEPO4_16S_CURVE = [
-    (57.6, 100), (56.0, 99), (54.4, 95), (53.6, 90),
-    (53.2, 80), (52.8, 70), (52.4, 60), (52.0, 50),
-    (51.6, 40), (51.2, 30), (50.4, 17), (48.0, 0),
-]
+def relay_grid_connected(relay):
+    """Grid relay state from register 552, or None when the register says nothing.
+
+    0 means "all relays off", which is also what firmware without this register
+    returns: then the voltages decide (see base.grid_online()).
+    """
+    return bool(relay & RELAY_GRID_BIT) if relay else None
 
 
-def voltage_to_soc(voltage):
-    """Convert LiFePO4 16S battery voltage to SOC using discharge curve."""
-    if voltage >= LIFEPO4_16S_CURVE[0][0]:
-        return 100
-    if voltage <= LIFEPO4_16S_CURVE[-1][0]:
-        return 0
-    # Find the two points to interpolate between
-    for i in range(len(LIFEPO4_16S_CURVE) - 1):
-        v_high, soc_high = LIFEPO4_16S_CURVE[i]
-        v_low, soc_low = LIFEPO4_16S_CURVE[i + 1]
-        if voltage >= v_low:
-            ratio = (voltage - v_low) / (v_high - v_low)
-            return int(soc_low + ratio * (soc_high - soc_low))
-    return 0
+def device_family(device_type):
+    """Family name for a register-0 value ("unknown" if not recognised)."""
+    return DEVICE_FAMILIES.get(device_type, "unknown")
 
 
-class DeyeInverter:
+class DeyeInverter(InverterDriver):
+    """Deye / Sunsynk hybrid inverter behind a Solarman V5 logger."""
+    name = "deye"
+    display_name = "Deye / Sunsynk (Solarman logger)"
+    required_settings = ("INVERTER_IP", "LOGGER_SERIAL")
+
     def __init__(self, ip: str, serial: int, port: int = 8899,
                  config: InverterConfig = None):
+        super().__init__(config)
         self.ip = ip
         self.serial = serial
         self.port = port
-        self.config = config or InverterConfig()
-        self.inverter = None
-        self.lock = threading.Lock()
+        self.inverter = None   # PySolarmanV5 connection while open
+
+    @classmethod
+    def from_settings(cls, settings):
+        """INVERTER_IP + LOGGER_SERIAL (the Solarman logger's serial number)."""
+        return cls(settings.get("INVERTER_IP", ""), parse_logger_serial(settings.get("LOGGER_SERIAL")))
+
+    @classmethod
+    def settings_problem(cls, settings):
+        if str(settings.get("INVERTER_IP") or "").strip() == "0.0.0.0":
+            settings = {**settings, "INVERTER_IP": ""}
+        problem = super().settings_problem(settings)
+        if not problem and not parse_logger_serial(settings.get("LOGGER_SERIAL")):
+            problem = f"LOGGER_SERIAL must be a logger serial number (1..{MAX_LOGGER_SERIAL})"
+        return problem
+
+    @classmethod
+    def discover(cls):
+        """Solarman loggers on the local /24 network (port 8899 open)."""
+        from discover_inverter import discover
+        return discover(quiet=True)
+
+    @property
+    def high_voltage(self):
+        """HV 3-phase models: battery voltage in 0.1 V, battery/PV power in 10 W."""
+        return self.config.family == "hybrid_3p_hv"
+
+    def family_supported(self, family):
+        return family not in UNSUPPORTED_FAMILIES
+
+    def battery_voltage_range(self):
+        # 48 V LiFePO4 window; HV battery stacks: anything a real stack can have
+        return (100.0, 1000.0) if self.high_voltage else super().battery_voltage_range()
+
+    def read_battery_sample(self):
+        """Battery voltage + SOC in one short connection (registers 183/184 or 587/588)."""
+        reg_voltage, reg_soc = (183, 184) if self.config.phases == 1 else (587, 588)
+        with self.lock:
+            try:
+                if not self.inverter:
+                    self.connect()
+                raw_v = self.read_register(reg_voltage)
+                raw_soc = self.read_register(reg_soc)
+            finally:
+                # Also on errors: a broken socket left open would be reused by the
+                # next reader and fail again
+                self.disconnect()
+        return raw_v / (10 if self.high_voltage else 100), raw_soc
 
     def connect(self):
         """Establish connection to inverter."""
@@ -141,6 +195,12 @@ class DeyeInverter:
                 available_capacity = (data["battery_capacity"] / 100) * data["battery_discharge_percent"]
                 data["battery_max_available_capacity_wh"] = available_capacity * data["battery_nominal_voltage"]
 
+                # For the runtime estimate: 204 = battery capacity (Ah), 217 = shutdown SOC
+                data["battery_capacity_ah"] = self.read_register(204)
+                time.sleep(0.05)
+                data["battery_shutdown_soc"] = self.read_register(217)
+                time.sleep(0.05)
+
                 if battery_sampler:
                     smoothed_v = battery_sampler.get_voltage()
                     if smoothed_v is not None:
@@ -162,6 +222,8 @@ class DeyeInverter:
 
             # Grid
             data["grid_voltage"] = self.read_register(150) / 10
+            data["grid_online"] = grid_online([data["grid_voltage"]])
+            data["grid_state"] = "online" if data["grid_online"] else "outage"
             time.sleep(0.05)
             raw_grid_power = self.read_register(169)
             data["grid_power"] = to_signed(raw_grid_power)
@@ -171,12 +233,6 @@ class DeyeInverter:
             data["load_power"] = self.read_register(178)
             time.sleep(0.05)
             data["load_l1"] = self.read_register(176)
-            time.sleep(0.05)
-
-            # Temperatures
-            data["dc_temp"] = (self.read_register(90) - 1000) / 10
-            time.sleep(0.05)
-            data["heatsink_temp"] = (self.read_register(91) - 1000) / 10
             time.sleep(0.05)
 
             # Daily stats
@@ -228,11 +284,16 @@ class DeyeInverter:
         try:
             if not self.inverter:
                 self.connect()
-            # Solar PV
-            data["pv1_power"] = self.read_register(514)
+            # HV models report battery voltage in 0.1 V and battery/PV power in 10 W
+            hv = self.high_voltage
+            power_scale = 10 if hv else 1
+
+            # Solar PV: 672/673 = PV1/PV2 power (514/515 are today's battery
+            # charge/discharge energy, not PV)
+            data["pv1_power"] = self.read_register(672) * power_scale
             time.sleep(0.05)
             if self.config.pv_strings >= 2:
-                data["pv2_power"] = self.read_register(515)
+                data["pv2_power"] = self.read_register(673) * power_scale
                 time.sleep(0.05)
             else:
                 data["pv2_power"] = 0
@@ -240,10 +301,14 @@ class DeyeInverter:
 
             # Battery
             if self.config.has_battery:
-                data["battery_voltage"] = self.read_register(587) / 100
+                data["battery_voltage"] = self.read_register(587) / (10 if hv else 100)
                 time.sleep(0.05)
-                raw_current = self.read_register(586)
-                data["battery_current"] = -to_signed(raw_current) / 100
+                # 590/591: battery power (W) / current (0.01 A), signed, Deye
+                # convention discharge > 0; negated so charging is positive here.
+                # (586 is the battery temperature, not the current.)
+                data["battery_current"] = -to_signed(self.read_register(591)) / 100
+                time.sleep(0.05)
+                battery_power = -to_signed(self.read_register(590)) * power_scale
                 time.sleep(0.05)
 
                 # SOC from register 588 (BMS-reported, same as Solarman)
@@ -251,6 +316,18 @@ class DeyeInverter:
                 raw_soc = self.read_register(588)
                 time.sleep(0.05)
                 data["battery_soc_raw"] = raw_soc
+
+                # For the runtime estimate: 592 = capacity measured by the BMS
+                # ("corrected"), 102 = capacity set on the inverter, 115 = SOC at
+                # which the inverter stops discharging
+                capacity_ah = self.read_register(592)
+                time.sleep(0.05)
+                if not capacity_ah:
+                    capacity_ah = self.read_register(102)
+                    time.sleep(0.05)
+                data["battery_capacity_ah"] = capacity_ah
+                data["battery_shutdown_soc"] = self.read_register(115)
+                time.sleep(0.05)
 
                 if battery_sampler:
                     smoothed_v = battery_sampler.get_voltage()
@@ -263,7 +340,7 @@ class DeyeInverter:
                         data["battery_soc"] = raw_soc
                 else:
                     data["battery_soc"] = raw_soc
-                data["battery_power"] = int(data["battery_voltage"] * data["battery_current"])
+                data["battery_power"] = battery_power
             else:
                 data["battery_voltage"] = 0
                 data["battery_current"] = 0
@@ -271,9 +348,21 @@ class DeyeInverter:
                 data["battery_soc_raw"] = 0
                 data["battery_power"] = 0
 
-            # Grid
+            # Grid: 598-600 = grid voltage L1-L3 (598 alone drives online/outage detection)
             data["grid_voltage"] = self.read_register(598) / 10
             time.sleep(0.05)
+            if self.config.phases == 3:
+                data["grid_voltage_l1"] = data["grid_voltage"]
+                data["grid_voltage_l2"] = self.read_register(599) / 10
+                time.sleep(0.05)
+                data["grid_voltage_l3"] = self.read_register(600) / 10
+                time.sleep(0.05)
+            data["grid_relay"] = self.read_register(552)
+            time.sleep(0.05)
+            grid_volts = [data["grid_voltage"], data.get("grid_voltage_l2"), data.get("grid_voltage_l3")]
+            data["grid_online"] = grid_online(grid_volts, relay_grid_connected(data["grid_relay"]))
+            data["grid_state"] = grid_state(data["grid_online"], grid_volts)
+            data["grid_phases_missing"] = grid_phases_missing(grid_volts)
             raw_grid_power = self.read_register(607)
             data["grid_power"] = to_signed(raw_grid_power)
             time.sleep(0.05)
@@ -282,14 +371,8 @@ class DeyeInverter:
             data["load_power"] = self.read_register(653)
             time.sleep(0.05)
 
-            # Temperatures
-            data["dc_temp"] = (self.read_register(540) - 1000) / 10
-            time.sleep(0.05)
-            data["heatsink_temp"] = (self.read_register(541) - 1000) / 10
-            time.sleep(0.05)
-
             # Daily stats
-            data["daily_pv"] = self.read_register(502) / 10
+            data["daily_pv"] = self.read_register(529) / 10  # day PV energy (502 = inverter output)
             time.sleep(0.05)
             data["daily_grid_import"] = self.read_register(520) / 10
             time.sleep(0.05)
@@ -322,9 +405,9 @@ class DeyeInverter:
 
             # Status indicators
             if self.config.has_battery:
-                if data["battery_current"] > 0:
+                if data["battery_power"] > 0:
                     data["battery_status"] = "Charging"
-                elif data["battery_current"] < 0:
+                elif data["battery_power"] < 0:
                     data["battery_status"] = "Discharging"
                 else:
                     data["battery_status"] = "Idle"
@@ -347,6 +430,36 @@ class DeyeInverter:
         return data
 
     def detect_config(self):
+        """Auto-detect inverter configuration; see _detect_config(). Always disconnects."""
+        try:
+            return self._detect_config()
+        finally:
+            with self.lock:
+                self.disconnect()
+
+    def read_device_type(self, disconnect=True):
+        """Register 0 (device type) -> (code or None, family). Never raises.
+
+        detect_config() passes disconnect=False: it reads more registers on the
+        same connection and disconnects at the end itself.
+        """
+        try:
+            with self.lock:
+                try:
+                    if not self.inverter:
+                        self.connect()
+                    code = self.read_register(0)
+                finally:
+                    if disconnect:
+                        self.disconnect()
+        except Exception as e:
+            logger.info("Device type read failed: %s", e)
+            return None, "unknown"
+        family = device_family(code)
+        logger.info("Device type 0x%04X -> %s", code, family)
+        return (code or None), family
+
+    def _detect_config(self):
         """Auto-detect inverter configuration by reading diagnostic registers.
 
         Two-stage detection:
@@ -355,10 +468,13 @@ class DeyeInverter:
                    appropriate for the detected phase count (3-phase vs Sunsynk).
         Takes 3 samples per stage with 2s delay; any positive reading wins.
         """
-        # --- Stage 1: detect phase count ---
+        # --- Stage 0: device type tells the family (and so the phase count) ---
+        device_type, family = self.read_device_type(disconnect=False)
+
+        # --- Stage 1: detect phase count from L2/L3 voltage (unknown family only) ---
         phases_3 = False
 
-        for i in range(3):
+        for i in range(0 if family in FAMILY_PHASES else 3):
             logger.info("detect_config stage 1: taking sample %d/3 (phase detection)", i + 1)
             with self.lock:
                 if not self.inverter:
@@ -384,12 +500,15 @@ class DeyeInverter:
             if i < 2:
                 time.sleep(2)
 
-        detected_phases = 3 if phases_3 else 1
-        logger.info("detect_config stage 1 result: phases=%d", detected_phases)
+        if family in FAMILY_PHASES:
+            detected_phases = FAMILY_PHASES[family]
+        else:
+            detected_phases = 3 if phases_3 else 1
+        logger.info("detect_config stage 1 result: phases=%d (family %s)", detected_phases, family)
 
         # --- Stage 2: detect battery & PV2 using correct register map ---
         if detected_phases == 3:
-            bat_reg, pv2_reg = 587, 515
+            bat_reg, pv2_reg = 587, 673
         else:
             bat_reg, pv2_reg = 183, 187
         logger.info(
@@ -486,88 +605,9 @@ class DeyeInverter:
             has_battery=has_battery,
             pv_strings=2 if pv2_detected else 1,
             has_generator=has_generator,
+            device_type=device_type,
+            family=family,
+            supported=self.family_supported(family),
         )
         logger.info("Auto-detected inverter config: %s", config)
         return config
-
-
-class BatterySampler:
-    """Reads battery voltage periodically and provides smoothed values."""
-
-    def __init__(self, inverter, interval=10, buffer_size=6):
-        self.inverter = inverter
-        self.interval = interval
-        self.buffer_size = buffer_size
-        self._buffer = []
-        self._soc_buffer = []
-        self._lock = threading.Lock()
-        self._running = False
-        self._thread = None
-        self._disabled = False
-
-    def _sample(self):
-        """Read battery voltage and SOC once, store if valid."""
-        if self.inverter.config.phases == 1:
-            reg_voltage, reg_soc = 183, 184
-        else:
-            reg_voltage, reg_soc = 587, 588
-        try:
-            with self.inverter.lock:
-                if not self.inverter.inverter:
-                    self.inverter.connect()
-                raw_v = self.inverter.read_register(reg_voltage)
-                raw_soc = self.inverter.read_register(reg_soc)
-                self.inverter.disconnect()
-            voltage = raw_v / 100
-        except Exception as e:
-            logger.warning("BatterySampler: failed to read battery registers: %s", e)
-            return
-
-        with self._lock:
-            if 46.0 <= voltage <= 58.0:
-                self._buffer.append(voltage)
-                if len(self._buffer) > self.buffer_size:
-                    self._buffer.pop(0)
-            else:
-                logger.warning("BatterySampler: discarding implausible voltage %.2fV", voltage)
-
-            if 0 <= raw_soc <= 100:
-                self._soc_buffer.append(raw_soc)
-                if len(self._soc_buffer) > self.buffer_size:
-                    self._soc_buffer.pop(0)
-            else:
-                logger.warning("BatterySampler: discarding implausible SOC %d%%", raw_soc)
-
-    def get_voltage(self):
-        """Return averaged voltage from buffer, or None if no valid readings."""
-        with self._lock:
-            if not self._buffer:
-                return None
-            return sum(self._buffer) / len(self._buffer)
-
-    def get_soc(self):
-        """Return SOC from register 588 using median to reject outliers."""
-        with self._lock:
-            if not self._soc_buffer:
-                return None
-            return sorted(self._soc_buffer)[len(self._soc_buffer) // 2]
-
-    def _run(self):
-        """Main sampling loop."""
-        while self._running:
-            self._sample()
-            time.sleep(self.interval)
-
-    def start(self):
-        """Start sampling in a background thread. Skips if inverter has no battery."""
-        if not self.inverter.config.has_battery:
-            self._disabled = True
-            logger.info("BatterySampler: skipping start (no battery configured)")
-            return
-        self._running = True
-        self._thread = threading.Thread(target=self._run, daemon=True)
-        self._thread.start()
-
-    def stop(self):
-        """Stop sampling."""
-        self._running = False

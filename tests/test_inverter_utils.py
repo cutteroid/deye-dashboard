@@ -1,5 +1,5 @@
 """Tests for pure utility functions in inverter.py."""
-from inverter import to_signed, voltage_to_soc, InverterConfig
+from inverters import to_signed, voltage_to_soc, InverterConfig
 
 
 class TestToSigned:
@@ -62,6 +62,9 @@ class TestInverterConfigToDict:
             "has_battery": True,
             "pv_strings": 2,
             "has_generator": False,
+            "device_type": None,
+            "family": "unknown",
+            "supported": True,
         }
 
     def test_with_generator(self):

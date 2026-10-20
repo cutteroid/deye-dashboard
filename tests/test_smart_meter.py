@@ -1,0 +1,232 @@
+"""Tests for the Bakler smart meter MQTT integration."""
+import json
+from datetime import datetime, timedelta
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from smart_meter import SmartMeter, SmartMeterClient, create_smart_meter_from_env, STALE_AFTER
+
+# Payloads from https://www.bakler.com.ua/setting-mqtt-client/
+SINGLE_PHASE_JSON = {
+    "ver": "1.2.0", "time": 1711730400, "posWh": 35820.0, "negWh": 0.000, "posVarh": 0.080, "negVarh": 0.000,
+    "Vmin": 223.2, "V": 225.3, "Vmax": 226.4, "Imin": 0.000, "I": 1.25, "Imax": 2.0,
+    "Pmin": 0.0, "Pmax": 450.0, "Qmin": 0.0, "Qmax": 0.0, "Hzmin": 49.96, "Hzmax": 50.00, "Tbox": 33.00, "relay": 1,
+}
+THREE_PHASE_JSON = {
+    "ver": "3.2.0", "time": 1632420300,
+    "posWh": [10169.896, 11000.0, 12168.816], "negWh": [0.0, 0.0, 0.0],
+    "posVarh": [30.04, 31.0, 32.04], "negVarh": [40.0, 41.04, 42.0], "T": [-60.0, -60.0, -60.0],
+    "Vmin": [216.5, 217.5, 215.5], "V": [218.6, 219.7, 217.6], "Vmax": [223.1, 224.2, 222.1],
+    "Imin": [0.0, 0.0, 0.0], "I": [1.0, 2.0, 3.0], "Imax": [0.0, 0.0, 0.0],
+    "Pmin": [0.0, 0.0, 0.0], "Pmax": [0.0, 0.0, 0.0], "Qmin": [0.0, 0.0, 0.0], "Qmax": [0.0, 0.0, 0.0],
+    "Hzmin": 49.97, "Hzmax": 50.01, "Tbox": 30.75, "relay": [0, 100, 100, 100, 100, 100],
+}
+
+
+@pytest.fixture
+def meter(tmp_path):
+    return SmartMeter(daily_file=str(tmp_path / "daily.json"))
+
+
+def test_waiting_until_first_message(meter):
+    meter.set_broker_state(True)
+    assert meter.get_status() == {"status": "waiting"}
+
+
+def test_waiting_before_first_connection_attempt(meter):
+    """Right after a restart the broker connection isn't up yet: not an error."""
+    assert meter.get_status() == {"status": "waiting"}
+
+
+def test_broker_error_reported(meter):
+    meter.set_broker_state(False, "Cannot connect to MQTT broker mosquitto:1883")
+    assert meter.get_status() == {"status": "error", "error": "Cannot connect to MQTT broker mosquitto:1883"}
+
+
+def test_single_phase_json_and_instant_power(meter):
+    meter.handle_message("buckler/772_ABC/status", b"online")
+    meter.handle_message("buckler/772_ABC/dataJson", json.dumps(SINGLE_PHASE_JSON).encode())
+    status = meter.get_status()
+    assert status["status"] == "ok" and status["serial"] == "772_ABC" and status["phases"] == 1
+    assert status["voltage"] == [225.3] and status["current"] == [1.25]
+    assert status["power_w"] == 450.0  # no instantaneous P yet: falls back to Pmax
+    assert status["energy_consumed_kwh"] == pytest.approx(35.82)
+    assert status["frequency_max"] == 50.0
+    assert status["relays"] == [1]
+    meter.handle_message("buckler/772_ABC/data/P", b"312.5")
+    meter.handle_message("buckler/772_ABC/data/V", b"226.1")
+    status = meter.get_status()
+    assert status["power_w"] == 312.5 and status["voltage"] == [226.1]
+
+
+def test_three_phase(meter):
+    meter.handle_message("buckler/64_XYZ/dataJson", json.dumps(THREE_PHASE_JSON))
+    for i, p in enumerate((100, 200, 300), start=1):
+        meter.handle_message(f"buckler/64_XYZ/data/P{i}", str(p))
+    meter.handle_message("buckler/64_XYZ/relay/r1", "0")
+    status = meter.get_status()
+    assert status["phases"] == 3
+    assert status["voltage"] == [218.6, 219.7, 217.6]
+    assert status["current"] == [1.0, 2.0, 3.0]
+    assert status["power_phases"] == [100.0, 200.0, 300.0] and status["power_w"] == 600.0
+    assert status["energy_consumed_kwh"] == pytest.approx((10169.896 + 11000.0 + 12168.816) / 1000)
+    assert status["relays"] == [0, 100, 100, 100, 100, 100]
+
+
+def test_phase_status_from_voltage(meter):
+    meter.handle_message("buckler/64_XYZ/dataJson", json.dumps(THREE_PHASE_JSON))
+    assert meter.get_status()["phases_on"] == [True, True, True]
+    meter.handle_message("buckler/64_XYZ/data/V2", "0.3")   # L2 lost supply
+    assert meter.get_status()["phases_on"] == [True, False, True]
+
+
+def test_phase_cut_by_meter_relay(meter):
+    """3 relays on a 3-phase meter = one per phase; the meter still measures the grid side."""
+    meter.handle_message("buckler/3366/dataJson", json.dumps({**THREE_PHASE_JSON, "V": [246.2, 256.4, 241.1],
+                                                               "relay": [100, 0, 100]}))
+    status = meter.get_status()
+    assert status["phases_connected"] == [True, False, True]
+    assert status["phases_on"] == [True, True, True]   # voltage alone wouldn't show it
+
+
+def test_relays_not_per_phase(meter):
+    meter.handle_message("buckler/64/dataJson", json.dumps(THREE_PHASE_JSON))  # 6 relays
+    assert meter.get_status()["phases_connected"] is None
+
+
+def test_phase_status_unknown_without_voltage(meter):
+    meter.handle_message("buckler/1/data/P", "100")
+    assert meter.get_status()["phases_on"] is None
+
+
+def test_demo_three_phase_loses_l3(tmp_path):
+    meter, feed = create_smart_meter_from_env({"SMART_METER_DEMO": "3"})
+    with patch("smart_meter.threading.Thread"), patch("smart_meter.time.time", return_value=3000.0):
+        feed.start()  # 3000 % 300 == 0: inside the phase-loss minute
+    status = meter.get_status()
+    assert status["phases_on"] == [True, True, False] and status["power_phases"][2] == 0.0
+
+
+def test_today_consumption_from_counter(meter, tmp_path):
+    meter.handle_message("buckler/1/dataJson", json.dumps({**SINGLE_PHASE_JSON, "posWh": 100000.0}))
+    meter.handle_message("buckler/1/dataJson", json.dumps({**SINGLE_PHASE_JSON, "posWh": 101500.0}))
+    # Baseline comes from the readings themselves, not from when the API is read
+    assert meter.get_status()["today_consumed_kwh"] == pytest.approx(1.5)
+    # The baseline survives a restart (new SmartMeter, same file)
+    again = SmartMeter(daily_file=str(tmp_path / "daily.json"))
+    again.handle_message("buckler/1/dataJson", json.dumps({**SINGLE_PHASE_JSON, "posWh": 102000.0}))
+    assert again.get_status()["today_consumed_kwh"] == pytest.approx(2.0)
+
+
+def test_last_reading_before_midnight_is_next_baseline(tmp_path):
+    now = [datetime(2026, 10, 17, 23, 59)]
+    meter = SmartMeter(daily_file=str(tmp_path / "daily.json"), clock=lambda: now[0])
+    meter.handle_message("buckler/1/data/posWh", "200000")
+    meter.handle_message("buckler/1/data/posWh", "200800")   # 23:59, last reading of the day
+    now[0] = datetime(2026, 10, 18, 0, 20)
+    meter.handle_message("buckler/1/data/posWh", "201100")   # first reading after midnight
+    assert meter.get_status()["today_consumed_kwh"] == pytest.approx(0.3)  # 201100 - 200800
+
+
+def test_counter_reset_restarts_baseline(meter):
+    meter.handle_message("buckler/1/dataJson", json.dumps({**SINGLE_PHASE_JSON, "posWh": 5000.0}))
+    meter.handle_message("buckler/1/dataJson", json.dumps({**SINGLE_PHASE_JSON, "posWh": 10.0}))  # new meter
+    assert meter.get_status()["today_consumed_kwh"] == 0.0
+
+
+def test_stale_and_offline(meter):
+    meter.handle_message("buckler/1/dataJson", json.dumps(SINGLE_PHASE_JSON))
+    meter.handle_message("buckler/1/status", "offline")
+    assert meter.get_status()["status"] == "offline"
+    meter._updated = datetime.now() - STALE_AFTER - timedelta(seconds=1)  # default clock
+    assert meter.get_status()["status"] == "stale"
+
+
+def test_first_meter_wins_unless_serial_configured(tmp_path):
+    meter = SmartMeter(daily_file=str(tmp_path / "d.json"))
+    meter.handle_message("buckler/A/data/P", "1")
+    meter.handle_message("buckler/B/data/P", "2")
+    assert meter.get_status()["serial"] == "A" and meter.get_status()["power_w"] == 1.0
+    chosen = SmartMeter(serial_filter="B", daily_file=str(tmp_path / "e.json"))
+    chosen.handle_message("buckler/A/data/P", "1")
+    chosen.handle_message("buckler/B/data/P", "2")
+    assert chosen.get_status()["serial"] == "B" and chosen.get_status()["power_w"] == 2.0
+
+
+def test_ignores_garbage(meter):
+    meter.handle_message("other/1/dataJson", "{}")
+    meter.handle_message("buckler/1/dataJson", "not json")
+    meter.handle_message("buckler/1/data/P", "abc")
+    meter.handle_message("buckler/1/data/set", "10")  # our own interval request
+    meter.set_broker_state(True)
+    assert meter.get_status()["status"] == "waiting"
+
+
+def test_client_requests_update_interval_once_and_never_touches_relay(meter):
+    client = SmartMeterClient(meter, host="broker", interval=10)
+    mqtt = MagicMock()
+    for topic, payload in (("buckler/9/status", b"online"), ("buckler/9/data/P", b"5"), ("buckler/9/relay/r1", b"1")):
+        client._on_message(mqtt, None, MagicMock(topic=topic, payload=payload))
+    mqtt.publish.assert_called_once_with("buckler/9/data/set", "10", qos=0)
+    assert all("/relay/" not in c.args[0] for c in mqtt.publish.call_args_list)
+
+
+def test_env_config():
+    assert create_smart_meter_from_env({}) == (None, None)
+    meter, client = create_smart_meter_from_env({
+        "SMART_METER_ENABLED": "true", "SMART_METER_MQTT_HOST": "10.0.0.2", "SMART_METER_MQTT_PORT": "1884",
+        "SMART_METER_MQTT_USER": "meter", "SMART_METER_MQTT_PASSWORD": "secret", "SMART_METER_INTERVAL": "500",
+        "SMART_METER_SERIAL": "772_ABC",
+    })
+    assert client.host == "10.0.0.2" and client.port == 1884 and client.username == "meter"
+    assert client.interval == 60  # clamped to the meter's 1..60 s range
+    assert meter.serial_filter == "772_ABC"
+
+
+class TestEndpoint:
+    @pytest.fixture
+    def client(self):
+        import app as app_module
+        app_module.app.config["TESTING"] = True
+        orig = app_module.smart_meter
+        with app_module.app.test_client() as c:
+            yield c, app_module
+        app_module.smart_meter = orig
+
+    def test_disabled(self, client):
+        c, app_module = client
+        app_module.smart_meter = None
+        assert c.get("/api/smart-meter").get_json() == {"status": "disabled"}
+
+    def test_readings(self, client, tmp_path):
+        c, app_module = client
+        meter = SmartMeter(daily_file=str(tmp_path / "d.json"))
+        meter.handle_message("buckler/772_ABC/dataJson", json.dumps(SINGLE_PHASE_JSON))
+        app_module.smart_meter = meter
+        data = c.get("/api/smart-meter").get_json()
+        assert data["status"] == "ok" and data["voltage"] == [225.3]
+
+    def test_card_on_page(self, client):
+        c, _ = client
+        assert 'id="smart-meter-card"' in c.get("/").get_data(as_text=True)
+
+
+@pytest.mark.parametrize("setting,phases", [("1", 1), ("true", 1), ("3", 3)])
+def test_demo_meter(setting, phases):
+    meter, feed = create_smart_meter_from_env({"SMART_METER_DEMO": setting})
+    assert meter.daily_file is None  # demo never touches the real daily baseline file
+    with patch("smart_meter.threading.Thread"):
+        feed.start()
+    feed._last_tick -= 60  # a minute later
+    feed.tick()
+    status = meter.get_status()
+    assert status["status"] == "ok" and status["demo"] is True and status["phases"] == phases
+    assert len(status["voltage"]) == phases and len(status["power_phases"]) == phases
+    assert status["power_w"] > 0 and status["today_consumed_kwh"] >= 0
+    assert status["frequency_max"] and status["relays"]
+
+
+def test_real_meter_not_flagged_demo(meter):
+    meter.handle_message("buckler/1/dataJson", json.dumps(SINGLE_PHASE_JSON))
+    assert "demo" not in meter.get_status()

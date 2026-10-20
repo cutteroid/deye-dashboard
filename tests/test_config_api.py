@@ -3,7 +3,7 @@ import json
 import pytest
 from unittest.mock import patch, MagicMock
 
-from inverter import InverterConfig
+from inverters import InverterConfig
 
 
 @pytest.fixture
@@ -28,8 +28,12 @@ def client():
     app_module.weather_poller = mock_weather_poller
     app_module.inverter_config = InverterConfig(phases=3, has_battery=True, pv_strings=2)
     app_module._configured = True
+    app_module._pin_failures = 0
+    app_module._pin_locked_until = 0.0
 
     with app_module.app.test_client() as c:
+        # Settings endpoints need the PIN once configured (default 0000)
+        c.environ_base["HTTP_X_SETTINGS_PIN"] = "0000"
         yield c, app_module
 
     # Restore originals
@@ -134,6 +138,7 @@ class TestSaveConfig:
         c, _ = client
         mock_existing = {
             "INVERTER_IP": "192.168.1.1",
+            "LOGGER_SERIAL": "2712345678",
             "TELEGRAM_BOT_TOKEN": "realtoken12345678",
         }
         with patch("setup.load_existing_env", return_value=(mock_existing, [])), \
@@ -156,13 +161,73 @@ class TestSaveConfig:
     def test_preserves_extra_lines(self, client):
         c, _ = client
         extra = ["DEPLOY_HOST=pi.local", "DEPLOY_USER=pi"]
-        with patch("setup.load_existing_env", return_value=({}, extra)), \
+        existing = {"INVERTER_IP": "192.168.1.1", "LOGGER_SERIAL": "2712345678"}
+        with patch("setup.load_existing_env", return_value=(existing, extra)), \
              patch("setup.write_env") as mock_write, \
              patch("threading.Timer"):
             resp = c.post("/api/config", json={"INVERTER_IP": "1.2.3.4"})
         assert resp.status_code == 200
         written_extra = mock_write.call_args[0][1]
         assert written_extra == extra
+
+
+class TestConfigValidation:
+    def _post(self, c, payload, existing=None):
+        existing = existing if existing is not None else {"INVERTER_IP": "192.168.1.1", "LOGGER_SERIAL": "2712345678"}
+        with patch("setup.load_existing_env", return_value=(existing, [])), \
+             patch("setup.write_env") as mock_write, \
+             patch("threading.Timer"):
+            resp = c.post("/api/config", json=payload)
+        return resp, mock_write
+
+    def test_rejects_serial_over_32_bits(self, client):
+        c, _ = client
+        resp, mock_write = self._post(c, {"LOGGER_SERIAL": "23312345678"})
+        assert resp.status_code == 400
+        assert "LOGGER_SERIAL" in resp.get_json()["fields"]
+        mock_write.assert_not_called()
+
+    def test_rejects_line_breaks(self, client):
+        """A newline would inject extra lines into .env (e.g. a new SETTINGS_PIN)."""
+        c, _ = client
+        resp, mock_write = self._post(c, {"OUTAGE_GROUP": "4.2\nSETTINGS_PIN=1111"})
+        assert resp.status_code == 400
+        mock_write.assert_not_called()
+
+    def test_rejects_unknown_keys(self, client):
+        c, _ = client
+        resp, mock_write = self._post(c, {"SETTINGS_PIN": "1111"})
+        assert resp.status_code == 400
+        assert resp.get_json()["fields"] == {"SETTINGS_PIN": "unknown setting"}
+        mock_write.assert_not_called()
+
+    def test_rejects_bad_values(self, client):
+        c, _ = client
+        resp, _ = self._post(c, {"INVERTER_IP": "999.1.1.1", "WEATHER_LATITUDE": "north",
+                                 "OUTAGE_PROVIDER": "acme", "GENERATOR_OIL_CHANGE_DATE": "17.10.2026"})
+        assert resp.status_code == 400
+        assert set(resp.get_json()["fields"]) == {
+            "INVERTER_IP", "WEATHER_LATITUDE", "OUTAGE_PROVIDER", "GENERATOR_OIL_CHANGE_DATE"}
+
+    def test_requires_ip_and_serial_after_merge(self, client):
+        c, _ = client
+        resp, mock_write = self._post(c, {"WEATHER_LATITUDE": "50.4"}, existing={})
+        assert resp.status_code == 400
+        mock_write.assert_not_called()
+
+    def test_accepts_full_onboarding_payload(self, client):
+        c, _ = client
+        resp, mock_write = self._post(c, {
+            "INVERTER_IP": "logger.local", "LOGGER_SERIAL": "2712345678",
+            "WEATHER_LATITUDE": "50.4501", "WEATHER_LONGITUDE": "30.5234",
+            "OUTAGE_PROVIDER": "dtek", "OUTAGE_DTEK_REGION": "kyiv-region", "OUTAGE_GROUP": "4.2",
+            "INVERTER_HAS_GENERATOR": "true", "GENERATOR_FUEL_RATE": "2.5",
+            "GENERATOR_OIL_CHANGE_DATE": "2026-01-15",
+            "TELEGRAM_ENABLED": "true", "TELEGRAM_BOT_TOKEN": "123456:ABCdefGHIjklMNOpqrSTUvwx",
+            "TELEGRAM_ALLOWED_USERS": "12345678, 87654321", "TELEGRAM_PUBLIC": "false",
+        })
+        assert resp.status_code == 200, resp.get_json()
+        mock_write.assert_called_once()
 
 
 class TestConfigDiscover:
@@ -206,14 +271,6 @@ class TestFirstRunGuards:
         data = resp.get_json()
         assert data["enabled"] is False
 
-    def test_update_status_returns_defaults_when_unconfigured(self, unconfigured_client):
-        c, _ = unconfigured_client
-        resp = c.get("/api/update/status")
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert data["update_available"] is False
-        assert data["manager_state"] == "idle"
-
     def test_index_serves_page_when_unconfigured(self, unconfigured_client):
         c, _ = unconfigured_client
         resp = c.get("/")
@@ -236,8 +293,99 @@ class TestIsConfigured:
         with patch.dict("os.environ", {"INVERTER_IP": "", "LOGGER_SERIAL": ""}, clear=False):
             assert is_configured() is False
 
+    def test_invalid_serial_means_setup_mode(self):
+        from app import is_configured
+        for serial in ("abc", "23312345678", "-5"):
+            with patch.dict("os.environ", {"INVERTER_IP": "192.168.1.100", "LOGGER_SERIAL": serial}):
+                assert is_configured() is False, serial
+
+    def test_parse_logger_serial(self):
+        from inverters.deye import parse_logger_serial
+        assert parse_logger_serial("2712345678") == 2712345678
+        assert parse_logger_serial(" 42 ") == 42
+        assert parse_logger_serial("4294967296") == 0
+        assert parse_logger_serial("x1") == 0
+        assert parse_logger_serial(None) == 0
+
     def test_missing_values(self):
         from app import is_configured
         env = dict(__builtins__="") # dummy to use clear
         with patch.dict("os.environ", {}, clear=True):
             assert is_configured() is False
+
+
+class TestSettingsPin:
+    @pytest.fixture(autouse=True)
+    def _default_pin(self, monkeypatch):
+        monkeypatch.delenv("SETTINGS_PIN", raising=False)
+
+    def _no_pin(self, c):
+        c.environ_base.pop("HTTP_X_SETTINGS_PIN", None)
+
+    def test_verify_default_pin(self, client):
+        c, _ = client
+        resp = c.post("/api/settings/verify-pin", json={"pin": "0000"})
+        assert resp.status_code == 200
+        assert resp.get_json()["status"] == "ok"
+
+    def test_verify_wrong_pin(self, client):
+        c, _ = client
+        resp = c.post("/api/settings/verify-pin", json={"pin": "1234"})
+        assert resp.status_code == 401
+
+    def test_verify_custom_pin_from_env(self, client, monkeypatch):
+        c, _ = client
+        monkeypatch.setenv("SETTINGS_PIN", "4821")
+        assert c.post("/api/settings/verify-pin", json={"pin": "0000"}).status_code == 401
+        assert c.post("/api/settings/verify-pin", json={"pin": "4821"}).status_code == 200
+
+    def test_lockout_after_repeated_failures(self, client):
+        c, app_module = client
+        for _ in range(app_module.PIN_MAX_ATTEMPTS - 1):
+            assert c.post("/api/settings/verify-pin", json={"pin": "9999"}).status_code == 401
+        resp = c.post("/api/settings/verify-pin", json={"pin": "9999"})
+        assert resp.status_code == 429
+        assert resp.get_json()["retry_after"] > 0
+        # Even the right PIN is refused while locked out
+        assert c.post("/api/settings/verify-pin", json={"pin": "0000"}).status_code == 429
+
+    @pytest.mark.parametrize("method,url", [
+        ("get", "/api/config"),
+        ("post", "/api/config"),
+        ("post", "/api/config/reset"),
+        ("get", "/api/config/discover"),
+        ("post", "/api/phase-stats/clear"),
+    ])
+    def test_settings_endpoints_require_pin(self, client, method, url):
+        c, _ = client
+        self._no_pin(c)
+        resp = getattr(c, method)(url, json={})
+        assert resp.status_code == 401
+
+    def test_wrong_pin_header_rejected(self, client):
+        c, _ = client
+        c.environ_base["HTTP_X_SETTINGS_PIN"] = "1111"
+        assert c.get("/api/config").status_code == 401
+
+    def test_first_run_does_not_need_pin(self, unconfigured_client):
+        c, _ = unconfigured_client
+        with patch("setup.load_existing_env", return_value=({}, [])):
+            resp = c.get("/api/config")
+        assert resp.status_code == 200
+
+
+class TestRestart:
+    def test_systemctl_success_does_not_exit(self):
+        import app as app_module
+        with patch("app.subprocess.run") as mock_run, patch("app.os._exit") as mock_exit:
+            app_module._restart_now()
+        assert mock_run.call_args[0][0][:2] == ["sudo", "-n"]
+        mock_exit.assert_not_called()
+
+    def test_falls_back_to_nonzero_exit(self):
+        import app as app_module
+        import subprocess
+        for error in (FileNotFoundError("sudo"), subprocess.CalledProcessError(1, "sudo")):
+            with patch("app.subprocess.run", side_effect=error), patch("app.os._exit") as mock_exit:
+                app_module._restart_now()
+            mock_exit.assert_called_once_with(3)

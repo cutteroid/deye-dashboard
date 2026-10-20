@@ -230,3 +230,146 @@ class TestSaveToPhaseHistory:
         with open(history_file) as f:
             history = json.load(f)
         assert len(history) <= 7
+
+
+class TestGeneratorMidnightAndRestart:
+    def _reset(self):
+        import app
+        app.generator_last_running = None
+        app.generator_session_start = None
+
+    def test_session_split_at_midnight(self, tmp_path):
+        self._reset()
+        log_file = str(tmp_path / "gen_log.json")
+        with patch("app.GENERATOR_LOG_FILE", log_file):
+            import app
+            app.track_generator_runtime(1000, now=datetime(2026, 10, 16, 23, 0, 0))
+            app.track_generator_runtime(1000, now=datetime(2026, 10, 17, 0, 30, 0))
+            app.track_generator_runtime(0, now=datetime(2026, 10, 17, 1, 0, 0))
+        with open(log_file) as f:
+            log = json.load(f)
+        assert log["2026-10-16"]["runtime_seconds"] == 3600
+        assert log["2026-10-16"]["sessions"] == [{"start": "23:00:00", "end": "24:00:00"}]
+        assert log["2026-10-17"]["runtime_seconds"] == 3600
+        assert log["2026-10-17"]["sessions"] == [{"start": "00:00:00", "end": "01:00:00"}]
+
+    def test_open_session_resumed_after_restart(self, tmp_path):
+        self._reset()
+        log_file = str(tmp_path / "gen_log.json")
+        with open(log_file, "w") as f:
+            json.dump({"2026-10-17": {"runtime_seconds": 0,
+                                      "sessions": [{"start": "10:00:00", "end": None}]}}, f)
+        with patch("app.GENERATOR_LOG_FILE", log_file):
+            import app
+            # App restarted; generator still running, then stops at 11:00
+            app.track_generator_runtime(1000, now=datetime(2026, 10, 17, 10, 30, 0))
+            app.track_generator_runtime(0, now=datetime(2026, 10, 17, 11, 0, 0))
+        with open(log_file) as f:
+            log = json.load(f)
+        assert log["2026-10-17"]["sessions"] == [{"start": "10:00:00", "end": "11:00:00"}]
+        assert log["2026-10-17"]["runtime_seconds"] == 3600
+
+
+class TestBatteryRuntime:
+    """Runtime estimate: usable energy above the shutdown SOC / average discharge power."""
+
+    DATA = {"battery_soc": 92, "battery_shutdown_soc": 10, "battery_capacity_ah": 100, "battery_voltage": 53.2}
+
+    def test_estimate(self):
+        import app
+        # 100 Ah x 53.2 V = 5320 Wh; (92 - 10)% = 4362.4 Wh; at 411 W -> 636 min
+        assert app.estimate_battery_runtime(self.DATA, 411) == 636
+
+    def test_none_when_not_discharging_or_capacity_unknown(self):
+        import app
+        assert app.estimate_battery_runtime(self.DATA, 0) is None
+        assert app.estimate_battery_runtime({**self.DATA, "battery_capacity_ah": 0}, 400) is None
+
+    def test_at_or_below_shutdown_soc_is_zero(self):
+        import app
+        assert app.estimate_battery_runtime({**self.DATA, "battery_soc": 8}, 400) == 0
+
+    def test_capacity_override(self, monkeypatch):
+        import app
+        monkeypatch.setattr(app, "BATTERY_CAPACITY_KWH", 10.0)
+        assert app.estimate_battery_runtime({**self.DATA, "battery_shutdown_soc": 0}, 920) == 600  # 9.2 kWh / 920 W
+
+    def test_poller_averages_discharge_and_resets(self):
+        import app
+        poller = app.InverterPoller(inverter=None, battery_sampler=None)
+        for power in (-300, -500):        # average 400 W
+            result = {**self.DATA, "battery_power": power}
+            poller._add_runtime_estimate(result)
+        assert result["battery_runtime_minutes"] == app.estimate_battery_runtime(self.DATA, 400)
+        result = {**self.DATA, "battery_power": 1500}  # charging: average restarts with charge power
+        poller._add_runtime_estimate(result)
+        assert result["battery_runtime_minutes"] is None and poller._flow_samples == [1500]
+        result = {**self.DATA, "battery_power": 0}     # idle: no estimates, nothing averaged
+        poller._add_runtime_estimate(result)
+        assert result["battery_charge_minutes"] is None and poller._flow_samples == []
+
+    def test_charge_time(self):
+        import app
+        # 100 Ah x 53.2 V = 5320 Wh; (100 - 92)% = 425.6 Wh; at 3135 W -> 8 min
+        assert app.estimate_battery_charge_time(self.DATA, 3135) == 8
+        assert app.estimate_battery_charge_time({**self.DATA, "battery_soc": 100}, 3135) is None
+        assert app.estimate_battery_charge_time(self.DATA, 0) is None
+
+    def test_poller_charge_estimate_uses_average_charge_power(self):
+        import app
+        poller = app.InverterPoller(inverter=None, battery_sampler=None)
+        data = {**self.DATA, "battery_soc": 50}
+        for power in (2000, 4000):        # average 3000 W
+            result = {**data, "battery_power": power}
+            poller._add_runtime_estimate(result)
+        assert result["battery_charge_minutes"] == app.estimate_battery_charge_time(data, 3000)
+        assert result["battery_runtime_minutes"] is None
+
+
+class TestPollerKeepsGoodData:
+    """A failed inverter poll keeps the last good readings (for up to INVERTER_CACHE_MAX_AGE)."""
+
+    def _poller(self, results):
+        import app
+        from unittest.mock import MagicMock
+        inv = MagicMock()
+        inv.read_all_data.side_effect = results
+        return app.InverterPoller(inverter=inv, battery_sampler=None)
+
+    def test_failed_poll_keeps_last_readings(self):
+        poller = self._poller([{"battery_soc": 80, "battery_power": 0}, {"error": "No socket available"}])
+        poller._fetch()
+        poller._fetch()
+        assert poller.data["battery_soc"] == 80 and "error" not in poller.data
+
+    def test_error_shown_once_readings_are_too_old(self):
+        import app
+        from datetime import datetime, timedelta
+        poller = self._poller([{"error": "No socket available"}])
+        old = (datetime.now() - timedelta(seconds=app.INVERTER_CACHE_MAX_AGE + 5)).isoformat()
+        poller._cache = {"battery_soc": 80, "last_updated": old}
+        poller._fetch()
+        assert poller.data["error"] == "No socket available"
+
+    def test_error_without_previous_readings(self):
+        poller = self._poller([{"error": "timeout"}])
+        poller._fetch()
+        assert poller.data["error"] == "timeout"
+
+    def test_api_reports_data_age(self):
+        import app
+        from datetime import datetime, timedelta
+        from unittest.mock import MagicMock, PropertyMock
+        from inverters import InverterConfig
+        app.app.config["TESTING"] = True
+        orig = (app.inverter_poller, app.inverter_config, app._configured)
+        try:
+            poller = MagicMock()
+            type(poller).data = PropertyMock(return_value={
+                "battery_soc": 80, "last_updated": (datetime.now() - timedelta(seconds=42)).isoformat()})
+            app.inverter_poller, app.inverter_config, app._configured = poller, InverterConfig(), True
+            with app.app.test_client() as c:
+                body = c.get("/api/data").get_json()
+            assert 41 <= body["data_age_seconds"] <= 44
+        finally:
+            app.inverter_poller, app.inverter_config, app._configured = orig

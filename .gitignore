@@ -32,3 +32,12 @@ generator_log.json
 # OS
 .DS_Store
 Thumbs.db
+
+# Runtime data (settings, stats, MQTT broker files)
+data/
+
+# Exported image bundles (tools/export_images.sh)
+dist/
+
+# NAS address for tools/deploy_nas.sh
+tools/.deploy_nas.env

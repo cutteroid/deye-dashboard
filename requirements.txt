@@ -2,3 +2,5 @@ pysolarmanv5
 flask
 requests
 python-dotenv
+waitress
+paho-mqtt>=2.0

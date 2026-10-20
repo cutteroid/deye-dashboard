@@ -101,13 +101,17 @@ echo -e "${GREEN}Deploying Deye Dashboard to ${REMOTE_HOST}...${NC}"
 # Files to deploy
 FILES=(
     "app.py"
-    "inverter.py"
+    "inverters"
     "telegram_bot.py"
     "poems.py"
     "outage_providers"
-    "update_manager.py"
+    "storage.py"
+    "air_alerts.py"
+    "smart_meter.py"
     "requirements.txt"
     "templates"
+    "static"
+    "locales"
     "discover_inverter.py"
     "check_inverter.py"
     "setup.py"
@@ -128,36 +132,9 @@ for file in "${FILES[@]}"; do
     fi
 done
 
-# Setup git repository for OTA updates
-echo -e "${YELLOW}Setting up git for OTA updates...${NC}"
-ssh ${REMOTE_USER}@${REMOTE_HOST} << ENDSSH
-cd ${REMOTE_DIR}
-
-# Install git if not present
-if ! command -v git &> /dev/null; then
-    echo "Installing git..."
-    sudo apt-get update -qq && sudo apt-get install -y -qq git
-fi
-
-# Initialize git repo if not present
-if [ ! -d ".git" ]; then
-    echo "Initializing git repository..."
-    git init
-    git remote add origin https://github.com/${GITHUB_REPO:-ivanursul/deye-dashboard}.git
-    git fetch --tags
-    LATEST_TAG=\$(git tag --sort=-v:refname | head -1)
-    if [ -n "\$LATEST_TAG" ]; then
-        echo "Checking out \$LATEST_TAG (force — initial setup over rsync'd files)..."
-        git checkout -f "\$LATEST_TAG"
-    fi
-else
-    echo "Fetching latest tags..."
-    git fetch --tags
-fi
-ENDSSH
-
-# Setup sudoers for passwordless systemctl restart
-echo -e "${YELLOW}Setting up sudoers for OTA restart...${NC}"
+# Setup sudoers for passwordless systemctl restart (the dashboard restarts itself
+# after the configuration is saved from the settings)
+echo -e "${YELLOW}Setting up sudoers for service restart...${NC}"
 ssh ${REMOTE_USER}@${REMOTE_HOST} << ENDSSH
 SUDOERS_FILE="/etc/sudoers.d/deye-dashboard"
 if [ ! -f "\$SUDOERS_FILE" ]; then

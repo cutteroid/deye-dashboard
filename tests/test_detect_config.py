@@ -1,13 +1,20 @@
 """Tests for DeyeInverter.detect_config() two-stage detection."""
 import pytest
 from unittest.mock import patch, MagicMock
-from inverter import DeyeInverter, InverterConfig
+from inverters import DeyeInverter, InverterConfig
+
+
+@pytest.fixture(autouse=True)
+def no_sleep():
+    """detect_config() sleeps 2s between samples; skip that in tests."""
+    with patch("inverters.deye.time.sleep"):
+        yield
 
 
 @pytest.fixture
 def inverter():
     """Create a DeyeInverter with a mocked PySolarmanV5 connection."""
-    with patch("inverter.PySolarmanV5"):
+    with patch("inverters.deye.PySolarmanV5"):
         inv = DeyeInverter(ip="192.168.1.1", serial=123456)
         inv.inverter = MagicMock()
         return inv
@@ -21,14 +28,14 @@ def _mock_read_register(register_values):
 
 
 class TestDetectConfig3Phase:
-    """Stage 1 detects 3-phase → Stage 2 reads 3-phase registers (587, 515)."""
+    """Stage 1 detects 3-phase → Stage 2 reads 3-phase registers (587, 673)."""
 
     def test_3phase_with_battery_and_pv2(self, inverter):
         inverter.read_register = _mock_read_register({
             645: 2300,   # L2 = 230V → 3-phase
             646: 2310,   # L3 = 231V
             587: 5200,   # battery = 52.00V
-            515: 300,    # PV2 = 300W
+            673: 300,    # PV2 = 300W
         })
         config = inverter.detect_config()
         assert config.phases == 3
@@ -40,7 +47,7 @@ class TestDetectConfig3Phase:
             645: 2300,
             646: 2310,
             587: 0,      # battery voltage 0 in all samples
-            515: 300,
+            673: 300,
         })
         config = inverter.detect_config()
         assert config.phases == 3
@@ -52,7 +59,7 @@ class TestDetectConfig3Phase:
             645: 2300,
             646: 2310,
             587: 5200,
-            515: 0,      # PV2 power 0 in all samples
+            673: 0,      # PV2 power 0 in all samples
         })
         config = inverter.detect_config()
         assert config.phases == 3
@@ -64,7 +71,7 @@ class TestDetectConfig3Phase:
             645: 2300,   # L2 = 230V → enough for 3-phase
             646: 0,      # L3 = 0V
             587: 5200,
-            515: 300,
+            673: 300,
         })
         config = inverter.detect_config()
         assert config.phases == 3
@@ -74,7 +81,7 @@ class TestDetectConfig3Phase:
             645: 0,      # L2 = 0V
             646: 2300,   # L3 = 230V → enough for 3-phase
             587: 5200,
-            515: 300,
+            673: 300,
         })
         config = inverter.detect_config()
         assert config.phases == 3
@@ -130,14 +137,14 @@ class TestDetectConfigSinglePhase:
         inverter.detect_config()
 
         assert 587 not in read_registers, "Should not read 3-phase battery register 587"
-        assert 515 not in read_registers, "Should not read 3-phase PV2 register 515"
+        assert 673 not in read_registers, "Should not read 3-phase PV2 register 673"
         assert 183 in read_registers, "Should read Sunsynk battery register 183"
         assert 187 in read_registers, "Should read Sunsynk PV2 register 187"
 
     def test_3phase_does_not_read_sunsynk_registers(self, inverter):
-        """Ensure 3-phase path reads 587/515, not 183/187."""
+        """Ensure 3-phase path reads 587/673, not 183/187."""
         read_registers = []
-        original_values = {645: 2300, 646: 2310, 587: 5200, 515: 300}
+        original_values = {645: 2300, 646: 2310, 587: 5200, 673: 300}
 
         def tracking_read(addr):
             read_registers.append(addr)
@@ -149,7 +156,7 @@ class TestDetectConfigSinglePhase:
         assert 183 not in read_registers, "Should not read Sunsynk battery register 183"
         assert 187 not in read_registers, "Should not read Sunsynk PV2 register 187"
         assert 587 in read_registers, "Should read 3-phase battery register 587"
-        assert 515 in read_registers, "Should read 3-phase PV2 register 515"
+        assert 673 in read_registers, "Should read 3-phase PV2 register 673"
 
 
 class TestDetectConfigEdgeCases:
@@ -172,7 +179,7 @@ class TestDetectConfigEdgeCases:
             645: 510,    # L2 = 51.0V — above 50V threshold
             646: 0,
             587: 5200,
-            515: 300,
+            673: 300,
         })
         config = inverter.detect_config()
         assert config.phases == 3
@@ -183,7 +190,7 @@ class TestDetectConfigEdgeCases:
             645: 2300,
             646: 2300,
             587: 1000,   # 10.00V — exactly at threshold
-            515: 300,
+            673: 300,
         })
         config = inverter.detect_config()
         assert config.has_battery is True  # defaults to True when not detected
@@ -194,7 +201,7 @@ class TestDetectConfigEdgeCases:
             645: 2300,
             646: 2300,
             587: 1100,   # 11.00V — above 10V threshold
-            515: 300,
+            673: 300,
         })
         config = inverter.detect_config()
         assert config.has_battery is True
@@ -213,7 +220,7 @@ class TestDetectConfigEdgeCases:
     def test_stage2_read_failure_defaults_to_battery_and_pv2(self, inverter):
         """If battery/PV2 reads fail, should default to has_battery=True, pv_strings=2."""
         def failing_read(addr):
-            if addr in (587, 515):
+            if addr in (587, 673):
                 raise Exception("connection timeout")
             return {645: 2300, 646: 2300}.get(addr, 0)
 
@@ -246,7 +253,7 @@ class TestDetectConfigEdgeCases:
                 return 0
             if addr == 646:
                 return 0
-            return {587: 5200, 515: 300}.get(addr, 0)
+            return {587: 5200, 673: 300}.get(addr, 0)
 
         inverter.read_register = intermittent_read
         config = inverter.detect_config()
@@ -254,7 +261,7 @@ class TestDetectConfigEdgeCases:
 
     def test_returns_inverter_config_instance(self, inverter):
         inverter.read_register = _mock_read_register({
-            645: 2300, 646: 2300, 587: 5200, 515: 300,
+            645: 2300, 646: 2300, 587: 5200, 673: 300,
         })
         config = inverter.detect_config()
         assert isinstance(config, InverterConfig)
@@ -275,7 +282,7 @@ class TestDetectConfigGenerator:
         """3-phase: register 667 returns >0 → has_generator=True."""
         inverter.read_register = _mock_read_register({
             645: 2300, 646: 2310,
-            587: 5200, 515: 300,
+            587: 5200, 673: 300,
             667: 3000,   # generator running at 3000W
         })
         config = inverter.detect_config()
@@ -286,7 +293,7 @@ class TestDetectConfigGenerator:
         """3-phase: register 667 returns 0 → has_generator=False."""
         inverter.read_register = _mock_read_register({
             645: 2300, 646: 2310,
-            587: 5200, 515: 300,
+            587: 5200, 673: 300,
             667: 0,
         })
         config = inverter.detect_config()
@@ -320,9 +327,55 @@ class TestDetectConfigGenerator:
         def failing_gen_read(addr):
             if addr in (667, 166):
                 raise Exception("connection timeout")
-            return {645: 2300, 646: 2300, 587: 5200, 515: 300}.get(addr, 0)
+            return {645: 2300, 646: 2300, 587: 5200, 673: 300}.get(addr, 0)
 
         inverter.read_register = failing_gen_read
         config = inverter.detect_config()
         assert config.phases == 3
         assert config.has_generator is False
+
+
+def test_detect_config_disconnects_afterwards(inverter):
+    inverter.read_register = _mock_read_register({645: 2300, 646: 2300, 587: 5200})
+    conn = inverter.inverter
+    inverter.detect_config()
+    conn.disconnect.assert_called()
+    assert inverter.inverter is None
+
+
+class TestDeviceType:
+    """Register 0 (device type) selects the family and skips voltage-based phase detection."""
+
+    @pytest.mark.parametrize("code,family,phases", [
+        (0x0005, "hybrid_3p_lv", 3), (0x0500, "hybrid_3p_lv", 3),
+        (0x0006, "hybrid_3p_hv", 3), (0x0601, "hybrid_3p_hv", 3),
+        (0x0003, "hybrid_1p", 1), (0x0300, "hybrid_1p", 1),
+    ])
+    def test_known_family_sets_phases(self, inverter, code, family, phases):
+        read = []
+        def reg(addr):
+            read.append(addr)
+            return {0: code, 587: 5200, 183: 5200}.get(addr, 0)
+        inverter.read_register = MagicMock(side_effect=reg)
+        config = inverter.detect_config()
+        assert (config.family, config.device_type, config.phases) == (family, code, phases)
+        assert 645 not in read and 646 not in read   # no L2/L3 voltage sampling needed
+
+    def test_unknown_code_falls_back_to_voltage_detection(self, inverter):
+        inverter.read_register = MagicMock(side_effect=_mock_read_register({0: 0x7777, 645: 2300, 646: 2300}))
+        config = inverter.detect_config()
+        assert config.family == "unknown" and config.phases == 3
+
+    @pytest.mark.parametrize("code", [0x0002, 0x0004, 0x0400])
+    def test_string_and_micro_flagged_unsupported(self, inverter, code):
+        inverter.read_register = MagicMock(side_effect=_mock_read_register({0: code}))
+        assert inverter.detect_config().to_dict()["supported"] is False
+
+    def test_device_type_read_failure_is_unknown(self, inverter):
+        def reg(addr):
+            if addr == 0:
+                raise Exception("timeout")
+            return {645: 2300, 646: 2300}.get(addr, 0)
+        inverter.read_register = MagicMock(side_effect=reg)
+        config = inverter.detect_config()
+        assert config.family == "unknown" and config.device_type is None and config.phases == 3

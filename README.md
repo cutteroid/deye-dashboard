@@ -1,4 +1,55 @@
-# Deye Solar Dashboard
+## Changes compared to the original project
+
+What this fork adds to the original [ivanursul/deye-dashboard](https://github.com/ivanursul/deye-dashboard):
+
+**New cards and features**
+- **Air raid alerts map:** Ukraine with oblasts and raions, live from [NEPTUN](https://neptun.in.ua/) (refreshed every 30 s), on a card and on the fullscreen first page. You can show the whole country or zoom to one region, with neighbouring regions dimmed around it (Settings → step 4).
+- **Planned outages:** today's and tomorrow's outage windows on a timeline, plus a countdown in the grid banner. Adds a DTEK provider (Kyiv oblast, Kyiv, Dnipro, Odesa). A failed schedule fetch is no longer reported as "No outages today".
+- **Bakler smart meter** (optional): live power, voltage and current per phase over MQTT, with a Mosquitto broker in `docker-compose.yml`. Phases cut by the meter or without supply are highlighted. The relay state is shown read-only. A demo mode is included.
+- **Battery estimates:**
+  - "Lasts about …" during an outage, counting down to the inverter's shutdown level;
+  - "Full in …" while charging;
+  - both based on a ~10-minute average power, with an optional `BATTERY_CAPACITY_KWH`.
+- **Grid status that matches reality:** taken from the inverter's grid relay. A partial outage (e.g. "L2 DOWN" / "НЕМАЄ ФАЗИ L2") and "grid out of range" are shown separately from a total outage. Grid voltage is shown per phase.
+- **Weather:** tomorrow's forecast in the fullscreen weather banner.
+- **Phase balance card** (was "Daily Phase Analytics"): today's kWh per phase plus one bar per day for the last 7 days. Tap a day for details.
+- **Consumption card:** home consumption and load per phase merged into one card.
+
+**Inverter support and accuracy**
+- **Inverter driver system** (`inverters/`). Deye / Sunsynk via a Solarman logger is the first driver; other brands can be added (`INVERTER_TYPE`). The UI no longer names a brand.
+- **Model detection** from the inverter's device type: single-phase, 3-phase low-voltage and 3-phase high-voltage hybrids (with HV scaling handled), plus a warning for unsupported string or micro inverters. The phase count can be set in the setup wizard.
+- **Fixed 3-phase readings:**
+  - battery power and current (was reading the battery temperature);
+  - PV power and today's PV (were reading the battery's daily counters);
+  - grid voltage L2/L3.
+
+**Interface**
+- **Languages:** English, Ukrainian and Russian, with a language menu.
+- **Fullscreen kiosk view:** reworked, including a compact layout for 7" tablets (960×600) and emoji that also render on old Android.
+- **Settings:** server settings are protected by a PIN, while local settings (low power mode, language) stay open.
+- **Less clutter:**
+  - removed: sound alerts, the temperature block, the weather background and effects, and the moving card icons;
+  - the planned outages and alerts maps no longer have their own timestamps.
+- **Robust against brief failures:** a dropped request or a busy logger keeps the last data on screen. Errors are only shown when data is really unavailable, and always with the real cause.
+
+**Running it**
+- **Docker:**
+  - runs on waitress;
+  - config and all data files live in the `data/` volume, so they survive rebuilds and deploys;
+  - `docker compose up` also starts the MQTT broker.
+- **Update checker removed:** the built-in OTA updater looked for releases of the original project. On a first deploy to a plain server, `deploy.sh` even replaced the copied files with the original's latest release. Updates now go through `git pull` + Docker / `deploy_nas.sh` / `deploy.sh`.
+- **Synology NAS** (e.g. DS223j):
+  - `tools/export_images.sh` builds a ready-to-load image bundle;
+  - `tools/deploy_nas.sh` pushes updates in seconds (one password prompt, build progress).
+- **Isolated IoT network:** firewall rules for reaching the logger and the meter on a separate IoT network (see [Devices on a Separate IoT Network](#devices-on-a-separate-iot-network)).
+- **Under the hood:**
+  - CSS, JS and HTML split into their own files;
+  - crash-safe data files;
+  - validated settings;
+  - background services that only start in `main()`;
+  - a test suite of 395 tests.
+
+# Extended Dashboard
 
 A web dashboard for monitoring Deye solar inverters in real-time. Supports both single-phase (e.g. SUN-6K-SG03LP1) and 3-phase hybrid models. Displays solar production, battery status, grid power, home consumption, weather conditions, and power outage schedules.
 
@@ -83,9 +134,10 @@ Raspberry Pi зчитує дані з вашого інвертора кожні
 - **Real-time monitoring** — solar production, battery SOC, grid power, and load consumption
 - **Load analytics** — per-phase power distribution with daily statistics (3-phase systems)
 - **Weather** — current conditions and forecast via Open-Meteo API
-- **Outage schedule** — upcoming power outage windows (Lvivoblenergo or Yasno providers)
-- **Grid outage detection** — voice alerts and browser notifications when power goes out
-- **Outage history** — track and review past power outages
+- **Planned outages** — today's and tomorrow's outage windows on a timeline, plus a countdown in the grid banner (Lvivoblenergo, Yasno, or DTEK providers)
+- **Air raid alerts** — map of Ukraine's regions and districts with live alert statuses (NEPTUN)
+- **Smart meter** — power, voltage, current and energy from a Bakler Wi-Fi electricity meter over MQTT (optional)
+- **Grid outage detection** — browser notifications when power goes out
 - **Telegram bot** — battery reports, inverter status, and Ukrainian weather poems
 - **Fullscreen mode** — kiosk-friendly display with weather, grid, and battery banners
 - **Responsive design** — works on desktop and mobile
@@ -99,8 +151,8 @@ Raspberry Pi зчитує дані з вашого інвертора кожні
 ## Quick Start
 
 ```bash
-git clone https://github.com/ivanursul/deye-dashboard.git
-cd deye-dashboard
+git clone https://github.com/cutteroid/kiosk-dashboard.git
+cd kiosk-dashboard
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -119,7 +171,16 @@ Run the dashboard:
 python app.py
 ```
 
-Open http://localhost:8080 in your browser.
+Open http://localhost:8080 in your browser. The app is served by [waitress](https://docs.pylonsproject.org/projects/waitress/) (a production WSGI server). For local development with the Flask debugger, run `DASHBOARD_DEV=1 python app.py` — never on a device reachable from the network.
+
+Inverter capabilities (phases, battery, PV strings, generator) are auto-detected in the background after startup. The inverter's device type (register 0) tells its family: Deye single-phase hybrid, three-phase low-voltage hybrid and three-phase high-voltage hybrid inverters are supported (HV models scale some values differently, handled automatically); string and micro inverters use other register maps and get a warning on the dashboard. Detection results are saved to `inverter_config.json` (override the path with `INVERTER_CONFIG_FILE`); the next start uses the saved result immediately. Set `INVERTER_PHASES`, `INVERTER_HAS_BATTERY`, `INVERTER_PV_STRINGS` and `INVERTER_HAS_GENERATOR` to skip detection.
+
+Run the tests:
+
+```bash
+pip install pytest
+python -m pytest        # runs tests/ (see pytest.ini), takes a few seconds
+```
 
 ## Docker
 
@@ -128,18 +189,21 @@ You can also run the dashboard using Docker, which is the recommended approach f
 ### Using Docker Compose (Recommended)
 
 ```bash
-# Create and configure .env file
-cp .env.example .env
-# Edit .env with your inverter IP, logger serial, etc.
+git clone https://github.com/cutteroid/kiosk-dashboard.git
+cd kiosk-dashboard
 
-# Build and start the dashboard
-docker-compose up -d
+# Build and start the dashboard (and the MQTT broker for the smart meter)
+docker compose up -d
+
+# Open http://localhost:8080 — without a configuration the setup wizard starts
+# and saves it to data/.env. Or prepare it yourself first:
+#   mkdir -p data && cp .env.example data/.env   (then edit data/.env)
 
 # View logs
-docker-compose logs -f
+docker compose logs -f
 
 # Stop the dashboard
-docker-compose down
+docker compose down
 ```
 
 ### Using Docker CLI
@@ -148,22 +212,38 @@ docker-compose down
 # Build the image
 docker build -t deye-dashboard:latest .
 
-# Run the container
+# Run the container (configuration and data live in ./data, see Data Persistence)
 docker run -d \
   --name deye-dashboard \
   -p 8080:8080 \
-  --env-file .env \
   -v $(pwd)/data:/app/data \
   --restart unless-stopped \
   deye-dashboard:latest
 ```
 
+Don't pass the settings with `--env-file` / `-e`: environment variables take precedence over `data/.env`, so changes saved from the dashboard's settings would be ignored.
+
+### Running on Another Machine Without Building (e.g. Synology NAS)
+
+`tools/export_images.sh` packs the dashboard and Mosquitto images with a ready-to-run `docker-compose.yml` into `dist/extended-dashboard-<arch>.tar.gz`; the target machine needs only Docker, no source code or build. Pass the target CPU: `arm64` (default on Apple Silicon; Raspberry Pi 4/5, Synology j/value models such as DS223j) or `amd64` (Intel/AMD PCs, Synology "+" models). Install steps for Synology and plain Linux are in `INSTALL.md` inside the archive. Your `data/.env` is not included (it holds secrets) — copy it over yourself if you want the same settings.
+
+```bash
+tools/export_images.sh          # this machine's architecture
+tools/export_images.sh amd64    # cross-build for an Intel/AMD machine
+```
+
+**Updates:** `tools/deploy_nas.sh` sends only the files the image is built from (~0.2 MB) to the NAS over SSH and rebuilds there (`docker compose up -d --build`); Docker reuses its cached layers, so a code-only update takes seconds. The first run asks for the SSH login and the dashboard folder on the NAS (saved to `tools/.deploy_nas.env`, not committed) and is slow once, because the NAS downloads the Python base image and installs the packages. `data/` on the NAS is never touched. The script asks for the NAS password once at the start of each run and uses it for both the SSH login and `sudo` (on DSM they're the same; it only asks again if `sudo` rejects it). With an SSH key (`ssh-copy-id user@nas`) the login needs no password, and if `sudo` needs none either, the script doesn't ask at all. `tools/deploy_nas.sh --setup` changes the saved address.
+
 ### Data Persistence
 
-The container mounts a `data` volume at `/app/data` for persistent storage of:
-- Outage history (`outage_history.json`)
-- Phase statistics (`phase_stats.json`)
-- Phase history (`phase_history.json`)
+The container mounts a `data` volume at `/app/data`. Everything the dashboard stores lives there, so it survives rebuilds and deploys:
+- Configuration (`.env`)
+- Phase statistics and history (`phase_stats.json`, `phase_history.json`)
+- Grid import log, generator log, last inverter readings, detected inverter model (`grid_daily_log.json`, `generator_log.json`, `inverter_cache.json`, `inverter_config.json`)
+- Telegram bot state and battery reports (`bot_state.json`, `battery_reports/`)
+- Smart meter daily counter (`smart_meter_daily.json`) and Mosquitto broker files (`mosquitto/`)
+
+Without a `data` folder (plain installs) the files are kept next to the app, as before. Each path can be overridden with its `*_FILE` variable.
 
 ### Health Checks
 
@@ -182,9 +262,12 @@ All configuration is done via environment variables, typically set in a `.env` f
 
 ### Inverter (required)
 
+The dashboard reads the inverter through a driver (`inverters/`). Supported so far: **Deye / Sunsynk hybrid inverters with a Solarman Wi-Fi logger** (driver `deye`, the default). Other brands can be added as drivers; see `inverters/__init__.py`.
+
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `INVERTER_IP` | IP address of your Deye inverter on the local network | `192.168.1.100` |
+| `INVERTER_TYPE` | Inverter driver | `deye` (default) |
+| `INVERTER_IP` | IP address of the inverter's logger on the local network | `192.168.1.100` |
 | `LOGGER_SERIAL` | Serial number of the Solarman Wi-Fi logger (printed on the stick or found in the Solarman app) | `1234567890` |
 
 ### Inverter Capabilities (optional)
@@ -193,9 +276,10 @@ These are auto-detected at startup. Set them only if auto-detection doesn't work
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `INVERTER_PHASES` | Number of phases (`1` or `3`) | auto-detected |
+| `INVERTER_PHASES` | Number of phases (`1` or `3`); also in Settings → Edit configuration (step 1) | auto-detected |
 | `INVERTER_HAS_BATTERY` | Whether a battery is connected (`true` / `false`) | auto-detected |
 | `INVERTER_PV_STRINGS` | Number of PV strings (`1` or `2`) | auto-detected |
+| `BATTERY_CAPACITY_KWH` | Battery capacity for the battery banner's time estimates — "Lasts about" during outages, "Full in" while charging — if the inverter's own value is wrong. Without it: battery capacity in Ah from the inverter (BMS-measured, else the inverter setting) × battery voltage; the estimates use the average charge / discharge power of the last ~10 minutes and count down to 100% / the inverter's shutdown SOC | from the inverter |
 
 ### Weather
 
@@ -210,7 +294,7 @@ Coordinates are used to fetch weather data from the [Open-Meteo API](https://ope
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `OUTAGE_PROVIDER` | Provider name: `lvivoblenergo`, `yasno`, or `none` | `none` |
+| `OUTAGE_PROVIDER` | Provider name: `lvivoblenergo`, `yasno`, `dtek`, or `none` | `none` |
 | `OUTAGE_GROUP` | Your outage queue/group number (e.g. `1.1`, `2.2`) | — |
 
 **Yasno-specific settings** (only when `OUTAGE_PROVIDER=yasno`):
@@ -219,6 +303,81 @@ Coordinates are used to fetch weather data from the [Open-Meteo API](https://ope
 |----------|-------------|---------|
 | `OUTAGE_REGION_ID` | Yasno region ID (e.g. `25` for Kyiv) | — |
 | `OUTAGE_DSO_ID` | Yasno DSO ID (e.g. `902` for DTEK Kyiv) | — |
+
+**DTEK-specific settings** (only when `OUTAGE_PROVIDER=dtek`):
+
+DTEK has no public API, so this provider reads the community feed [outage-data-ua](https://github.com/Baskerville42/outage-data-ua), which mirrors DTEK's published schedules every few minutes. Only definite outages are shown; "possible outage" hours are ignored.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `OUTAGE_DTEK_REGION` | `kyiv-region` (Kyiv oblast), `kyiv`, `dnipro`, or `odesa` | `kyiv-region` |
+
+### Settings PIN
+
+The settings panel (gear button) opens without a PIN for local, per-device settings such as low power mode (the language button is also always available). Server-side settings — Edit Configuration and Factory Reset — are locked behind the settings PIN (**Unlock** in the panel) and lock again when the panel closes. The server enforces the same PIN on the API endpoints behind them: config read/save/reset, inverter discovery and clearing phase statistics. After 5 wrong attempts, PIN checks are locked for 60 seconds.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `SETTINGS_PIN` | PIN for the settings panel | `0000` |
+
+This is basic protection for a kiosk display, not real authentication: the PIN is sent in plain HTTP. Factory Reset deletes `.env`, which resets the PIN to `0000`. During first-run setup no PIN is required.
+
+### Air Raid Alerts
+
+The **Air raid alerts** card shows a map of Ukraine's regions and districts (raions) coloured by status: red — air raid alert, yellow — threat (yellow level, e.g. drones). Alerts can cover a whole region or single districts. In fullscreen mode the map sits next to Planned outages on the first screen.
+
+Data comes from [NEPTUN](https://neptun.in.ua/) ([developer docs](https://neptun.in.ua/developers)): free REST API, no key needed. The server requests `GET https://neptun.in.ua/api/v1/alerts` every 30 seconds (their terms allow at most one request per 5 seconds) with `If-None-Match`, so unchanged data isn't re-downloaded. As required by NEPTUN's [terms of use](https://neptun.in.ua/api-terms), the card shows a visible "Source: NEPTUN" link and a note that it is not an official alert system.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `AIR_ALERTS_PROVIDER` | `neptun`, `mock` (demo data, marked "Demo data") or `none` to hide the card | `neptun` |
+| `AIR_ALERTS_REGION` | Zoom the map to one region, with the neighbouring regions dimmed around it (ISO 3166-2 code, e.g. `UA-32` Kyiv oblast — includes Kyiv city; `UA-43` Crimea includes Sevastopol) | whole Ukraine |
+
+Both are also in Settings → Edit configuration, step 4 ("Air raid alerts": on/off and which region the map shows).
+
+**Map data:** `static/data/ukraine-regions.json` is generated by `tools/build_ukraine_map.py` from the OCHA Common Operational Dataset *Ukraine – Subnational Administrative Boundaries* (State Scientific Production Enterprise "Kartographia"), licensed [CC BY-IGO](https://creativecommons.org/licenses/by/3.0/igo/), source: [data.humdata.org/dataset/cod-ab-ukr](https://data.humdata.org/dataset/cod-ab-ukr). NEPTUN alerts are matched to it by Ukrainian region/district name (with aliases for raions NEPTUN still lists under their pre-2024 names).
+
+### Smart Meter (optional)
+
+The **Smart meter** card shows live readings from a [Bakler](https://www.bakler.com.ua/) Wi-Fi electricity meter: current power, voltage and current (a per-phase table for three-phase meters, where a phase below 100 V is shown as "No voltage"), mains frequency and the relay state. When the meter or the broker is unavailable, a badge says so (Waiting for data / Meter offline / No recent data / MQTT broker unavailable) and the last known readings are dimmed. The relay is shown only; the dashboard never switches it.
+
+The meter talks MQTT: it connects to a broker and publishes its readings there ([MQTT docs, in Ukrainian](https://www.bakler.com.ua/setting-mqtt-client/)). `docker compose` starts a Mosquitto broker (`deye-mosquitto`, port 1883) next to the dashboard.
+
+1. Add to `data/.env` (choose your own user name and password):
+   ```
+   SMART_METER_ENABLED=true
+   SMART_METER_MQTT_USER=meter
+   SMART_METER_MQTT_PASSWORD=choose-a-long-password
+   ```
+2. `docker compose up -d` (restarts the broker and the dashboard with the new settings).
+3. In the meter's app open **Settings → Integration → MQTT** and enter: broker = IP address of the dashboard machine on your network, port `1883`, the same user name and password.
+
+The card appears with "Waiting for data" and fills in after the meter's first message. The dashboard asks the meter to send readings every `SMART_METER_INTERVAL` seconds; the full summary (frequency, relay) arrives once a minute.
+
+Without `SMART_METER_MQTT_USER` / `SMART_METER_MQTT_PASSWORD` the broker accepts no connections from the network, so it is never open without a password. If the meter (or the inverter's logger) is on a separate IoT / guest network, see [Devices on a Separate IoT Network](#devices-on-a-separate-iot-network).
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `SMART_METER_ENABLED` | Show the card and connect to the broker | `false` |
+| `SMART_METER_MQTT_USER` / `SMART_METER_MQTT_PASSWORD` | Broker login (also creates the Mosquitto user) | — |
+| `SMART_METER_MQTT_HOST` | Use another broker instead of the bundled one | `mosquitto` in Docker, else `localhost` |
+| `SMART_METER_MQTT_PORT` | Broker port | `1883` |
+| `SMART_METER_SERIAL` | Meter serial (topic `buckler/<serial>/…`) when several meters share the broker; otherwise the first one seen is used | — |
+| `SMART_METER_INTERVAL` | Update interval requested from the meter, 1–60 s (`0` = leave the meter's setting) | `10` |
+| `SMART_METER_DAILY_FILE` | Where today's starting counter is kept | `data/smart_meter_daily.json` |
+| `SMART_METER_DEMO` | `1` / `3`: show simulated single-/three-phase readings (marked "Demo data") instead of a real meter; no broker needed. The three-phase demo drops L3 for the first minute of every 5 minutes | — |
+
+### Language
+
+The dashboard UI is available in English (default), Ukrainian and Russian. Switch with the language button next to the fullscreen button, which opens a list of the available languages; the choice is stored in the browser's local storage, so each device keeps its own language.
+
+Translations live in `locales/<lang>.json` (one file per language, nested keys, `{name}` placeholders). To add a language, copy `locales/en.json` to e.g. `locales/pl.json`, translate the values, and restart — the language button picks it up automatically. `tests/test_i18n.py` checks that every locale has the same keys and placeholders as English.
+
+The Telegram bot is Ukrainian-only and is not affected by this setting.
+
+### Low Power Mode
+
+For always-on wall tablets, **Settings → Display → Low power mode** turns off all animations, transitions and blur effects to reduce CPU/GPU load. It is stored per device (browser local storage). Animations are also turned off automatically when the device has the system "Reduce motion" accessibility setting enabled.
 
 ### Telegram Bot (optional)
 
@@ -260,7 +419,6 @@ The bot also provides a keyboard with Ukrainian-labeled buttons for quick access
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `OUTAGE_HISTORY_FILE` | Path to outage history JSON file | `outage_history.json` |
 | `PHASE_STATS_FILE` | Path to phase statistics JSON file | `phase_stats.json` |
 | `PHASE_HISTORY_FILE` | Path to phase history JSON file | `phase_history.json` |
 
@@ -332,7 +490,7 @@ To change settings, edit `.env` directly and re-deploy.
 
 ### What the deploy script does
 
-1. **Rsync** — copies `app.py`, `inverter.py`, `telegram_bot.py`, `poems.py`, `outage_providers/`, `requirements.txt`, `templates/`, and `.env` to the remote server
+1. **Rsync** — copies `app.py`, `inverters/`, `telegram_bot.py`, `poems.py`, `outage_providers/`, `requirements.txt`, `templates/`, and `.env` to the remote server
 2. **Python setup** — creates a virtual environment (if needed) and installs dependencies from `requirements.txt`
 3. **Systemd service** — creates a service file at `/etc/systemd/system/<service-name>.service`, enables it, and restarts it
 4. The dashboard runs on port 8080 by default
@@ -367,6 +525,52 @@ nmap -sP 192.168.1.0/24
 
 The serial number is printed on the Solarman Wi-Fi logger stick, or can be found in the Solarman app under device settings.
 
+## Devices on a Separate IoT Network
+
+If the inverter's logger and the smart meter are on an isolated IoT / guest Wi-Fi (no access to the home network) and the dashboard runs on the home network, the router has to let exactly the dashboard's traffic through, in one direction each:
+
+| Connection | Who connects | Port |
+|------------|--------------|------|
+| Dashboard → Solarman logger | the dashboard (polls the inverter) | TCP 8899 on the logger |
+| Smart meter → dashboard host | the meter (it is an MQTT client of the broker) | TCP 1883 on the dashboard host |
+
+Everything else stays blocked: the IoT devices can't open any other connection into the home network, and the dashboard host can't open connections to the meter.
+
+On ASUS routers the IoT network ("Guest Network Pro") has only an all-or-nothing "Access Intranet" switch, so this needs [Asuswrt-Merlin](https://www.asuswrt-merlin.net/) firmware and a firewall script. Other routers usually offer the same as "allow rules" between networks / VLANs: create the rules from the table above.
+
+1. Give the dashboard host, the logger and the meter fixed addresses (DHCP reservations), and keep "Access Intranet" **off** on the IoT network.
+2. In Merlin, enable *Administration → System → Enable JFFS custom scripts and configs* and SSH.
+3. Create `/jffs/scripts/firewall-start` on the router (example addresses; use your own):
+
+   ```sh
+   #!/bin/sh
+   NAS=192.168.1.10         # dashboard host, home network
+   LOGGER=192.168.20.30     # Solarman logger, IoT network
+   METER=192.168.20.40      # Bakler smart meter, IoT network
+
+   # Delete first, so re-running the script doesn't stack duplicate rules
+   iptables -D FORWARD -s $NAS -d $LOGGER -p tcp --dport 8899 -j ACCEPT 2>/dev/null
+   iptables -D FORWARD -s $LOGGER -d $NAS -p tcp --sport 8899 -m state --state ESTABLISHED -j ACCEPT 2>/dev/null
+   iptables -D FORWARD -s $METER -d $NAS -p tcp --dport 1883 -j ACCEPT 2>/dev/null
+   iptables -D FORWARD -s $NAS -d $METER -p tcp --sport 1883 -m state --state ESTABLISHED -j ACCEPT 2>/dev/null
+
+   # NAS -> logger: NAS may open connections to the logger's port 8899 only;
+   # the logger may only reply on those connections
+   iptables -I FORWARD -s $NAS -d $LOGGER -p tcp --dport 8899 -j ACCEPT
+   iptables -I FORWARD -s $LOGGER -d $NAS -p tcp --sport 8899 -m state --state ESTABLISHED -j ACCEPT
+
+   # Meter -> NAS: the meter may connect to the MQTT broker (port 1883) only;
+   # the NAS may only reply on those connections
+   iptables -I FORWARD -s $METER -d $NAS -p tcp --dport 1883 -j ACCEPT
+   iptables -I FORWARD -s $NAS -d $METER -p tcp --sport 1883 -m state --state ESTABLISHED -j ACCEPT
+   ```
+
+   Leave out the `METER` lines if you have no smart meter.
+4. Make it executable and apply it: `chmod a+rx /jffs/scripts/firewall-start`, then `service restart_firewall` (or reboot). The router runs the script again after every firewall restart, and it survives firmware updates.
+5. Use the logger's IoT address as `INVERTER_IP` (Settings → Edit configuration). Network scan can't find it from the home network, so enter it by hand. Point the meter's MQTT settings at the dashboard host's home-network address (see [Smart Meter](#smart-meter-optional)).
+
+**Check:** from the dashboard host, `docker exec deye-dashboard python -c "import socket; socket.create_connection(('192.168.20.30', 8899), 3); print('logger reachable')"`; for the meter, `docker logs deye-mosquitto` shows a client connecting from its address. If the dashboard host has its own firewall (e.g. Synology: Control Panel → Security → Firewall), allow TCP 1883 from the meter there as well. If a check fails, `iptables -S FORWARD` on the router shows whether the rules are in place.
+
 ## Utility Scripts
 
 ```bash
@@ -389,12 +593,9 @@ python scan_registers.py
 |----------|--------|-------------|
 | `/api/data` | GET | Current inverter readings |
 | `/api/weather` | GET | Current weather and forecast |
-| `/api/outage_schedule` | GET | Upcoming outage windows |
+| `/api/outage_schedule` | GET | Current outage status, plus today's and (if published) tomorrow's planned windows |
 | `/api/phase-stats` | GET | Daily phase statistics |
 | `/api/phase-history` | GET | Phase power history |
-| `/api/outages` | GET | Outage history |
-| `/api/outages` | POST | Record outage event |
-| `/api/outages/clear` | POST | Clear outage history |
 | `/api/phase-stats/clear` | POST | Clear phase statistics |
 
 ## License

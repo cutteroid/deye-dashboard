@@ -1,45 +1,20 @@
 services:
   deye-dashboard:
+    # Built locally; the name lets tools/export_images.sh ship it to another machine
+    image: extended-dashboard:latest
     build:
       context: .
       dockerfile: Dockerfile
     container_name: deye-dashboard
     ports:
       - "8080:8080"
-    environment:
-      # Required: Inverter configuration
-      INVERTER_IP: ${INVERTER_IP:-192.168.1.100}
-      LOGGER_SERIAL: ${LOGGER_SERIAL:-1234567890}
-
-      # Optional: Inverter capabilities (auto-detected if not set)
-      # INVERTER_PHASES: ${INVERTER_PHASES:-}
-      # INVERTER_HAS_BATTERY: ${INVERTER_HAS_BATTERY:-}
-      # INVERTER_PV_STRINGS: ${INVERTER_PV_STRINGS:-}
-      # INVERTER_HAS_GENERATOR: ${INVERTER_HAS_GENERATOR:-false}
-
-      # Weather configuration
-      WEATHER_LATITUDE: ${WEATHER_LATITUDE:-50.4501}
-      WEATHER_LONGITUDE: ${WEATHER_LONGITUDE:-30.5234}
-
-      # Outage schedule provider
-      OUTAGE_PROVIDER: ${OUTAGE_PROVIDER:-none}
-      OUTAGE_GROUP: ${OUTAGE_GROUP:-1.1}
-      # OUTAGE_REGION_ID: ${OUTAGE_REGION_ID:-}
-      # OUTAGE_DSO_ID: ${OUTAGE_DSO_ID:-}
-
-      # Telegram bot (optional)
-      TELEGRAM_ENABLED: ${TELEGRAM_ENABLED:-false}
-      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
-      TELEGRAM_ALLOWED_USERS: ${TELEGRAM_ALLOWED_USERS:-}
-      TELEGRAM_PUBLIC: ${TELEGRAM_PUBLIC:-false}
-
-      # Data file paths
-      OUTAGE_HISTORY_FILE: ${OUTAGE_HISTORY_FILE:-outage_history.json}
-      PHASE_STATS_FILE: ${PHASE_STATS_FILE:-phase_stats.json}
-      PHASE_HISTORY_FILE: ${PHASE_HISTORY_FILE:-phase_history.json}
+    # Configuration is read from ./data/.env (the app loads it via python-dotenv).
+    # Don't pass settings as `environment:` here — env vars take precedence over
+    # .env, so values saved from the dashboard's "Edit configuration" would be ignored.
+    # With no ./data/.env, the dashboard starts in first-run onboarding mode.
 
     volumes:
-      # Mount for persistent data files
+      # Persistent data files, including .env
       - ./data:/app/data
 
     restart: unless-stopped
@@ -49,6 +24,30 @@ services:
       - deye-network
 
     # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # MQTT broker for the smart electricity meter: point the meter at this machine's
+  # IP, port 1883, with SMART_METER_MQTT_USER / SMART_METER_MQTT_PASSWORD from
+  # data/.env (without them the broker isn't reachable from the network)
+  mosquitto:
+    image: eclipse-mosquitto:2.0.20
+    container_name: deye-mosquitto
+    entrypoint: ["/bin/sh", "/mosquitto-entrypoint.sh"]
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/entrypoint.sh:/mosquitto-entrypoint.sh:ro
+      - ./data/mosquitto:/mosquitto/data
+      # read-only: the entrypoint takes the broker login from data/.env
+      # (works with older Compose versions, e.g. on Synology, unlike optional env_file)
+      - ./data:/dashboard-data:ro
+    restart: unless-stopped
+    networks:
+      - deye-network
     logging:
       driver: "json-file"
       options:
