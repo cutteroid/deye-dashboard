@@ -865,6 +865,8 @@ var dashboardRequestInFlight = false;
 // keep the last data on screen and only report a problem once nothing has
 // arrived for this long
 var STALE_ERROR_MS = 60000;
+// Battery power (W) within ±this counts as idle (card border; server: time estimates)
+var BATTERY_IDLE_W = 20;
 function noDataFor(lastOkAt) { return !lastOkAt || Date.now() - lastOkAt > STALE_ERROR_MS; }
 
 var dashboardOkAt = 0;   // last answer with readings
@@ -954,9 +956,9 @@ function updateDashboard() {
             document.getElementById('load-power').innerHTML = data.load_power + '<span class="unit">' + t('units.w') + '</span>';
             document.getElementById('daily-load').textContent = fmt(data.daily_load, 1);
 
-            // ===== ANIMATIONS =====
+            // ===== CARD STATES (border + glow, see .card.* in the CSS) =====
 
-            // Solar animation - glow when producing
+            // Solar: producing
             const solarCard = document.getElementById('solar-card');
             if (data.pv_total_power > 10) {
                 solarCard.classList.add('solar-active');
@@ -964,23 +966,16 @@ function updateDashboard() {
                 solarCard.classList.remove('solar-active');
             }
 
-            // Battery animation - charging/discharging
+            // Battery: charging / discharging, by power like the card's text (a
+            // few watts either way count as idle, as for the time estimates)
             if (!inverterConfig || inverterConfig.has_battery !== false) {
                 const batteryCard = document.getElementById('battery-card');
-                const batteryBar = document.querySelector('.battery-bar');
-                batteryCard.classList.remove('battery-charging', 'battery-discharging');
-                batteryBar.classList.remove('charging', 'discharging');
-
-                if (data.battery_current > 1) {
-                    batteryCard.classList.add('battery-charging');
-                    batteryBar.classList.add('charging');
-                } else if (data.battery_current < -1) {
-                    batteryCard.classList.add('battery-discharging');
-                    batteryBar.classList.add('discharging');
-                }
+                const batteryPower = data.battery_power || 0;
+                batteryCard.classList.toggle('battery-charging', batteryPower > BATTERY_IDLE_W);
+                batteryCard.classList.toggle('battery-discharging', batteryPower < -BATTERY_IDLE_W);
             }
 
-            // Grid animation - active when importing/exporting
+            // Grid: importing / exporting
             const gridCard = document.getElementById('grid-card');
             if (Math.abs(data.grid_power) > 50) {
                 gridCard.classList.add('grid-active');
@@ -988,7 +983,7 @@ function updateDashboard() {
                 gridCard.classList.remove('grid-active');
             }
 
-            // Load animation - glow based on consumption
+            // Consumption: using power (neutral) / high load (red)
             const loadCard = document.getElementById('consumption-card');
             loadCard.classList.remove('load-active', 'load-high');
             if (data.load_power > 3000) {

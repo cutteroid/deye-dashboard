@@ -810,80 +810,43 @@ body.cards-dragging * {
     opacity: 1;
 }
 
-/* ===== CARD STATES (static: card icons don't animate) ===== */
+/* ===== CARD STATES =====
+   A coloured border + soft glow while the card's part of the system is active
+   (updateDashboard()); static, nothing animates. */
 
-/* Solar animation - glowing sun when producing */
+/* Solar: producing */
 .card.solar-active {
     border-color: rgba(251, 191, 36, 0.5);
     box-shadow: 0 0 30px rgba(251, 191, 36, 0.2);
 }
 
-/* Battery charging animation - flowing energy */
-.battery-bar.charging {
-    overflow: hidden;
-}
-
-.battery-bar.charging::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: -100%;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(
-        90deg,
-        transparent,
-        rgba(110, 200, 155, 0.4),
-        transparent
-    );
-    animation: charge-flow 1.5s linear infinite;
-}
-
-@keyframes charge-flow {
-    0% { left: -100%; }
-    100% { left: 100%; }
-}
-
-/* Battery discharging animation */
-.battery-bar.discharging .battery-fill {
-    animation: discharge-pulse 1s ease-in-out infinite;
-}
-
-@keyframes discharge-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.7; }
-}
-
+/* Battery: charging green, discharging orange (as in the energy flow diagram) */
 .card.battery-charging {
     border-color: rgba(110, 200, 155, 0.5);
     box-shadow: 0 0 20px rgba(110, 200, 155, 0.15);
 }
 
 .card.battery-discharging {
-    border-color: rgba(251, 191, 36, 0.5);
-    box-shadow: 0 0 20px rgba(251, 191, 36, 0.15);
+    border-color: rgba(251, 146, 60, 0.5);
+    box-shadow: 0 0 20px rgba(251, 146, 60, 0.15);
 }
 
-/* Grid electricity animation */
+/* Grid: importing or exporting */
 .card.grid-active {
     border-color: rgba(96, 165, 250, 0.5);
     box-shadow: 0 0 20px rgba(96, 165, 250, 0.15);
 }
 
-/* Load/consumption animation */
+/* Consumption: neutral while the home uses power (it nearly always does);
+   red only for a high load */
 .card.load-active {
-    border-color: rgba(248, 113, 113, 0.4);
-    box-shadow: 0 0 20px rgba(248, 113, 113, 0.1);
+    border-color: rgba(255, 255, 255, 0.28);
+    box-shadow: 0 0 20px rgba(255, 255, 255, 0.06);
 }
 
 .card.load-high {
     border-color: rgba(248, 113, 113, 0.6);
-    animation: load-warning 1s ease-in-out infinite;
-}
-
-@keyframes load-warning {
-    0%, 100% { box-shadow: 0 0 20px rgba(248, 113, 113, 0.2); }
-    50% { box-shadow: 0 0 35px rgba(248, 113, 113, 0.4); }
+    box-shadow: 0 0 25px rgba(248, 113, 113, 0.25);
 }
 
 /* Consumption card: per-phase section below the home load */
@@ -1438,7 +1401,7 @@ body.fullscreen-mode .battery-banner-bar {
 }
 
 /* Battery banner (normal and fullscreen view): charge / discharge power stands
-   out (green in, amber out) */
+   out (green in, orange out, like the battery card and the energy flow diagram) */
 .battery-banner-status.battery-flow-charging,
 .battery-banner-status.battery-flow-discharging {
     font-weight: 600;
@@ -1450,7 +1413,7 @@ body.fullscreen-mode .battery-banner-bar {
 }
 
 .battery-banner-status.battery-flow-discharging {
-    color: #fbbf24;
+    color: #fb923c;
 }
 
 .battery-banner-status.battery-flow-charging::before {
