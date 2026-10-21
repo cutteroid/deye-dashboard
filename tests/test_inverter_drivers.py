@@ -6,6 +6,7 @@ import pytest
 import inverters
 from inverters import (DRIVERS, DeyeInverter, InverterConfig, InverterDriver, create_inverter,
                        driver_class, grid_online)
+from tests.conftest import page_config
 
 
 class TestRegistry:
@@ -92,7 +93,7 @@ class TestUi:
 
     def test_type_list_only_with_several_drivers(self, client):
         html = client.get("/").get_data(as_text=True)
-        assert "inverterTypes: []" in html            # one driver: nothing to choose
+        assert page_config(html)["inverterTypes"] == []    # one driver: nothing to choose
 
     def test_locales_have_no_brand(self):
         import json

@@ -1,3 +1,6 @@
+// Values from the server (JSON in templates/index.html, #dashboard-config)
+window.DASHBOARD_CONFIG = JSON.parse(document.getElementById('dashboard-config').textContent);
+
 // ===== I18N =====
 // UI strings live in locales/<lang>.json (embedded by app.py). Static markup
 // uses data-i18n (text) and data-i18n-attr (attr:key;...) attributes; code uses t(key, params).

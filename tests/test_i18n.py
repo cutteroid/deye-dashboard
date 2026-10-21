@@ -4,6 +4,7 @@ import os
 import re
 
 import pytest
+from tests.conftest import page_config
 
 LOCALES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "locales")
 PLACEHOLDER = re.compile(r"\{(\w+)\}")
@@ -76,10 +77,9 @@ class TestAppLocales:
         with app_module.app.test_client() as c:
             html = c.get("/").get_data(as_text=True)
         assert 'id="language-select"' in html   # language select in the settings panel
-        # uk.json is embedded (non-ASCII is JSON-escaped in the page)
-        uk_name = json.dumps(_load("uk")["meta.name"])[1:-1]
-        assert '"uk":' in html and uk_name in html
-        assert 'defaultLanguage: "en"' in html
+        config = page_config(html)
+        assert config["locales"]["uk"]["meta"]["name"] == _load("uk")["meta.name"]   # uk.json embedded
+        assert config["defaultLanguage"] == "en"
 
     def test_template_keys_exist_in_english(self):
         """Every data-i18n / t('...') key used by the page is defined in en.json."""

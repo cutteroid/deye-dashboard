@@ -852,14 +852,19 @@ def add_no_cache_headers(response):
 def index():
     """Serve the dashboard page."""
     region = os.environ.get("AIR_ALERTS_REGION", "").strip()
-    return render_template("index.html", first_run=not _configured,
-                           locales=LOCALES, default_language=DEFAULT_LANGUAGE,
-                           alerts_map_url=asset_version_url("data/ukraine-regions.json"),
-                           alerts_region=region if region in REGION_CODES else "",
-                           alerts_region_codes=list(REGION_CODES),
-                           # Inverter type list for the settings; with one driver it isn't shown
-                           inverter_types=[{"id": d.name, "name": d.display_name} for d in DRIVERS.values()]
-                           if len(DRIVERS) > 1 else [])
+    # Read by dashboard.js as window.DASHBOARD_CONFIG (embedded as JSON)
+    dashboard_config = {
+        "locales": LOCALES,
+        "defaultLanguage": DEFAULT_LANGUAGE,
+        "firstRun": not _configured,
+        "alertsMapUrl": asset_version_url("data/ukraine-regions.json"),
+        "alertsRegion": region if region in REGION_CODES else "",
+        "alertsRegionCodes": list(REGION_CODES),
+        # Inverter type list for the settings; with one driver it isn't shown
+        "inverterTypes": [{"id": d.name, "name": d.display_name} for d in DRIVERS.values()]
+                         if len(DRIVERS) > 1 else [],
+    }
+    return render_template("index.html", first_run=not _configured, dashboard_config=dashboard_config)
 
 
 @app.route("/api/data")

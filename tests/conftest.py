@@ -1,5 +1,7 @@
 """Shared test fixtures."""
+import json
 import os
+import re
 
 import pytest
 from unittest.mock import patch, MagicMock
@@ -16,6 +18,13 @@ def _isolated_data_files(tmp_path, monkeypatch):
                  "GRID_DAILY_LOG_FILE", "GENERATOR_LOG_FILE", "INVERTER_CONFIG_FILE"):
         monkeypatch.setattr(app, name, str(tmp_path / os.path.basename(getattr(app, name))))
     monkeypatch.setattr(telegram_bot, "BATTERY_REPORT_DIR", str(tmp_path / "battery_reports"))
+
+
+def page_config(html):
+    """window.DASHBOARD_CONFIG as the page embeds it (JSON in #dashboard-config)."""
+    match = re.search(r'<script type="application/json" id="dashboard-config">(.*?)</script>', html, re.S)
+    assert match, "no #dashboard-config in the page"
+    return json.loads(match.group(1))
 
 
 @pytest.fixture

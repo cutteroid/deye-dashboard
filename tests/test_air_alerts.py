@@ -11,6 +11,7 @@ from air_alerts import (
     AlertsInUaProvider, AlertsPoller, AlertsProvider, MockAlertsProvider, NeptunProvider,
     create_alerts_provider, normalize_name,
 )
+from tests.conftest import page_config
 
 MAP_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "data", "ukraine-regions.json")
 
@@ -369,7 +370,7 @@ class TestAlertsEndpoint:
     def test_page_passes_map_url(self, client):
         c, _ = client
         html = c.get("/").get_data(as_text=True)
-        assert "alertsMapUrl: \"/static/data/ukraine-regions.json?v=" in html
+        assert page_config(html)["alertsMapUrl"].startswith("/static/data/ukraine-regions.json?v=")
         assert 'id="alerts-card"' in html and 'id="alerts-banner"' in html
         assert html.count('href="https://neptun.in.ua/"') == 2  # attribution in card + fullscreen banner
         assert html.count('data-alerts-source="alerts.in.ua"') == 2
@@ -379,5 +380,6 @@ class TestAlertsEndpoint:
         c, _ = client
         monkeypatch.setenv("AIR_ALERTS_REGION", value)
         html = c.get("/").get_data(as_text=True)
-        assert f'alertsRegion: "{expected}"' in html
-        assert '"UA-32"' in html.split("alertsRegionCodes:")[1].split("\n")[0]   # list for the settings step
+        config = page_config(html)
+        assert config["alertsRegion"] == expected
+        assert "UA-32" in config["alertsRegionCodes"]   # list for the settings step

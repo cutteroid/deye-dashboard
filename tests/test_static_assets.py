@@ -2,6 +2,7 @@
 import re
 
 import pytest
+from tests.conftest import page_config
 
 
 @pytest.fixture
@@ -22,9 +23,11 @@ def test_index_links_versioned_css_and_js(client):
     urls = _asset_urls(html)
     assert any(re.fullmatch(r"/static/css/dashboard\.css\?v=[0-9a-f]{12}", u) for u in urls), urls
     assert any(re.fullmatch(r"/static/js/dashboard\.js\?v=[0-9a-f]{12}", u) for u in urls), urls
-    # No CSS or app JS left inline; only the small config script
+    # No CSS or app JS left inline; the server's values come as JSON data
     assert "<style>" not in html
-    assert "window.DASHBOARD_CONFIG = {" in html
+    assert "window.DASHBOARD_CONFIG" not in html
+    assert set(page_config(html)) == {"locales", "defaultLanguage", "firstRun", "alertsMapUrl",
+                                      "alertsRegion", "alertsRegionCodes", "inverterTypes"}
 
 
 def test_assets_are_served(client):

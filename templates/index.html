@@ -777,18 +777,9 @@
         </div>
     </div>
 
-    <script>
-        // Values from the server; everything else is in static/js/dashboard.js
-        window.DASHBOARD_CONFIG = {
-            locales: {{ locales|tojson }},
-            defaultLanguage: {{ default_language|tojson }},
-            firstRun: {{ first_run|tojson }},
-            alertsMapUrl: {{ alerts_map_url|tojson }},
-            alertsRegion: {{ alerts_region|tojson }},
-            alertsRegionCodes: {{ alerts_region_codes|tojson }},
-            inverterTypes: {{ inverter_types|tojson }}
-        };
-    </script>
+    <!-- Values from the server, read by static/js/dashboard.js. JSON data rather
+         than a script, so editors don't try to parse the Jinja tags as JavaScript -->
+    <script type="application/json" id="dashboard-config">{{ dashboard_config|tojson }}</script>
     <script src="{{ asset_url('js/dashboard.js') }}"></script>
 </body>
 </html>
