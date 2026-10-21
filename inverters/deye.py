@@ -111,21 +111,6 @@ class DeyeInverter(InverterDriver):
         # 48 V LiFePO4 window; HV battery stacks: anything a real stack can have
         return (100.0, 1000.0) if self.high_voltage else super().battery_voltage_range()
 
-    def read_battery_sample(self):
-        """Battery voltage + SOC in one short connection (registers 183/184 or 587/588)."""
-        reg_voltage, reg_soc = (183, 184) if self.config.phases == 1 else (587, 588)
-        with self.lock:
-            try:
-                if not self.inverter:
-                    self.connect()
-                raw_v = self.read_register(reg_voltage)
-                raw_soc = self.read_register(reg_soc)
-            finally:
-                # Also on errors: a broken socket left open would be reused by the
-                # next reader and fail again
-                self.disconnect()
-        return raw_v / (10 if self.high_voltage else 100), raw_soc
-
     def connect(self):
         """Establish connection to inverter."""
         self.disconnect()
@@ -151,18 +136,18 @@ class DeyeInverter(InverterDriver):
         """Read a single holding register."""
         return self.inverter.read_holding_registers(address, 1)[0]
 
-    def read_all_data(self, battery_sampler=None) -> dict:
+    def read_all_data(self) -> dict:
         """Read all inverter data and return as dictionary."""
         with self.lock:
-            return self._read_all_data_unlocked(battery_sampler)
+            return self._read_all_data_unlocked()
 
-    def _read_all_data_unlocked(self, battery_sampler=None) -> dict:
+    def _read_all_data_unlocked(self) -> dict:
         """Internal: read all data (caller must hold self.lock)."""
         if self.config.phases == 1:
-            return self._read_1p_data_unlocked(battery_sampler)
-        return self._read_3p_data_unlocked(battery_sampler)
+            return self._read_1p_data_unlocked()
+        return self._read_3p_data_unlocked()
 
-    def _read_1p_data_unlocked(self, battery_sampler=None) -> dict:
+    def _read_1p_data_unlocked(self) -> dict:
         """Read all data from single-phase hybrid inverter (Sunsynk register map)."""
         data = {}
 
@@ -210,17 +195,7 @@ class DeyeInverter(InverterDriver):
                 data["battery_shutdown_soc"] = self.read_register(217)
                 time.sleep(0.05)
 
-                if battery_sampler:
-                    smoothed_v = battery_sampler.get_voltage()
-                    if smoothed_v is not None:
-                        data["battery_voltage"] = smoothed_v
-                    smoothed_soc = battery_sampler.get_soc()
-                    if smoothed_soc is not None:
-                        data["battery_soc"] = smoothed_soc
-                    else:
-                        data["battery_soc"] = raw_soc
-                else:
-                    data["battery_soc"] = raw_soc
+                self.smooth_battery(data)   # battery_voltage / battery_soc over the last reads
                 data["battery_power"] = int(data["battery_voltage"] * data["battery_current"])
             else:
                 data["battery_voltage"] = 0
@@ -286,7 +261,7 @@ class DeyeInverter(InverterDriver):
 
         return data
 
-    def _read_3p_data_unlocked(self, battery_sampler=None) -> dict:
+    def _read_3p_data_unlocked(self) -> dict:
         """Read all data from 3-phase hybrid inverter (original register map)."""
         data = {}
 
@@ -320,8 +295,8 @@ class DeyeInverter(InverterDriver):
                 battery_power = -to_signed(self.read_register(590)) * power_scale
                 time.sleep(0.05)
 
-                # SOC from register 588 (BMS-reported, same as Solarman)
-                # Use smoothed median from sampler if available for outlier rejection
+                # SOC from register 588 (BMS-reported, same as Solarman); shown as
+                # the median of the last reads (smooth_battery)
                 raw_soc = self.read_register(588)
                 time.sleep(0.05)
                 data["battery_soc_raw"] = raw_soc
@@ -340,17 +315,7 @@ class DeyeInverter(InverterDriver):
                 data["battery_shutdown_soc"] = self.read_register(115)
                 time.sleep(0.05)
 
-                if battery_sampler:
-                    smoothed_v = battery_sampler.get_voltage()
-                    if smoothed_v is not None:
-                        data["battery_voltage"] = smoothed_v
-                    smoothed_soc = battery_sampler.get_soc()
-                    if smoothed_soc is not None:
-                        data["battery_soc"] = smoothed_soc
-                    else:
-                        data["battery_soc"] = raw_soc
-                else:
-                    data["battery_soc"] = raw_soc
+                self.smooth_battery(data)   # battery_voltage / battery_soc over the last reads
                 data["battery_power"] = battery_power
             else:
                 data["battery_voltage"] = 0

@@ -79,7 +79,7 @@ Solar Panels → Deye Inverter → Wi-Fi Logger Stick
                               Your Phone / Tablet / PC (opens the dashboard in a browser)
 ```
 
-The Raspberry Pi reads data from your inverter every 60 seconds over your local network. It then shows this data on a web page you can open from any device in your home — phone, tablet, or computer — by going to the Raspberry Pi's address in a browser (e.g. `http://192.168.1.50:8080`).
+The Raspberry Pi reads data from your inverter every 30 seconds over your local network. It then shows this data on a web page you can open from any device in your home — phone, tablet, or computer — by going to the Raspberry Pi's address in a browser (e.g. `http://192.168.1.50:8080`).
 
 ### Setup overview
 

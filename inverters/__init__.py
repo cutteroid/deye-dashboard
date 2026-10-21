@@ -2,10 +2,11 @@
 
 To add a driver: subclass base.InverterDriver in a new module (read_all_data()
 returning the fields documented in base.py, from_settings(), and whatever of
-detect_config() / read_battery_sample() / discover() the inverter supports),
+detect_config() / discover() the inverter supports; read_all_data() calls
+smooth_battery() on its battery values),
 then register it in DRIVERS below.
 """
-from .base import (BatterySampler, InverterConfig, InverterDriver, grid_online,
+from .base import (BatterySmoother, InverterConfig, InverterDriver, grid_online,
                    grid_phases_missing, grid_state, to_signed, voltage_to_soc)
 from .deye import DeyeInverter
 
@@ -28,7 +29,7 @@ def create_inverter(settings):
 
 
 __all__ = [
-    "BatterySampler", "DEFAULT_DRIVER", "DRIVERS", "DeyeInverter", "InverterConfig",
+    "BatterySmoother", "DEFAULT_DRIVER", "DRIVERS", "DeyeInverter", "InverterConfig",
     "InverterDriver", "create_inverter", "driver_class", "grid_online", "grid_phases_missing",
     "grid_state", "to_signed", "voltage_to_soc",
 ]

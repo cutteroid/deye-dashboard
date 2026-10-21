@@ -296,7 +296,7 @@ class TestBatteryRuntime:
 
     def test_poller_averages_discharge_and_resets(self):
         import app
-        poller = app.InverterPoller(inverter=None, battery_sampler=None)
+        poller = app.InverterPoller(inverter=None)
         for power in (-300, -500):        # average 400 W
             result = {**self.DATA, "battery_power": power}
             poller._add_runtime_estimate(result)
@@ -317,7 +317,7 @@ class TestBatteryRuntime:
 
     def test_poller_charge_estimate_uses_average_charge_power(self):
         import app
-        poller = app.InverterPoller(inverter=None, battery_sampler=None)
+        poller = app.InverterPoller(inverter=None)
         data = {**self.DATA, "battery_soc": 50}
         for power in (2000, 4000):        # average 3000 W
             result = {**data, "battery_power": power}
@@ -334,7 +334,7 @@ class TestPollerKeepsGoodData:
         from unittest.mock import MagicMock
         inv = MagicMock()
         inv.read_all_data.side_effect = results
-        return app.InverterPoller(inverter=inv, battery_sampler=None)
+        return app.InverterPoller(inverter=inv)
 
     def test_failed_poll_keeps_last_readings(self):
         poller = self._poller([{"battery_soc": 80, "battery_power": 0}, {"error": "No socket available"}])

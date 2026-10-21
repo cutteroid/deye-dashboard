@@ -52,7 +52,7 @@ python scan_phases.py       # phase registers
 - **`app.py`** — Flask web server. Contains the main application, API routes, and background poller classes (`InverterPoller`, `WeatherPoller`). Serves the single-page dashboard at `/` and JSON API at `/api/*`. Manages phase stats and grid daily logs as JSON files.
 
 - **`inverters/`** — inverter drivers, selected by `INVERTER_TYPE` (default `deye`):
-  - `base.py` — brand-neutral: `InverterConfig` (capabilities: phases, battery, PV strings, generator, model family, `supported`), the `InverterDriver` interface (`from_settings`, `settings_problem`/`required_settings`, `read_all_data`, `detect_config`, `read_device_type`, `read_battery_sample`, `discover`), the **reading fields every driver returns** (module docstring — the rest of the app uses only those, never registers), shared grid logic (`grid_online`, `grid_state`, `grid_phases_missing`) and `BatterySampler` (smooths voltage/SOC through `read_battery_sample()`).
+  - `base.py` — brand-neutral: `InverterConfig` (capabilities: phases, battery, PV strings, generator, model family, `supported`), the `InverterDriver` interface (`from_settings`, `settings_problem`/`required_settings`, `read_all_data`, `detect_config`, `read_device_type`, `discover`), the **reading fields every driver returns** (module docstring — the rest of the app uses only those, never registers), shared grid logic (`grid_online`, `grid_state`, `grid_phases_missing`) and `BatterySmoother`: each driver's `read_all_data()` calls `smooth_battery(data)`, which shows battery voltage (average) and SOC (median) over the last 6 reads (3 min at 30 s), dropping implausible values (the logger sometimes returns 0 V) — no separate battery reads.
   - `deye.py` — `DeyeInverter`: Modbus over Solarman V5 (`pysolarmanv5`), both register maps, device-type families, HV scaling, grid relay, capability detection, Solarman discovery (`discover_inverter.py`). 50 ms between register reads to spare the logger.
   - `__init__.py` — `DRIVERS` registry, `driver_class()`, `create_inverter(settings)`. **New driver:** subclass `InverterDriver`, return the documented fields, register it in `DRIVERS`, add its name to `setup.INVERTER_TYPES` (stdlib-only script; a test keeps the lists in sync) and its settings to the wizard (step 1). The wizard's "Inverter type" list appears by itself once `DRIVERS` has more than one entry.
   - UI text never names a brand (tests check page and locales); brand-specific wording belongs to the driver (`display_name`).
@@ -90,9 +90,8 @@ Map: `static/data/ukraine-regions.json` (regions by ISO 3166-2 code, districts b
 Background services start once in `main()` (`init_services()`), not at import — importing `app` (tests, WSGI) starts nothing. Do not reintroduce a reloader/multi-process server: every poller would run in each process.
 
 The app runs several daemon threads:
-- `InverterPoller` — polls inverter every 60s, caches to JSON file
+- `InverterPoller` — one full inverter read every 30s (`INVERTER_POLL_SECONDS`; also feeds the battery smoothing), caches to JSON file
 - `inverter-detect` — one-off background auto-detect; updates the shared `InverterConfig` in place and saves it to `inverter_config.json` for the next start
-- `BatterySampler` — reads battery voltage/SOC every 30s for smoothing (idle when no battery)
 - `WeatherPoller` — fetches Open-Meteo weather every 15 min
 - `OutageSchedulePoller` — fetches outage schedule every 60s
 - `TelegramBot` — runs Telegram polling loop
@@ -101,7 +100,7 @@ The app runs several daemon threads:
 
 Transient failures never replace good data: `InverterPoller` keeps the last good readings through a failed poll (until they're older than `INVERTER_CACHE_MAX_AGE`, 5 min; `/api/data` reports `data_age_seconds`), and the frontend keeps every card's last data through failed requests, reporting a problem only after `STALE_ERROR_MS` (60 s) without an answer (`noDataFor()`). Error texts must name the real cause: a failed request from the browser is "Connection failed" / "No connection", never e.g. "MQTT broker unavailable".
 
-All pollers use thread locks for safe cache access. The inverter connection (the driver's `lock`) is shared between `InverterPoller`, `BatterySampler` and auto-detect. The Telegram bot reads `InverterPoller.data` (no direct inverter reads).
+All pollers use thread locks for safe cache access. The inverter connection (the driver's `lock`) is shared between `InverterPoller` and auto-detect (one logger connection per poll: its few TCP slots are the scarce resource). The Telegram bot reads `InverterPoller.data` (no direct inverter reads).
 
 Data files (stats, logs, caches, bot state) default to `storage.data_path(name)` = `data/<name>` when `data/` exists (the Docker volume, so they survive deploys), else next to the app; tests redirect them all to a temp folder (autouse fixture in `tests/conftest.py`). They go through `storage.py`: `atomic_write_json()` (temp file + fsync + rename, safe across power cuts) and `load_json()` (missing/corrupt file → default; corrupt files are moved to `*.corrupt`). Read-modify-write updates in `app.py` hold `_data_lock`.
 

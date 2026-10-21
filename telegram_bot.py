@@ -158,7 +158,7 @@ INVERTER_DATA_MAX_AGE = 180  # seconds
 
 
 class TelegramBot:
-    def __init__(self, token, allowed_users, inverter, battery_sampler=None,
+    def __init__(self, token, allowed_users, inverter,
                  outage_poller=None, state_file=None, grid_daily_log_file=None,
                  weather_poller=None, is_public=False, inverter_poller=None):
         self.token = token
@@ -166,7 +166,6 @@ class TelegramBot:
         self.is_public = is_public
         self.inverter = inverter
         self.inverter_poller = inverter_poller
-        self.battery_sampler = battery_sampler
         self.outage_poller = outage_poller
         self.grid_daily_log_file = grid_daily_log_file
         self.weather_poller = weather_poller
@@ -231,11 +230,9 @@ class TelegramBot:
             "trigger": trigger,
             "inverter_data": data,
         }
-        if self.battery_sampler:
-            report["sampler_voltage"] = self.battery_sampler.get_voltage()
-            report["sampler_soc"] = self.battery_sampler.get_soc()
-            with self.battery_sampler._lock:
-                report["sampler_buffer"] = list(self.battery_sampler._buffer)
+        smoother = getattr(self.inverter, "battery_smoother", None)
+        if smoother is not None:
+            report["battery_smoothing"] = smoother.snapshot()
         try:
             atomic_write_json(filepath, report, indent=2, default=str)
             logger.info("Battery report saved to %s", filepath)
@@ -719,12 +716,12 @@ class TelegramBot:
     def _get_inverter_data(self):
         """Latest inverter data from the dashboard's poller (no extra inverter reads).
 
-        The poller already reads the inverter every minute; reading it again from
+        The poller already reads the inverter every 30 s; reading it again from
         the bot would hold the inverter lock and add load on the logger. Falls back
         to a direct read only when no poller is wired in.
         """
         if self.inverter_poller is None:
-            return self.inverter.read_all_data(battery_sampler=self.battery_sampler)
+            return self.inverter.read_all_data()
         data = self.inverter_poller.data
         if not data:
             return {"error": "no inverter data yet"}

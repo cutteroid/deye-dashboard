@@ -8,6 +8,8 @@ Readings returned by InverterDriver.read_all_data() (W, V, A, %, kWh):
     pv1_power, pv2_power, pv_total_power
     battery_voltage, battery_current (> 0 charging), battery_power (> 0 charging),
     battery_soc, battery_soc_raw, battery_status ("Charging"/"Discharging"/"Idle"/"N/A")
+        (battery_voltage and battery_soc smoothed over the last reads, see
+        InverterDriver.smooth_battery(); battery_soc_raw is this read's value)
     battery_capacity_ah, battery_shutdown_soc   (optional: battery time estimates)
     battery_temperature (°C, optional; None when the inverter doesn't report it)
     grid_voltage (L1), grid_power (> 0 importing), grid_status ("Importing"/"Exporting"/"Idle")
@@ -20,7 +22,6 @@ Readings returned by InverterDriver.read_all_data() (W, V, A, %, kWh):
 """
 import logging
 import threading
-import time
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -54,8 +55,9 @@ class InverterConfig:
 class InverterDriver:
     """Interface of an inverter driver; drivers register in inverters/__init__.py.
 
-    Drivers may be called from several threads (poller, battery sampler, auto-
-    detect): anything that uses the connection must hold self.lock.
+    Drivers may be called from several threads (poller, auto-detect, the
+    Telegram bot's fallback read): anything that uses the connection must hold
+    self.lock.
     """
     name = ""            # INVERTER_TYPE value, e.g. "deye"
     display_name = ""    # shown in the settings when there is more than one driver
@@ -64,6 +66,7 @@ class InverterDriver:
     def __init__(self, config=None):
         self.config = config or InverterConfig()
         self.lock = threading.Lock()
+        self.battery_smoother = BatterySmoother()
 
     @classmethod
     def from_settings(cls, settings):
@@ -82,8 +85,10 @@ class InverterDriver:
         """Devices on the local network: [{"ip", "model", ...}] (settings wizard scan)."""
         return []
 
-    def read_all_data(self, battery_sampler=None):
-        """Readings (see the module docstring); on failure {"error": message}."""
+    def read_all_data(self):
+        """Readings (see the module docstring); on failure {"error": message}.
+
+        Call smooth_battery(data) once the battery values are read."""
         raise NotImplementedError
 
     def detect_config(self):
@@ -98,13 +103,23 @@ class InverterDriver:
         """Can this driver read inverters of this family?"""
         return True
 
-    def read_battery_sample(self):
-        """(battery voltage, SOC %) for BatterySampler; raises on failure."""
-        raise NotImplementedError
-
     def battery_voltage_range(self):
-        """Plausible battery voltage; BatterySampler discards readings outside it."""
+        """Plausible battery voltage; the smoothing drops readings outside it."""
         return 46.0, 58.0   # 48 V LiFePO4 (16S)
+
+    def smooth_battery(self, data):
+        """Show battery_voltage / battery_soc smoothed over the last reads.
+
+        Takes this read's battery_voltage and battery_soc_raw, adds them to the
+        smoother and replaces battery_voltage / battery_soc with the smoothed
+        values (this read's own ones while there's nothing plausible yet).
+        """
+        smoother = self.battery_smoother
+        smoother.add(data["battery_voltage"], data["battery_soc_raw"], self.battery_voltage_range())
+        voltage, soc = smoother.get_voltage(), smoother.get_soc()
+        if voltage is not None:
+            data["battery_voltage"] = voltage
+        data["battery_soc"] = soc if soc is not None else data["battery_soc_raw"]
 
 
 def grid_online(voltages, connected=None):
@@ -168,71 +183,46 @@ def voltage_to_soc(voltage):
     return 0
 
 
-class BatterySampler:
-    """Reads battery voltage/SOC periodically (via the driver) and provides smoothed values."""
+class BatterySmoother:
+    """Battery voltage and SOC over the last few full reads.
 
-    def __init__(self, inverter, interval=10, buffer_size=6):
-        self.inverter = inverter
-        self.interval = interval
-        self.buffer_size = buffer_size
-        self._buffer = []
-        self._soc_buffer = []
+    A single bad read (the logger sometimes returns 0 V) must not show as an
+    empty battery or trigger a low-battery alert: voltage is the average and SOC
+    the median of the last `size` plausible readings (6 reads every 30 s = the
+    last 3 minutes), implausible values are dropped.
+    """
+
+    def __init__(self, size=6):
+        self.size = size
+        self._voltages = []
+        self._socs = []
         self._lock = threading.Lock()
-        self._running = False
-        self._thread = None
 
-    def _sample(self):
-        """Read battery voltage and SOC once, store if valid."""
-        try:
-            voltage, raw_soc = self.inverter.read_battery_sample()
-        except Exception as e:
-            logger.warning("BatterySampler: failed to read battery: %s", e)
-            return
-
-        low, high = self.inverter.battery_voltage_range()
+    def add(self, voltage, soc, voltage_range=(46.0, 58.0)):
+        low, high = voltage_range
         with self._lock:
-            if low <= voltage <= high:
-                self._buffer.append(voltage)
-                if len(self._buffer) > self.buffer_size:
-                    self._buffer.pop(0)
+            if voltage is not None and low <= voltage <= high:
+                self._voltages = (self._voltages + [voltage])[-self.size:]
             else:
-                logger.warning("BatterySampler: discarding implausible voltage %.2fV", voltage)
-
-            if 0 <= raw_soc <= 100:
-                self._soc_buffer.append(raw_soc)
-                if len(self._soc_buffer) > self.buffer_size:
-                    self._soc_buffer.pop(0)
+                logger.warning("Battery: discarding implausible voltage %s V", voltage)
+            if soc is not None and 0 <= soc <= 100:
+                self._socs = (self._socs + [soc])[-self.size:]
             else:
-                logger.warning("BatterySampler: discarding implausible SOC %d%%", raw_soc)
+                logger.warning("Battery: discarding implausible SOC %s%%", soc)
 
     def get_voltage(self):
-        """Return averaged voltage from buffer, or None if no valid readings."""
+        """Average of the recent voltages, or None."""
         with self._lock:
-            if not self._buffer:
-                return None
-            return sum(self._buffer) / len(self._buffer)
+            return sum(self._voltages) / len(self._voltages) if self._voltages else None
 
     def get_soc(self):
-        """Return the median SOC of the buffer (rejects outliers), or None."""
+        """Median of the recent SOC values (rejects outliers), or None."""
         with self._lock:
-            if not self._soc_buffer:
-                return None
-            return sorted(self._soc_buffer)[len(self._soc_buffer) // 2]
+            return sorted(self._socs)[len(self._socs) // 2] if self._socs else None
 
-    def _run(self):
-        """Main sampling loop (idle while no battery is configured)."""
-        while self._running:
-            # Checked every loop: background auto-detect may change the config
-            if self.inverter.config.has_battery:
-                self._sample()
-            time.sleep(self.interval)
-
-    def start(self):
-        """Start sampling in a background thread."""
-        self._running = True
-        self._thread = threading.Thread(target=self._run, daemon=True)
-        self._thread.start()
-
-    def stop(self):
-        """Stop sampling."""
-        self._running = False
+    def snapshot(self):
+        """Recent readings and the smoothed values (for battery reports)."""
+        with self._lock:
+            voltages, socs = list(self._voltages), list(self._socs)
+        return {"voltages": voltages, "socs": socs,
+                "voltage": self.get_voltage(), "soc": self.get_soc()}

@@ -6,7 +6,7 @@ except ImportError:
     pass
 
 from flask import Flask, render_template, jsonify, request, url_for
-from inverters import BatterySampler, DRIVERS, InverterConfig, create_inverter, driver_class
+from inverters import DRIVERS, InverterConfig, create_inverter, driver_class
 from telegram_bot import TelegramBot
 from outage_providers import OutageSchedulePoller, create_outage_provider
 from storage import atomic_write_json, data_path, load_json
@@ -137,7 +137,8 @@ class WeatherPoller:
 INVERTER_CACHE_FILE = os.environ.get("INVERTER_CACHE_FILE") or data_path("inverter_cache.json")
 # Overrides the capacity the inverter reports (for the battery runtime estimate)
 BATTERY_CAPACITY_KWH = env_float("BATTERY_CAPACITY_KWH", 0.0)
-RUNTIME_AVERAGE_SAMPLES = 10  # polls (~10 min) of discharge power behind the estimate
+INVERTER_POLL_SECONDS = 30   # one full read; battery voltage/SOC are smoothed over the last 6 (3 min)
+RUNTIME_AVERAGE_SAMPLES = 20  # polls (~10 min) of discharge power behind the estimate
 
 
 def battery_capacity_wh(data):
@@ -181,10 +182,8 @@ INVERTER_CACHE_MAX_AGE = 300  # seconds – serve cached data if fresher than 5 
 class InverterPoller:
     """Polls inverter for current data in a background thread."""
 
-    def __init__(self, inverter, battery_sampler, poll_interval=60,
-                 cache_file=None):
+    def __init__(self, inverter, poll_interval=INVERTER_POLL_SECONDS, cache_file=None):
         self.inverter = inverter
-        self.battery_sampler = battery_sampler
         self.poll_interval = poll_interval
         self._cache = {}
         self._lock = threading.Lock()
@@ -225,9 +224,7 @@ class InverterPoller:
     def _fetch(self):
         try:
             t0 = time.time()
-            result = self.inverter.read_all_data(
-                battery_sampler=self.battery_sampler
-            )
+            result = self.inverter.read_all_data()
             elapsed = time.time() - t0
 
             if result.get("error"):
@@ -475,7 +472,6 @@ def refresh_device_type(inv, config):
 # Service variables — initialised by init_services() when configured
 inverter = None
 inverter_config = None
-battery_sampler = None
 outage_poller = None
 weather_poller = None
 inverter_poller = None
@@ -545,7 +541,7 @@ def require_settings_pin(view):
 
 def init_services():
     """Initialise all background services (inverter, pollers, etc.)."""
-    global inverter, inverter_config, battery_sampler
+    global inverter, inverter_config
     global outage_poller, weather_poller, inverter_poller
     global alerts_poller, smart_meter
 
@@ -557,9 +553,6 @@ def init_services():
     detect = refresh_device_type if env_config_complete() else refresh_inverter_config
     threading.Thread(target=detect, args=(inverter, inverter_config),
                      name="inverter-detect", daemon=True).start()
-
-    battery_sampler = BatterySampler(inverter, interval=30)
-    battery_sampler.start()
 
     # Outage schedule provider
     outage_provider_name = os.environ.get("OUTAGE_PROVIDER", "lvivoblenergo")
@@ -596,8 +589,7 @@ def init_services():
 
     weather_poller = WeatherPoller()
     weather_poller.start()
-    inverter_poller = InverterPoller(inverter, battery_sampler,
-                                    cache_file=INVERTER_CACHE_FILE)
+    inverter_poller = InverterPoller(inverter, cache_file=INVERTER_CACHE_FILE)
     inverter_poller.start()
 
 
@@ -1239,7 +1231,7 @@ def start_telegram_bot():
     state_file = os.environ.get("BOT_STATE_FILE") or data_path("bot_state.json")
     bot = TelegramBot(
         token=token, allowed_users=user_ids, inverter=inverter,
-        battery_sampler=battery_sampler, outage_poller=outage_poller,
+        outage_poller=outage_poller,
         state_file=state_file,
         grid_daily_log_file=GRID_DAILY_LOG_FILE,
         weather_poller=weather_poller,
