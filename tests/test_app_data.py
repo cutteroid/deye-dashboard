@@ -294,6 +294,24 @@ class TestBatteryRuntime:
         monkeypatch.setattr(app, "BATTERY_CAPACITY_KWH", 10.0)
         assert app.estimate_battery_runtime({**self.DATA, "battery_shutdown_soc": 0}, 920) == 600  # 9.2 kWh / 920 W
 
+    def test_capacity_from_nominal_voltage(self):
+        """Ah x nominal voltage: a full battery's live 55.27 V would overstate it by ~8%."""
+        import app
+        live = {"battery_capacity_ah": 200, "battery_voltage": 55.27}
+        assert app.battery_capacity_wh({**live, "battery_nominal_voltage": 51.2}) == pytest.approx(10240)
+        assert app.battery_capacity_wh(live) == pytest.approx(11054)            # unknown nominal: live voltage
+        assert app.battery_capacity_wh({**live, "battery_nominal_voltage": None}) == pytest.approx(11054)
+
+    def test_drivers_report_nominal_voltage(self):
+        from unittest.mock import patch
+        from inverters import DeyeInverter, InverterConfig, InverterDriver
+        assert InverterDriver().battery_nominal_voltage() == 51.2
+        with patch("inverters.deye.PySolarmanV5"):
+            inv = DeyeInverter(ip="192.168.1.1", serial=1, config=InverterConfig(phases=3, family="hybrid_3p_lv"))
+            assert inv.battery_nominal_voltage() == 51.2
+            inv.config = InverterConfig(phases=3, family="hybrid_3p_hv")
+            assert inv.battery_nominal_voltage() is None                       # HV stacks vary
+
     def test_poller_averages_discharge_and_resets(self):
         import app
         poller = app.InverterPoller(inverter=None)

@@ -11,6 +11,7 @@ Readings returned by InverterDriver.read_all_data() (W, V, A, %, kWh):
         (battery_voltage and battery_soc smoothed over the last reads, see
         InverterDriver.smooth_battery(); battery_soc_raw is this read's value)
     battery_capacity_ah, battery_shutdown_soc   (optional: battery time estimates)
+    battery_nominal_voltage (optional: Ah -> Wh; without it the live voltage is used)
     battery_temperature (°C, optional; None when the inverter doesn't report it)
     grid_voltage (L1), grid_power (> 0 importing), grid_status ("Importing"/"Exporting"/"Idle")
     grid_online (house actually on grid power), grid_state (see grid_state())
@@ -111,6 +112,10 @@ class InverterDriver:
     def battery_voltage_range(self):
         """Plausible battery voltage; the smoothing drops readings outside it."""
         return 46.0, 58.0   # 48 V LiFePO4 (16S)
+
+    def battery_nominal_voltage(self):
+        """Nominal battery voltage for capacity Ah -> Wh (None: unknown)."""
+        return 51.2         # 48 V LiFePO4: 16 cells x 3.2 V
 
     def smooth_battery(self, data):
         """Show battery_voltage / battery_soc smoothed over the last reads.

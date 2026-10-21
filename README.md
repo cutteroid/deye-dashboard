@@ -285,7 +285,7 @@ These are auto-detected at startup. Set them only if auto-detection doesn't work
 | `INVERTER_PHASES` | Number of phases (`1` or `3`); also in Settings → Edit configuration (step 1) | auto-detected |
 | `INVERTER_HAS_BATTERY` | Whether a battery is connected (`true` / `false`) | auto-detected |
 | `INVERTER_PV_STRINGS` | Number of PV strings (`1` or `2`) | auto-detected |
-| `BATTERY_CAPACITY_KWH` | Battery capacity for the battery banner's time estimates — "Lasts about" during outages, "Full in" while charging — if the inverter's own value is wrong. Without it: battery capacity in Ah from the inverter (BMS-measured, else the inverter setting) × battery voltage; the estimates use the average charge / discharge power of the last ~10 minutes and count down to 100% / the inverter's shutdown SOC | from the inverter |
+| `BATTERY_CAPACITY_KWH` | Battery capacity for the battery banner's time estimates — "Lasts about" during outages, "Full in" while charging — if the inverter's own value is wrong. Without it: battery capacity in Ah from the inverter (BMS-measured, else the inverter setting) × the battery's nominal voltage (51.2 V for 48 V LiFePO4; high-voltage stacks: the live voltage); the estimates use the average charge / discharge power of the last ~10 minutes and count down to 100% / the inverter's shutdown SOC | from the inverter |
 
 ### Weather
 

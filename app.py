@@ -144,11 +144,13 @@ LOAD_AVERAGE_SAMPLES = 60     # polls (~30 min) of home load behind the outage r
 
 
 def battery_capacity_wh(data):
-    """Full battery capacity in Wh: BATTERY_CAPACITY_KWH, else inverter's Ah x battery voltage."""
+    """Full battery capacity in Wh: BATTERY_CAPACITY_KWH, else the inverter's Ah x the
+    battery's nominal voltage (51.2 V for a 48 V LiFePO4 battery). The live voltage
+    is only a fallback: it runs ~8% above nominal when the battery is full."""
     if BATTERY_CAPACITY_KWH > 0:
         return BATTERY_CAPACITY_KWH * 1000
     capacity_ah = data.get("battery_capacity_ah") or 0
-    voltage = data.get("battery_voltage") or 0
+    voltage = data.get("battery_nominal_voltage") or data.get("battery_voltage") or 0
     return capacity_ah * voltage if capacity_ah > 0 and voltage > 0 else None
 
 

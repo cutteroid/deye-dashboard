@@ -142,6 +142,10 @@ class DeyeInverter(InverterDriver):
         # 48 V LiFePO4 window; HV battery stacks: anything a real stack can have
         return (100.0, 1000.0) if self.high_voltage else super().battery_voltage_range()
 
+    def battery_nominal_voltage(self):
+        # HV stacks come in many sizes: unknown (the live voltage is used instead)
+        return None if self.high_voltage else super().battery_nominal_voltage()
+
     def connect(self):
         """Establish connection to inverter."""
         self.disconnect()
@@ -384,6 +388,7 @@ class DeyeInverter(InverterDriver):
                     capacity_ah = self.read_register(102)
                     time.sleep(0.05)
                 data["battery_capacity_ah"] = capacity_ah
+                data["battery_nominal_voltage"] = self.battery_nominal_voltage()
                 data["battery_shutdown_soc"] = self.read_register(115)
                 time.sleep(0.05)
 
