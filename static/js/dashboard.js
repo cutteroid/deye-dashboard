@@ -1076,10 +1076,8 @@ function updateDashboard() {
 loadPhaseStats();
 updateDashboard();
 
-// Weather forecast banner (independent of inverter data)
+// Weather forecast banner (independent of inverter data; polled from its section below)
 updateClock();
-fetchWeather();
-setInterval(fetchWeather, WEATHER_POLL_MS);
 
 // Update every 5 seconds
 setInterval(updateDashboard, 5000);
@@ -1487,6 +1485,11 @@ function fetchWeather() {
             console.error('Weather fetch error:', err);
         });
 }
+
+// Started here, after WEATHER_POLL_MS is set: called earlier, the delay was
+// still undefined and the browser polled as fast as it could (~250 requests/s)
+fetchWeather();
+setInterval(fetchWeather, WEATHER_POLL_MS);
 
 // Clock in the forecast banner: the device's local time, 24-hour (HH:MM)
 var clockTimer;  // no "= null": updateClock() already runs at startup, before this line
