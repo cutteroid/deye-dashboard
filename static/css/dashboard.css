@@ -1304,6 +1304,13 @@ body.fullscreen-mode .settings-toggle-btn {
     display: none !important;   /* only the fullscreen (exit) button stays */
 }
 
+/* Cards below the first screen: the same side margins as the banners, and at
+   the bottom the space the first screen has at the top (the page itself has
+   no padding in fullscreen) */
+body.fullscreen-mode .dashboard {
+    padding: 0 40px 40px;
+}
+
 /* ── Fullscreen: CSS Grid layout ── */
 body.fullscreen-mode .fullscreen-banner-wrapper {
     display: grid;
@@ -1623,6 +1630,10 @@ body.fullscreen-mode.alerts-enabled:not(.has-generator):not(.outages-disabled) .
     body.fullscreen-mode .fullscreen-banner-wrapper {
         padding-top: 24px;
         padding-bottom: 84px;
+    }
+
+    body.fullscreen-mode .dashboard {
+        padding-bottom: 24px;
     }
 
     body.fullscreen-mode .weather-forecast-banner {
@@ -2819,6 +2830,10 @@ html.low-power .pin-overlay {
         align-content: stretch;
         gap: 10px;
         padding: 10px 12px;
+    }
+
+    body.fullscreen-mode .dashboard {
+        padding: 0 12px 12px;
     }
 
     body.fullscreen-mode .fullscreen-btn {
