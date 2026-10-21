@@ -135,6 +135,8 @@ Raspberry Pi зчитує дані з вашого інвертора кожні
 - **Load analytics** — per-phase power distribution with daily statistics (3-phase systems)
 - **Weather** — current conditions and forecast via Open-Meteo API
 - **Planned outages** — today's and tomorrow's outage windows on a timeline, plus a countdown in the grid banner (Lvivoblenergo, Yasno, or DTEK providers)
+- **Outage readiness** — whether the battery will last through the next planned outage, at the last 30 minutes' average load
+- **Inverter & battery health** — inverter state and temperatures, fault / warning codes, lifetime battery charge and discharge with equivalent full cycles (3-phase hybrids)
 - **Air raid alerts** — map of Ukraine's regions and districts with live alert statuses (alerts.in.ua or NEPTUN)
 - **Smart meter** — power, voltage, current and energy from a Bakler Wi-Fi electricity meter over MQTT (optional)
 - **Grid outage detection** — browser notifications when power goes out
@@ -382,6 +384,20 @@ The dashboard UI is available in English (default), Ukrainian and Russian. Switc
 Translations live in `locales/<lang>.json` (one file per language, nested keys, `{name}` placeholders). To add a language, copy `locales/en.json` to e.g. `locales/pl.json`, translate the values, and restart — the settings panel lists it automatically. `tests/test_i18n.py` checks that every locale has the same keys and placeholders as English.
 
 The Telegram bot is Ukrainian-only and is not affected by this setting.
+
+### Outage Readiness
+
+The **Outage readiness** card (shown with an outage schedule and a battery) answers whether the battery will last through the next planned outage, today's or tomorrow's (back-to-back windows count as one outage):
+
+- **Needed:** the home's average load over the last 30 minutes × the outage's length, plus 10% for the inverter's own losses.
+- **Available:** the battery's charge down to the inverter's shutdown SOC. If the battery is still charging, the charge it will have when the outage starts.
+- **Verdict:** "Battery is enough" (at least 20% to spare), "Just enough", or "Short by ~…" (red). During an outage it counts the rest of it.
+
+The load during an outage can differ (a kettle, a heater), so treat it as an estimate.
+
+### Inverter & Battery Health
+
+The **Inverter & battery** card shows the inverter's state (Normal, Standby, Warning, Fault), its DC- and AC-side temperatures, and the battery's lifetime charged and discharged energy with the equivalent number of full cycles (total discharged ÷ capacity). While the inverter reports a warning or fault, the card turns amber or red and lists the codes (F13, W03, …) as in the inverter manual. The state is read with every poll; temperatures, totals and codes every 5 minutes, and right away while there is a problem. So far the card is available for 3-phase hybrid inverters.
 
 ### Back to the First Screen
 

@@ -53,7 +53,7 @@ python scan_phases.py       # phase registers
 
 - **`inverters/`** — inverter drivers, selected by `INVERTER_TYPE` (default `deye`):
   - `base.py` — brand-neutral: `InverterConfig` (capabilities: phases, battery, PV strings, generator, model family, `supported`), the `InverterDriver` interface (`from_settings`, `settings_problem`/`required_settings`, `read_all_data`, `detect_config`, `read_device_type`, `discover`), the **reading fields every driver returns** (module docstring — the rest of the app uses only those, never registers), shared grid logic (`grid_online`, `grid_state`, `grid_phases_missing`) and `BatterySmoother`: each driver's `read_all_data()` calls `smooth_battery(data)`, which shows battery voltage (average) and SOC (median) over the last 6 reads (3 min at 30 s), dropping implausible values (the logger sometimes returns 0 V) — no separate battery reads.
-  - `deye.py` — `DeyeInverter`: Modbus over Solarman V5 (`pysolarmanv5`), both register maps, device-type families, HV scaling, grid relay, capability detection, Solarman discovery (`discover_inverter.py`). 50 ms between register reads to spare the logger.
+  - `deye.py` — `DeyeInverter` (3-phase health: running state 500 on every read; temperatures 540/541, battery totals 516-519, warning 553-554 / fault 555-558 bits every `HEALTH_READ_SECONDS` and while the state is alarm/fault; codes reported only then): Modbus over Solarman V5 (`pysolarmanv5`), both register maps, device-type families, HV scaling, grid relay, capability detection, Solarman discovery (`discover_inverter.py`). 50 ms between register reads to spare the logger.
   - `__init__.py` — `DRIVERS` registry, `driver_class()`, `create_inverter(settings)`. **New driver:** subclass `InverterDriver`, return the documented fields, register it in `DRIVERS`, add its name to `setup.INVERTER_TYPES` (stdlib-only script; a test keeps the lists in sync) and its settings to the wizard (step 1). The wizard's "Inverter type" list appears by itself once `DRIVERS` has more than one entry.
   - UI text never names a brand (tests check page and locales); brand-specific wording belongs to the driver (`display_name`).
 
@@ -166,6 +166,7 @@ Config saved from the UI is validated by `setup.validate_config()` (types, range
 | `/api/phase-stats/clear` | POST | Clear phase statistics |
 | `/api/alerts` | GET | Air raid alert statuses by region/district |
 | `/api/smart-meter` | GET | Smart meter readings (`status: disabled` when off) |
+| `/api/outage-readiness` | GET | Will the battery last through the next planned outage (`outage_readiness.py`: recent average load × window vs charge above the shutdown SOC; `status`: disabled/no_schedule/no_data/no_outage/ok, `verdict`: enough/tight/short) |
 
 ## Configuration
 

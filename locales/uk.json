@@ -153,6 +153,27 @@
     "starts_in": "через {time}",
     "source": "Джерело: {provider}"
   },
+  "readiness": {
+    "title": "Готовність до відключення",
+    "no_data": "Очікування даних...",
+    "no_outage": "В опублікованому графіку відключень немає",
+    "no_schedule": "Графік відключень недоступний",
+    "today": "сьогодні",
+    "tomorrow": "завтра",
+    "next_label": "Наступне відключення",
+    "now_label": "Відключення зараз",
+    "next": "{day} {window} · {time}",
+    "now": "до {end} · ще {time}",
+    "enough": "Батареї вистачить",
+    "tight": "Впритул",
+    "short": "Не вистачить",
+    "lasts": "Вистачить на {time}",
+    "lasts_short": "Вистачить на {time}, бракує {short}",
+    "needed": "Потрібно",
+    "available": "Доступно",
+    "basis": "Середнє навантаження ~{power} Вт · до {soc}%",
+    "charged_by_start": "На початок зарядиться до ~{soc}%"
+  },
   "alerts": {
     "title": "Повітряні тривоги",
     "demo": "Демо-дані",
@@ -217,6 +238,28 @@
       "idle": "Очікування",
       "na": "Н/Д"
     }
+  },
+  "health": {
+    "title": "Інвертор і батарея",
+    "inverter": "Інвертор",
+    "state_normal": "Норма",
+    "state_standby": "Очікування",
+    "state_self_check": "Самоперевірка",
+    "state_alarm": "Попередження",
+    "state_fault": "Аварія",
+    "state_unknown": "Невідомо",
+    "fault_codes": "Коди аварій: {codes}",
+    "warning_codes": "Коди попереджень: {codes}",
+    "codes_hint": "Значення кодів — в інструкції до інвертора",
+    "temperatures": "Температура",
+    "temp_dc": "Інвертор DC",
+    "temp_ac": "Інвертор AC",
+    "temp_battery": "Батарея",
+    "lifetime": "Батарея за весь час, кВт·год",
+    "charged": "Заряджено",
+    "discharged": "Розряджено",
+    "cycles": "Циклів",
+    "capacity": "Ємність за BMS: {ah} А·год"
   },
   "grid": {
     "title": "Мережа",

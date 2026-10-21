@@ -114,6 +114,7 @@ function refreshTranslatedContent() {
         function() { updateOnboardingUI(); },
         function() { renderAlerts(); },
         function() { renderSmartMeter(); },
+        function() { renderOutageReadiness(); },
         function() { updateDashboard(); },
     ];
     refreshers.forEach(function(fn) {
@@ -995,6 +996,8 @@ function updateDashboard() {
                 loadCard.classList.add('load-active');
             }
 
+            renderHealth(data);
+
             // Grid Status Banner
             const gridBanner = document.getElementById('grid-banner');
             const gridStatusValue = document.getElementById('grid-status-value');
@@ -1502,6 +1505,132 @@ function updateClock() {
     clockTimer = setTimeout(updateClock, 60000 - now.getSeconds() * 1000 - now.getMilliseconds() + 50);
 }
 
+// ===== OUTAGE READINESS =====
+// Will the battery last through the next planned outage? The server compares
+// the energy the outage needs (recent average load x its length) with what the
+// battery has left (/api/outage-readiness, outage_readiness.py).
+var READINESS_POLL_MS = 60000;
+var readinessData = null;
+
+function fetchOutageReadiness() {
+    apiFetch('/api/outage-readiness')
+        .then(function(r) { return r.json(); })
+        .then(function(data) { readinessData = data; renderOutageReadiness(); })
+        .catch(function() {});   // keep the last answer through a failed request
+}
+
+// "14:00–18:00"; an end at the next midnight shows as 24:00
+function readinessWindow(d) {
+    var end = formatTimeFromISO(d.end);
+    if (end === '00:00' && d.end.slice(0, 10) !== d.start.slice(0, 10)) end = '24:00';
+    return formatTimeFromISO(d.start) + '–' + end;
+}
+
+// Long durations rounded to hours ("~15h"), so they stay short
+function readinessDuration(mins) {
+    return mins >= 600 ? '~' + t('duration.h', { h: Math.round(mins / 60) }) : formatPlannedDuration(mins);
+}
+
+function renderOutageReadiness() {
+    var card = document.getElementById('readiness-card');
+    var body = document.getElementById('readiness-body');
+    if (!card || !body) return;
+    var d = readinessData;
+    if (!d || d.status === 'disabled') {
+        card.style.display = 'none';
+        return;
+    }
+    card.style.display = '';
+    card.classList.toggle('readiness-tight', d.verdict === 'tight');
+    card.classList.toggle('readiness-short', d.verdict === 'short');
+
+    if (d.status === 'no_outage' || d.status === 'no_schedule' || !d.start) {
+        var key = d.status === 'no_outage' || d.status === 'no_schedule' ? d.status : 'no_data';
+        body.innerHTML = '<div class="planned-none">' + escapeHtml(t('readiness.' + key)) + '</div>';
+        return;
+    }
+    // When: a short label, then the window on its own line
+    var duration = formatPlannedDuration(d.outage_minutes);
+    var when = d.during
+        ? t('readiness.now', { end: readinessWindow(d).split('–')[1], time: duration })
+        : t('readiness.next', {
+            day: t(d.start.slice(0, 10) === localDateString(new Date()) ? 'readiness.today' : 'readiness.tomorrow'),
+            window: readinessWindow(d), time: duration });
+    var html = '<div class="readiness-when-label">' + escapeHtml(t(d.during ? 'readiness.now_label' : 'readiness.next_label')) + '</div>' +
+        '<div class="readiness-when">' + escapeHtml(when) + '</div>';
+    if (d.status !== 'ok') {
+        body.innerHTML = html + '<div class="planned-none">' + escapeHtml(t('readiness.no_data')) + '</div>';
+        return;
+    }
+
+    var mark = d.verdict === 'short' ? '✕ ' : d.verdict === 'tight' ? '⚠ ' : '✓ ';
+    var detail = d.lasts_minutes == null ? '' : d.verdict === 'short'
+        ? t('readiness.lasts_short', { time: readinessDuration(d.lasts_minutes), short: readinessDuration(d.short_minutes) })
+        : t('readiness.lasts', { time: readinessDuration(d.lasts_minutes) });
+    var kwh = '<span class="unit">' + escapeHtml(t('units.kwh')) + '</span>';
+    // Bar: the share of the available energy the outage needs (full and red when short)
+    var share = d.available_kwh > 0 ? Math.min(100, Math.round(d.needed_kwh / d.available_kwh * 100)) : 100;
+    html += '<div class="readiness-verdict readiness-' + d.verdict + '">' + escapeHtml(mark + t('readiness.' + d.verdict)) + '</div>' +
+        (detail ? '<div class="readiness-detail">' + escapeHtml(detail) + '</div>' : '') +
+        '<div class="stats-row readiness-energy">' +
+        '<div class="stat"><div class="value">' + fmtKwh(d.needed_kwh) + kwh + '</div><div class="label">' + escapeHtml(t('readiness.needed')) + '</div></div>' +
+        '<div class="stat"><div class="value">' + fmtKwh(d.available_kwh) + kwh + '</div><div class="label">' + escapeHtml(t('readiness.available')) + '</div></div>' +
+        '</div>' +
+        '<div class="readiness-bar readiness-bar-' + d.verdict + '"><div class="readiness-bar-fill" style="width: ' + share + '%"></div></div>';
+    // One short line each (the average covers the last 30 minutes)
+    html += '<div class="readiness-basis">' + escapeHtml(t('readiness.basis', { power: d.average_load_w, soc: d.shutdown_soc })) + '</div>';
+    if (!d.during && d.soc_at_start > d.soc) {
+        html += '<div class="readiness-basis">' + escapeHtml(t('readiness.charged_by_start', { soc: d.soc_at_start })) + '</div>';
+    }
+    body.innerHTML = html;
+}
+
+fetchOutageReadiness();
+setInterval(fetchOutageReadiness, READINESS_POLL_MS);
+
+// ===== INVERTER & BATTERY HEALTH =====
+// From the inverter readings (/api/data); hidden when the driver doesn't report it.
+function renderHealth(data) {
+    var card = document.getElementById('health-card');
+    if (!card) return;
+    if (!data || !('inverter_state' in data)) {
+        card.style.display = 'none';
+        return;
+    }
+    card.style.display = '';
+    var state = data.inverter_state || 'unknown';
+    card.classList.toggle('health-alarm', state === 'alarm');
+    card.classList.toggle('health-fault', state === 'fault');
+    document.getElementById('health-state').innerHTML =
+        '<span class="health-label">' + escapeHtml(t('health.inverter')) + '</span>' +
+        '<span class="health-chip health-' + state + '">' + escapeHtml(t('health.state_' + state)) + '</span>';
+
+    // Codes only come while the inverter reports a warning or fault
+    var codes = [];
+    if ((data.inverter_fault_codes || []).length) codes.push(t('health.fault_codes', { codes: data.inverter_fault_codes.join(', ') }));
+    if ((data.inverter_warning_codes || []).length) codes.push(t('health.warning_codes', { codes: data.inverter_warning_codes.join(', ') }));
+    var codesEl = document.getElementById('health-codes');
+    codesEl.hidden = !codes.length;
+    codesEl.innerHTML = codes.length
+        ? codes.map(function(line) { return '<div>' + escapeHtml(line) + '</div>'; }).join('') +
+          '<div class="health-codes-hint">' + escapeHtml(t('health.codes_hint')) + '</div>'
+        : '';
+
+    function temperature(value) { return value == null ? '--' : fmt(value, 0) + '°'; }
+    document.getElementById('health-temp-dc').textContent = temperature(data.inverter_temperature_dc);
+    document.getElementById('health-temp-ac').textContent = temperature(data.inverter_temperature_ac);
+    document.getElementById('health-temp-battery').textContent = temperature(data.battery_temperature);
+
+    var hasBattery = !inverterConfig || inverterConfig.has_battery !== false;
+    document.getElementById('health-temp-battery-stat').hidden = !hasBattery;
+    document.getElementById('health-battery').hidden = !hasBattery;
+    document.getElementById('health-charged').textContent = data.battery_total_charge_kwh == null ? '--' : fmt(data.battery_total_charge_kwh, 0);
+    document.getElementById('health-discharged').textContent = data.battery_total_discharge_kwh == null ? '--' : fmt(data.battery_total_discharge_kwh, 0);
+    document.getElementById('health-cycles').textContent = data.battery_cycles == null ? '--' : '≈ ' + data.battery_cycles;
+    var capacityEl = document.getElementById('health-capacity');
+    capacityEl.textContent = hasBattery && data.battery_capacity_ah ? t('health.capacity', { ah: data.battery_capacity_ah }) : '';
+}
+
 // ===== SMART METER =====
 // Read-only readings of the MQTT smart meter (/api/smart-meter); the card stays
 // hidden unless the meter is enabled on the server.
@@ -1801,6 +1930,7 @@ function refreshAllData() {
     fetchAlerts();
     fetchOutageSchedule();
     fetchWeather();
+    fetchOutageReadiness();
 }
 document.addEventListener('visibilitychange', function() {
     if (document.visibilityState === 'visible') refreshAllData();

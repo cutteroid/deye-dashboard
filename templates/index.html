@@ -422,6 +422,61 @@
             <div class="planned-outages-source" id="planned-outages-source"></div>
         </div>
 
+        <!-- Outage readiness: will the battery last through the next planned outage?
+             Hidden without an outage schedule or a battery (renderOutageReadiness) -->
+        <div class="card" id="readiness-card" data-id="readiness-card" style="display: none;">
+            <div class="card-header">
+                <span class="icon">🔦</span>
+                <h2 data-i18n="readiness.title">Outage readiness</h2>
+            </div>
+            <div id="readiness-body">
+                <div class="planned-none" data-i18n="readiness.no_data">Waiting for data...</div>
+            </div>
+        </div>
+
+        <!-- Inverter & battery health; hidden when the inverter driver doesn't report it -->
+        <div class="card" id="health-card" data-id="health-card" style="display: none;">
+            <div class="card-header">
+                <span class="icon">🔧</span>
+                <h2 data-i18n="health.title">Inverter &amp; battery</h2>
+            </div>
+            <div class="health-state" id="health-state"></div>
+            <div class="health-codes" id="health-codes" hidden></div>
+            <div class="card-section-label" data-i18n="health.temperatures">Temperature</div>
+            <div class="stats-row stats-row-3">
+                <div class="stat">
+                    <div class="value" id="health-temp-dc">--</div>
+                    <div class="label" data-i18n="health.temp_dc">Inverter DC</div>
+                </div>
+                <div class="stat">
+                    <div class="value" id="health-temp-ac">--</div>
+                    <div class="label" data-i18n="health.temp_ac">Inverter AC</div>
+                </div>
+                <div class="stat" id="health-temp-battery-stat">
+                    <div class="value" id="health-temp-battery">--</div>
+                    <div class="label" data-i18n="health.temp_battery">Battery</div>
+                </div>
+            </div>
+            <div id="health-battery">
+                <div class="card-section-label" data-i18n="health.lifetime">Battery, all time, kWh</div>
+                <div class="stats-row stats-row-3">
+                    <div class="stat">
+                        <div class="value" id="health-charged">--</div>
+                        <div class="label" data-i18n="health.charged">Charged</div>
+                    </div>
+                    <div class="stat">
+                        <div class="value" id="health-discharged">--</div>
+                        <div class="label" data-i18n="health.discharged">Discharged</div>
+                    </div>
+                    <div class="stat">
+                        <div class="value" id="health-cycles">--</div>
+                        <div class="label" data-i18n="health.cycles">Cycles</div>
+                    </div>
+                </div>
+            </div>
+            <div class="health-capacity" id="health-capacity"></div>
+        </div>
+
         <!-- Air Raid Alerts -->
         <div class="card" id="alerts-card" data-id="alerts-card" data-alerts-card>
             <div class="card-header">

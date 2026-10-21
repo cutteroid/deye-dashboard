@@ -60,6 +60,35 @@ def battery_temperature(raw):
     return celsius if -40 <= celsius <= 90 else None
 
 
+# Inverter health, 3-phase register map: the running state on every read; the
+# temperatures, lifetime battery totals and warning / fault bits every
+# HEALTH_READ_SECONDS, and on every read while the inverter reports a problem
+INVERTER_STATES = {0: "standby", 1: "self_check", 2: "normal", 3: "alarm", 4: "fault"}
+HEALTH_READ_SECONDS = 300
+REG_STATE_3P = 500
+REG_TEMPERATURES_3P = 540     # 540 DC side, 541 AC side (heatsink): (x - 1000) / 10 °C
+REG_BATTERY_TOTALS_3P = 516   # 516/517 charged, 518/519 discharged: 0.1 kWh, low word first
+REG_WARNINGS_3P = 553         # 553-554: warning bits -> W01..W32
+REG_FAULTS_3P = 555           # 555-558: fault bits -> F01..F64 (the inverter manual's fault codes)
+
+
+def inverter_temperature(raw):
+    """Inverter temperature register ((x - 1000) / 10 °C) -> °C, or None when implausible."""
+    celsius = (raw - 1000) / 10
+    return celsius if -40 <= celsius <= 120 else None
+
+
+def bit_codes(words, prefix):
+    """Set bits of consecutive 16-bit registers -> codes: bit 0 of the first = <prefix>01."""
+    return [f"{prefix}{index * 16 + bit + 1:02d}"
+            for index, word in enumerate(words) for bit in range(16) if word & (1 << bit)]
+
+
+def total_kwh(low, high):
+    """32-bit counter in 0.1 kWh (low word first) -> kWh."""
+    return ((high << 16) | low) / 10
+
+
 def device_family(device_type):
     """Family name for a register-0 value ("unknown" if not recognised)."""
     return DEVICE_FAMILIES.get(device_type, "unknown")
@@ -78,6 +107,8 @@ class DeyeInverter(InverterDriver):
         self.serial = serial
         self.port = port
         self.inverter = None   # PySolarmanV5 connection while open
+        self._health = {}           # last temperatures / battery totals / codes (3-phase)
+        self._health_read_at = None  # time.monotonic() of that read
 
     @classmethod
     def from_settings(cls, settings):
@@ -135,6 +166,47 @@ class DeyeInverter(InverterDriver):
     def read_register(self, address: int) -> int:
         """Read a single holding register."""
         return self.inverter.read_holding_registers(address, 1)[0]
+
+    def read_registers(self, address: int, count: int) -> list:
+        """Read consecutive holding registers in one request."""
+        return list(self.inverter.read_holding_registers(address, count))
+
+    def _read_health_3p(self, data):
+        """inverter_state on every read, the rest of the health fields from the last
+        health read (see HEALTH_READ_SECONDS). A failed health read only leaves
+        them out; the readings themselves are fine."""
+        state = None
+        try:
+            state = INVERTER_STATES.get(self.read_register(REG_STATE_3P))
+            time.sleep(0.05)
+            problem = state in ("alarm", "fault")
+            now = time.monotonic()
+            if problem or self._health_read_at is None or now - self._health_read_at >= HEALTH_READ_SECONDS:
+                health = {}
+                dc, ac = self.read_registers(REG_TEMPERATURES_3P, 2)
+                time.sleep(0.05)
+                health["inverter_temperature_dc"] = inverter_temperature(dc)
+                health["inverter_temperature_ac"] = inverter_temperature(ac)
+                if self.config.has_battery:
+                    charged_lo, charged_hi, discharged_lo, discharged_hi = self.read_registers(REG_BATTERY_TOTALS_3P, 4)
+                    time.sleep(0.05)
+                    health["battery_total_charge_kwh"] = total_kwh(charged_lo, charged_hi)
+                    health["battery_total_discharge_kwh"] = total_kwh(discharged_lo, discharged_hi)
+                if problem:
+                    health["inverter_warning_codes"] = bit_codes(self.read_registers(REG_WARNINGS_3P, 2), "W")
+                    time.sleep(0.05)
+                    health["inverter_fault_codes"] = bit_codes(self.read_registers(REG_FAULTS_3P, 4), "F")
+                    time.sleep(0.05)
+                self._health, self._health_read_at = health, now
+        except Exception as e:
+            logger.warning("Inverter health read failed: %s", e)
+        data["inverter_state"] = state
+        data.update({key: value for key, value in self._health.items() if not key.endswith("_codes")})
+        # Codes only while the inverter itself reports a problem: on a normal
+        # inverter nothing shows, whatever those registers hold
+        problem = state in ("alarm", "fault")
+        data["inverter_warning_codes"] = self._health.get("inverter_warning_codes", []) if problem else []
+        data["inverter_fault_codes"] = self._health.get("inverter_fault_codes", []) if problem else []
 
     def read_all_data(self) -> dict:
         """Read all inverter data and return as dictionary."""
@@ -396,6 +468,8 @@ class DeyeInverter(InverterDriver):
                 data["grid_status"] = "Exporting"
             else:
                 data["grid_status"] = "Idle"
+
+            self._read_health_3p(data)
 
         except Exception as e:
             logger.warning("Error reading inverter data: %s", e)

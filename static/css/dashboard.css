@@ -849,6 +849,155 @@ body.cards-dragging * {
     box-shadow: 0 0 25px rgba(248, 113, 113, 0.25);
 }
 
+/* Outage readiness card: amber when it's tight, red when the battery won't last */
+.card.readiness-tight {
+    border-color: rgba(251, 191, 36, 0.5);
+    box-shadow: 0 0 20px rgba(251, 191, 36, 0.15);
+}
+
+.card.readiness-short {
+    border-color: rgba(248, 113, 113, 0.6);
+    box-shadow: 0 0 25px rgba(248, 113, 113, 0.25);
+}
+
+/* Small heading above a group of stats or a line (new cards) */
+.card-section-label,
+.readiness-when-label {
+    font-size: 0.75rem;
+    color: #64748b;
+    margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.card-section-label {
+    margin: 14px 0 8px;
+}
+
+.readiness-when {
+    font-size: 0.95rem;
+    color: #e2e8f0;
+    margin-bottom: 12px;
+}
+
+.readiness-verdict {
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
+.readiness-verdict.readiness-enough { color: #4ade80; }
+.readiness-verdict.readiness-tight { color: #fbbf24; }
+.readiness-verdict.readiness-short { color: #f87171; }
+
+.readiness-detail {
+    margin-top: 6px;
+    font-size: 0.85rem;
+    color: #94a3b8;
+}
+
+.readiness-energy {
+    margin-top: 14px;
+}
+
+.readiness-energy .value .unit,
+#health-card .value .unit {
+    margin-left: 3px;
+    font-size: 0.7em;
+    font-weight: 400;
+    color: #94a3b8;
+}
+
+/* Needed vs available: the share of the available energy the outage takes */
+.readiness-bar {
+    height: 6px;
+    margin-top: 10px;
+    border-radius: 3px;
+    background: rgba(74, 222, 128, 0.2);
+    overflow: hidden;
+}
+
+.readiness-bar-fill {
+    height: 100%;
+    background: #4ade80;
+}
+
+.readiness-bar-tight { background: rgba(251, 191, 36, 0.2); }
+.readiness-bar-tight .readiness-bar-fill { background: #fbbf24; }
+.readiness-bar-short { background: rgba(248, 113, 113, 0.2); }
+.readiness-bar-short .readiness-bar-fill { background: #f87171; }
+
+.readiness-basis {
+    margin-top: 2px;
+    font-size: 0.75rem;
+    color: #64748b;
+}
+
+.readiness-bar + .readiness-basis {
+    margin-top: 10px;
+}
+
+/* Inverter & battery health card: amber on a warning, red on a fault */
+.card.health-alarm {
+    border-color: rgba(251, 191, 36, 0.5);
+    box-shadow: 0 0 20px rgba(251, 191, 36, 0.15);
+}
+
+.card.health-fault {
+    border-color: rgba(248, 113, 113, 0.6);
+    box-shadow: 0 0 25px rgba(248, 113, 113, 0.25);
+}
+
+.health-state {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.health-label {
+    font-size: 0.9rem;
+    color: #cbd5e1;
+}
+
+.health-chip {
+    padding: 4px 12px;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    background: rgba(148, 163, 184, 0.15);
+    color: #cbd5e1;
+}
+
+.health-chip.health-normal { background: rgba(74, 222, 128, 0.15); color: #4ade80; }
+.health-chip.health-alarm { background: rgba(251, 191, 36, 0.18); color: #fbbf24; }
+.health-chip.health-fault { background: rgba(248, 113, 113, 0.18); color: #f87171; }
+
+.health-codes {
+    margin-top: 10px;
+    font-size: 0.85rem;
+    color: #fca5a5;
+}
+
+.health-codes[hidden] {
+    display: none;
+}
+
+.health-codes-hint {
+    font-size: 0.75rem;
+    color: #64748b;
+}
+
+/* Three stats side by side: less padding, so the labels fit on one line */
+#health-card .stats-row-3 .stat {
+    padding: 10px 6px;
+}
+
+.health-capacity {
+    margin-top: 10px;
+    font-size: 0.75rem;
+    color: #64748b;
+}
+
 /* Consumption card: per-phase section below the home load */
 .consumption-phases {
     margin-top: 20px;

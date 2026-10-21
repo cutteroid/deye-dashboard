@@ -153,6 +153,27 @@
     "starts_in": "через {time}",
     "source": "Источник: {provider}"
   },
+  "readiness": {
+    "title": "Готовность к отключению",
+    "no_data": "Ожидание данных...",
+    "no_outage": "В опубликованном графике отключений нет",
+    "no_schedule": "График отключений недоступен",
+    "today": "сегодня",
+    "tomorrow": "завтра",
+    "next_label": "Следующее отключение",
+    "now_label": "Отключение сейчас",
+    "next": "{day} {window} · {time}",
+    "now": "до {end} · ещё {time}",
+    "enough": "Батареи хватит",
+    "tight": "Впритык",
+    "short": "Не хватит",
+    "lasts": "Хватит на {time}",
+    "lasts_short": "Хватит на {time}, не хватает {short}",
+    "needed": "Нужно",
+    "available": "Доступно",
+    "basis": "Средняя нагрузка ~{power} Вт · до {soc}%",
+    "charged_by_start": "К началу зарядится до ~{soc}%"
+  },
   "alerts": {
     "title": "Воздушные тревоги",
     "demo": "Демо-данные",
@@ -217,6 +238,28 @@
       "idle": "Ожидание",
       "na": "Н/Д"
     }
+  },
+  "health": {
+    "title": "Инвертор и батарея",
+    "inverter": "Инвертор",
+    "state_normal": "Норма",
+    "state_standby": "Ожидание",
+    "state_self_check": "Самопроверка",
+    "state_alarm": "Предупреждение",
+    "state_fault": "Авария",
+    "state_unknown": "Неизвестно",
+    "fault_codes": "Коды аварий: {codes}",
+    "warning_codes": "Коды предупреждений: {codes}",
+    "codes_hint": "Значения кодов — в инструкции к инвертору",
+    "temperatures": "Температура",
+    "temp_dc": "Инвертор DC",
+    "temp_ac": "Инвертор AC",
+    "temp_battery": "Батарея",
+    "lifetime": "Батарея за всё время, кВт·ч",
+    "charged": "Заряжено",
+    "discharged": "Разряжено",
+    "cycles": "Циклов",
+    "capacity": "Ёмкость по BMS: {ah} А·ч"
   },
   "grid": {
     "title": "Сеть",

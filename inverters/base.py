@@ -18,6 +18,11 @@ Readings returned by InverterDriver.read_all_data() (W, V, A, %, kWh):
     daily_pv, daily_grid_import, daily_grid_export, daily_load
     generator_power
     3-phase only: grid_voltage_l1..l3, grid_phases_missing, load_l1..l3, voltage_l1..l3
+    optional, health (the "Inverter & battery" card shows when inverter_state is there):
+        inverter_state ("standby"/"self_check"/"normal"/"alarm"/"fault", None if unknown),
+        inverter_temperature_dc, inverter_temperature_ac (°C or None),
+        inverter_warning_codes, inverter_fault_codes (["W03"], ["F13"]; empty unless
+        the state is alarm / fault), battery_total_charge_kwh, battery_total_discharge_kwh
     error (only when the read failed)
 """
 import logging

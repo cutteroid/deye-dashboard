@@ -153,6 +153,27 @@
     "starts_in": "in {time}",
     "source": "Source: {provider}"
   },
+  "readiness": {
+    "title": "Outage readiness",
+    "no_data": "Waiting for data...",
+    "no_outage": "No outages in the published schedule",
+    "no_schedule": "Outage schedule unavailable",
+    "today": "today",
+    "tomorrow": "tomorrow",
+    "next_label": "Next outage",
+    "now_label": "Outage now",
+    "next": "{day} {window} · {time}",
+    "now": "until {end} · {time} left",
+    "enough": "Battery is enough",
+    "tight": "Just enough",
+    "short": "Not enough",
+    "lasts": "Lasts {time}",
+    "lasts_short": "Lasts {time}, {short} short",
+    "needed": "Needed",
+    "available": "Available",
+    "basis": "Average load ~{power} W · down to {soc}%",
+    "charged_by_start": "Charged to ~{soc}% by the start"
+  },
   "alerts": {
     "title": "Air raid alerts",
     "demo": "Demo data",
@@ -217,6 +238,28 @@
       "idle": "Idle",
       "na": "N/A"
     }
+  },
+  "health": {
+    "title": "Inverter & battery",
+    "inverter": "Inverter",
+    "state_normal": "Normal",
+    "state_standby": "Standby",
+    "state_self_check": "Self-check",
+    "state_alarm": "Warning",
+    "state_fault": "Fault",
+    "state_unknown": "Unknown",
+    "fault_codes": "Fault codes: {codes}",
+    "warning_codes": "Warning codes: {codes}",
+    "codes_hint": "The codes are explained in the inverter manual",
+    "temperatures": "Temperature",
+    "temp_dc": "Inverter DC",
+    "temp_ac": "Inverter AC",
+    "temp_battery": "Battery",
+    "lifetime": "Battery, all time, kWh",
+    "charged": "Charged",
+    "discharged": "Discharged",
+    "cycles": "Cycles",
+    "capacity": "BMS capacity: {ah} Ah"
   },
   "grid": {
     "title": "Grid",

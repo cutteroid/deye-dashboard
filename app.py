@@ -11,6 +11,7 @@ from telegram_bot import TelegramBot
 from outage_providers import OutageSchedulePoller, create_outage_provider
 from storage import atomic_write_json, data_path, load_json
 from air_alerts import AlertsPoller, create_alerts_provider, REGION_CODES
+from outage_readiness import outage_readiness
 from smart_meter import create_smart_meter_from_env
 from datetime import datetime, date, timedelta
 from functools import wraps
@@ -139,6 +140,7 @@ INVERTER_CACHE_FILE = os.environ.get("INVERTER_CACHE_FILE") or data_path("invert
 BATTERY_CAPACITY_KWH = env_float("BATTERY_CAPACITY_KWH", 0.0)
 INVERTER_POLL_SECONDS = 30   # one full read; battery voltage/SOC are smoothed over the last 6 (3 min)
 RUNTIME_AVERAGE_SAMPLES = 20  # polls (~10 min) of discharge power behind the estimate
+LOAD_AVERAGE_SAMPLES = 60     # polls (~30 min) of home load behind the outage readiness
 
 
 def battery_capacity_wh(data):
@@ -189,6 +191,7 @@ class InverterPoller:
         self._lock = threading.Lock()
         self.cache_file = cache_file
         self._flow_samples = []  # recent charge or discharge power (W) for the time estimates
+        self._load_samples = []  # recent home load (W) for the outage readiness
         self._flow_direction = 0  # 1 charging, -1 discharging, 0 idle
         self._load_cache()
 
@@ -247,6 +250,8 @@ class InverterPoller:
                     return
             else:
                 self._add_runtime_estimate(result)
+                self._add_load_average(result)
+                self._add_battery_cycles(result)
             with self._lock:
                 self._cache = result
             self._save_cache()
@@ -295,6 +300,22 @@ class InverterPoller:
         average = sum(self._flow_samples) / len(self._flow_samples) if self._flow_samples else 0
         result["battery_runtime_minutes"] = estimate_battery_runtime(result, average) if direction < 0 else None
         result["battery_charge_minutes"] = estimate_battery_charge_time(result, average) if direction > 0 else None
+
+    def _add_load_average(self, result):
+        """load_average_w: home load averaged over the last ~30 minutes."""
+        load = result.get("load_power")
+        if isinstance(load, (int, float)) and load >= 0:
+            self._load_samples = (self._load_samples + [load])[-LOAD_AVERAGE_SAMPLES:]
+        if self._load_samples:
+            result["load_average_w"] = round(sum(self._load_samples) / len(self._load_samples))
+
+    @staticmethod
+    def _add_battery_cycles(result):
+        """battery_cycles: total energy discharged / full capacity (equivalent full cycles)."""
+        discharged = result.get("battery_total_discharge_kwh")
+        capacity = battery_capacity_wh(result)
+        if discharged and capacity:
+            result["battery_cycles"] = round(discharged * 1000 / capacity)
 
     @property
     def data(self):
@@ -971,6 +992,21 @@ def get_outage_schedule():
             for day in status["days"]
         ]
     return jsonify(result)
+
+
+@app.route("/api/outage-readiness")
+def get_outage_readiness():
+    """Will the battery last through the next planned outage? (see outage_readiness.py)"""
+    if outage_poller is None or inverter_config is None or not inverter_config.has_battery:
+        return jsonify({"status": "disabled"})
+    status = outage_poller.get_outage_status()
+    if status["status"] in ("unknown", "error"):
+        return jsonify({"status": "no_schedule"})
+    data = inverter_poller.data if inverter_poller else None
+    if not data or data.get("error"):
+        return jsonify({"status": "no_data"})
+    return jsonify(outage_readiness(data, status.get("days", []), datetime.now(),
+                                    data.get("load_average_w"), battery_capacity_wh(data)))
 
 
 @app.route("/api/smart-meter")
