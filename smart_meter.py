@@ -4,7 +4,13 @@ The meter is an MQTT client: it connects to a broker (Mosquitto from
 docker-compose, or any other) and publishes under buckler/<serial>/...
 (https://www.bakler.com.ua/setting-mqtt-client/):
 
-  buckler/<serial>/status          "online" / offline
+  buckler/<serial>/status          "online" / offline. The broker's "offline" (the
+                                   meter's last will) can be old: it's kept as a
+                                   retained message, and it also comes when the
+                                   meter drops its connection for a moment and
+                                   reconnects. So any data message counts as
+                                   online, and "offline" shows only after
+                                   OFFLINE_GRACE without data.
   buckler/<serial>/dataJson        JSON every minute: posWh/negWh (consumed/generated
                                    active energy, Wh), V/Vmin/Vmax, I/Imin/Imax,
                                    Pmin/Pmax, Hzmin/Hzmax, Tbox, relay. Three-phase
@@ -34,6 +40,9 @@ logger = logging.getLogger(__name__)
 TOPIC_ROOT = "buckler"
 # No update for this long: show the data as stale
 STALE_AFTER = timedelta(minutes=5)
+# "offline" from the status topic shows only when no data came for this long
+# after it: the meter often reconnects within seconds (and keeps sending data)
+OFFLINE_GRACE = timedelta(seconds=90)
 # A phase below this voltage has no supply (real readings are ~230 V or ~0 V)
 PHASE_ON_MIN_VOLTAGE = 100
 
@@ -76,7 +85,8 @@ class SmartMeter:
         self._daily = daily if isinstance(daily, dict) and "date" in daily else {}
         self._last_totals = {}  # latest counter totals, for the next day's baseline
         self._serial = None
-        self._online = None
+        self._online = None     # from the status topic; any data message sets it True
+        self._offline_at = None  # when it last reported offline (and sent no data since)
         self._values = {}       # field -> list of numbers (len 1 or 3)
         self._relays = {}       # "r1" -> int
         self._updated = None
@@ -102,8 +112,14 @@ class SmartMeter:
         text = payload.decode("utf-8", "replace") if isinstance(payload, (bytes, bytearray)) else str(payload)
         kind = parts[2]
         if kind == "status" and len(parts) == 3:
+            online = text.strip().lower() == "online"
             with self._lock:
-                self._online = text.strip().lower() == "online"
+                if not online and self._online is not False:
+                    self._offline_at = self.clock()
+                    logger.info("Smart meter: %s reported offline", serial)
+                elif online:
+                    self._offline_at = None
+                self._online = online
         elif kind == "dataJson" and len(parts) == 3:
             self._apply_json(text)
         elif kind == "data" and len(parts) == 4 and parts[3] not in ("set", "get"):
@@ -140,8 +156,7 @@ class SmartMeter:
             self._values.update(updates)
             self._relays.update(relays)
             self._updated = self.clock()
-            if self._online is None:
-                self._online = True
+            self._mark_online()
             self._track_energy()
 
     def _apply_field(self, field, text):
@@ -160,10 +175,17 @@ class SmartMeter:
             else:
                 self._values[field] = [value]
             self._updated = self.clock()
-            if self._online is None:
-                self._online = True
+            self._mark_online()
             if field.startswith(self.ENERGY_KEYS):
                 self._track_energy()
+
+    def _mark_online(self):
+        """It just sent data, whatever the last status said (caller holds the lock)."""
+        if self._online is False and self._offline_at is not None:
+            logger.info("Smart meter: sending data again %.0fs after reporting offline",
+                        (self.clock() - self._offline_at).total_seconds())
+        self._online = True
+        self._offline_at = None
 
     def set_broker_state(self, connected, error=None):
         with self._lock:
@@ -214,6 +236,7 @@ class SmartMeter:
         with self._lock:
             serial = self._serial
             online = self._online
+            offline_at = self._offline_at
             values = {k: list(v) for k, v in self._values.items()}
             relays = dict(self._relays)
             updated = self._updated
@@ -242,9 +265,10 @@ class SmartMeter:
             return sum(vals) if vals else None
 
         phases = 3 if any(len(values.get(k) or []) == 3 for k in ("V", "I", "P", "posWh")) else 1
-        if self.clock() - updated > STALE_AFTER:
+        now = self.clock()
+        if now - updated > STALE_AFTER:
             status = "stale"
-        elif online is False:
+        elif online is False and (offline_at is None or now - offline_at >= OFFLINE_GRACE):
             status = "offline"
         else:
             status = "ok"
@@ -256,6 +280,11 @@ class SmartMeter:
             "serial": serial,
             "phases": phases,
             "updated": updated.isoformat(),
+            # For checking the status: seconds since the last reading, and since the
+            # meter reported offline (None while it's online)
+            "data_age_seconds": round((now - updated).total_seconds()),
+            "offline_seconds": None if online is not False or offline_at is None
+                               else round((now - offline_at).total_seconds()),
             "power_w": total("P"),
             "power_phases": phase_list("P"),
             "voltage": phase_list("V"),
@@ -339,6 +368,11 @@ class SmartMeterClient:
     def _on_message(self, client, userdata, message):
         try:
             self.meter.handle_message(message.topic, message.payload)
+            parts = message.topic.split("/")
+            if len(parts) == 3 and parts[2] == "status" and message.payload.strip().lower() == b"online":
+                # The meter (re)connected: it may be back on its default once-a-minute
+                # updates, so ask for the faster interval again
+                self._interval_sent.discard(parts[1])
             self._maybe_set_interval(client, message.topic)
         except Exception:
             logger.exception("Smart meter: error handling %s", message.topic)

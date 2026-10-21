@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from smart_meter import SmartMeter, SmartMeterClient, create_smart_meter_from_env, STALE_AFTER
+from smart_meter import OFFLINE_GRACE, STALE_AFTER, SmartMeter, SmartMeterClient, create_smart_meter_from_env
 
 # Payloads from https://www.bakler.com.ua/setting-mqtt-client/
 SINGLE_PHASE_JSON = {
@@ -135,12 +135,74 @@ def test_counter_reset_restarts_baseline(meter):
     assert meter.get_status()["today_consumed_kwh"] == 0.0
 
 
-def test_stale_and_offline(meter):
+@pytest.fixture
+def timed(tmp_path):
+    """A meter with a clock the test moves: (meter, advance(seconds))."""
+    now = [datetime(2026, 10, 21, 12, 0, 0)]
+    meter = SmartMeter(daily_file=str(tmp_path / "daily.json"), clock=lambda: now[0])
+
+    def advance(seconds):
+        now[0] += timedelta(seconds=seconds)
+    return meter, advance
+
+
+def test_stale_and_offline(timed):
+    meter, advance = timed
     meter.handle_message("buckler/1/dataJson", json.dumps(SINGLE_PHASE_JSON))
     meter.handle_message("buckler/1/status", "offline")
-    assert meter.get_status()["status"] == "offline"
-    meter._updated = datetime.now() - STALE_AFTER - timedelta(seconds=1)  # default clock
+    assert meter.get_status()["status"] == "ok"               # may just be reconnecting
+    advance(OFFLINE_GRACE.total_seconds())
+    status = meter.get_status()
+    assert status["status"] == "offline"                      # no data since: really offline
+    assert status["offline_seconds"] == status["data_age_seconds"] == 90
+    advance(STALE_AFTER.total_seconds())
     assert meter.get_status()["status"] == "stale"
+
+
+@pytest.mark.parametrize("topic,payload", [
+    ("buckler/1/data/P", "412"),
+    ("buckler/1/dataJson", json.dumps(SINGLE_PHASE_JSON)),
+])
+def test_short_offline_never_shows(timed, topic, payload):
+    """The meter's last will "offline" comes when it drops its connection for a moment
+    (and, retained, first thing after a dashboard restart); data within the grace
+    period means it's online, so the card never flips to "Meter offline"."""
+    meter, advance = timed
+    meter.handle_message("buckler/1/status", "offline")       # retained, from earlier
+    meter.handle_message(topic, payload)
+    assert meter.get_status()["status"] == "ok"
+    for _ in range(3):                                        # a flaky Wi-Fi link
+        meter.handle_message("buckler/1/status", "offline")
+        advance(OFFLINE_GRACE.total_seconds() - 1)
+        assert meter.get_status()["status"] == "ok"
+        meter.handle_message(topic, payload)
+        assert meter.get_status()["status"] == "ok"
+
+
+def test_online_status_cancels_offline(timed):
+    meter, advance = timed
+    meter.handle_message("buckler/1/data/P", "1")
+    meter.handle_message("buckler/1/status", "offline")
+    meter.handle_message("buckler/1/status", "online")
+    advance(OFFLINE_GRACE.total_seconds() + 1)
+    status = meter.get_status()
+    assert status["status"] == "ok" and status["offline_seconds"] is None and status["data_age_seconds"] == 91
+
+
+def test_interval_requested_again_after_meter_reconnects():
+    meter = SmartMeter(daily_file=None)
+    client = SmartMeterClient(meter, "localhost", interval=10)
+    mqtt = MagicMock()
+
+    def message(topic, payload):
+        client._on_message(mqtt, None, MagicMock(topic=topic, payload=payload))
+
+    message("buckler/1/data/P", b"1")
+    message("buckler/1/data/P", b"2")
+    assert mqtt.publish.call_count == 1                       # once per connection
+    message("buckler/1/status", b"online")                    # the meter reconnected
+    assert mqtt.publish.call_count == 2
+    assert mqtt.publish.call_args[0][:2] == ("buckler/1/data/set", "10")
 
 
 def test_first_meter_wins_unless_serial_configured(tmp_path):
