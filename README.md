@@ -1,5 +1,7 @@
 # Extended Dashboard
 
+> **This repository has moved to [cutteroid/inverter-dashboard](https://github.com/cutteroid/inverter-dashboard).** It continues there with the full history, releases and updates. This fork of [ivanursul/deye-dashboard](https://github.com/ivanursul/deye-dashboard) is archived and no longer updated.
+
 A web dashboard for monitoring Deye solar inverters in real-time. Supports both single-phase (e.g. SUN-6K-SG03LP1) and 3-phase hybrid models. Displays solar production, battery status, grid power, home consumption, weather conditions, and power outage schedules.
 
 Maintained by [Cutteroid](https://github.com/cutteroid). Originally based on [deye-dashboard](https://github.com/ivanursul/deye-dashboard) by Ivan Ursul (MIT license, see [License](#license)).
