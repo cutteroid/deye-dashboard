@@ -59,7 +59,7 @@ awk -v image="$APP_IMAGE:$TAG" '
     { print }
 ' docker-compose.yml > "$OUT/docker-compose.yml"
 cp mosquitto/entrypoint.sh "$OUT/mosquitto/"
-cp .env.example "$OUT/"
+cp .env.example LICENSE "$OUT/"
 # Synology's Docker doesn't create missing bind-mount folders: ship them
 mkdir -p "$OUT/data/mosquitto"
 

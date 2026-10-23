@@ -39,6 +39,8 @@ COPY smart_meter.py .
 COPY outage_readiness.py .
 COPY setup.py .
 COPY discover_inverter.py .
+# MIT: the license and its copyright notices ship with every copy
+COPY LICENSE .
 
 # Create a non-root user for security.
 # .env lives in the mounted data volume so config saved from the UI persists.

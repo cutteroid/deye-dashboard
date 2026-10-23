@@ -116,6 +116,7 @@ FILES=(
     "discover_inverter.py"
     "check_inverter.py"
     "setup.py"
+    "LICENSE"
     ".env"
 )
 

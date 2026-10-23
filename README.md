@@ -1,6 +1,12 @@
+# Extended Dashboard
+
+A web dashboard for monitoring Deye solar inverters in real-time. Supports both single-phase (e.g. SUN-6K-SG03LP1) and 3-phase hybrid models. Displays solar production, battery status, grid power, home consumption, weather conditions, and power outage schedules.
+
+Maintained by [Cutteroid](https://github.com/cutteroid). Originally based on [deye-dashboard](https://github.com/ivanursul/deye-dashboard) by Ivan Ursul (MIT license, see [License](#license)).
+
 ## Changes compared to the original project
 
-What this fork adds to the original [ivanursul/deye-dashboard](https://github.com/ivanursul/deye-dashboard):
+What this project adds to the original [ivanursul/deye-dashboard](https://github.com/ivanursul/deye-dashboard):
 
 **New cards and features**
 - **Air raid alerts map:** Ukraine with oblasts and raions, live from [alerts.in.ua](https://alerts.in.ua/) (with a free API token) or [NEPTUN](https://neptun.in.ua/) (no key needed), refreshed every 30 s,, on a card and on the fullscreen first page. You can show the whole country or zoom to one region, with neighbouring regions dimmed around it (Settings → step 4).
@@ -47,11 +53,7 @@ What this fork adds to the original [ivanursul/deye-dashboard](https://github.co
   - crash-safe data files;
   - validated settings;
   - background services that only start in `main()`;
-  - a test suite of 395 tests.
-
-# Extended Dashboard
-
-A web dashboard for monitoring Deye solar inverters in real-time. Supports both single-phase (e.g. SUN-6K-SG03LP1) and 3-phase hybrid models. Displays solar production, battery status, grid power, home consumption, weather conditions, and power outage schedules.
+  - a test suite of over 400 tests.
 
 ![Dashboard Preview](docs/preview.png)
 
@@ -626,4 +628,6 @@ python scan_registers.py
 
 ## License
 
-MIT License
+MIT License, see [LICENSE](LICENSE).
+
+This project is originally based on [deye-dashboard](https://github.com/ivanursul/deye-dashboard) by Ivan Ursul, also released under the MIT license. His copyright notice is kept in [LICENSE](LICENSE), as the license requires; code from it still makes up part of this project.
