@@ -97,14 +97,29 @@ pack |
     "${SSH[@]}" "$NAS_SSH" "set -e; mkdir -p '$NAS_DIR'; cd '$NAS_DIR'; rm -rf ${DIRS[*]}; mkdir -p data/mosquitto; tar -xzf -"
 
 # Build progress on the NAS: compose logs each step without a terminal
-# (BuildKit "#13 [svc 10/20] ..." then "#13 DONE"/"CACHED"; classic builder
-# "Step 10/20 :"). This turns finished steps into "10%" ... "100%" lines.
-PROGRESS_AWK='function report(f) { p = int(f * 10 + 1e-9) * 10; while (last < p) { last += 10; print "  " last "%"; fflush() } }
-/^Step [0-9]+\/[0-9]+ :/ { split($2, a, "/"); report((a[1] - 1) / a[2]); next }
-$1 ~ /^#[0-9]+$/ && match($0, /[0-9]+\/[0-9]+\]/) { split(substr($0, RSTART, RLENGTH - 1), a, "/"); total = a[2]; steps[$1] = 1; next }
-($2 == "DONE" || $2 == "CACHED") && ($1 in steps) && !($1 in done) { done[$1] = 1; n++; if (total) report(n / total); next }
+# (BuildKit "#13 [svc 10/20] RUN ..." then "#13 DONE 2.1s" / "#13 CACHED";
+# classic builder "Step 10/20 : RUN ..."). This prints one line per step as it
+# starts, with the share of steps already finished and what the step does, e.g.
+# "  25%  [5/20] Python packages (pip)", plus how long a slow step took. So a
+# hanging download shows which step it's in. (One awk program on one line, so
+# no awk comments in it; POSIX awk only: it runs in the NAS's awk.)
+PROGRESS_AWK='function label(s,  w) {
+    if (s ~ /^FROM/) return "base image";
+    if (s ~ /apt-get/) return "system packages (apt-get)";
+    if (s ~ /pip install/) return "Python packages (pip)";
+    if (s ~ /useradd/) return "user and data folder";
+    if (s ~ /^WORKDIR/) return "working folder";
+    if (s ~ /^COPY/) { split(s, w, " "); return "copy " w[2] }
+    return substr(s, 1, 60)
+}
+function show(n, total, s) { printf "%4d%%  [%d/%d] %s\n", int(100 * (n - 1) / total), n, total, label(s); fflush() }
+/^Step [0-9]+\/[0-9]+ :/ { split($2, a, "/"); t = $0; sub(/^Step [^:]*: */, "", t); show(a[1], a[2], t); next }
+$1 ~ /^#[0-9]+$/ && !($1 in steps) && match($0, /[0-9]+\/[0-9]+\] /) {
+    split(substr($0, RSTART, RLENGTH - 2), a, "/"); steps[$1] = 1; t = substr($0, RSTART + RLENGTH); show(a[1], a[2], t); next
+}
+$2 == "DONE" && ($1 in steps) { d = $3; sub(/s$/, "", d); if (d + 0 >= 20) { printf "        took %d s\n", d + 0; fflush() } next }
 /naming to .* done|Successfully tagged|Image .* Built/ { finished = 1 }
-END { if (finished) report(1) }'
+END { if (finished) print " 100%  done" }'
 PROGRESS_AWK=$(printf '%s' "$PROGRESS_AWK" | tr '\n' ' ')
 
 echo "==> Rebuilding and restarting on the NAS"
@@ -125,7 +140,7 @@ printf '%s\n' "$SUDO_PW" | "${SSH[@]}" "$NAS_SSH" "set -e; cd '$NAS_DIR'
     case \"\$PROJECT\" in ''|'<no value>') PROJECT=\$(basename \"\$PWD\") ;; esac
     echo \"Compose project: \$PROJECT\"
     # No terminal on the NAS side (stdin carries the password): show the build as
-    # percent lines; the full log is kept and printed if the build fails
+    # a line per step (progress and what it does); the full log is kept and printed if the build fails
     echo 'Building image (seconds; first run or new requirements: several minutes)...'
     LOG=\$(mktemp)
     { s \$DC -p \"\$PROJECT\" build 2>&1; echo \"__EXIT__\$?\"; } | tee \"\$LOG\" | awk $(printf '%q' "$PROGRESS_AWK")
