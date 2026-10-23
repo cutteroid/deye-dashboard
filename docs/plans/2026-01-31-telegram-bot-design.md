@@ -1,5 +1,7 @@
 # Telegram Bot for Battery & Grid Monitoring
 
+> **Historical design note (January 2026), kept for background:** parts of it no longer match the code. The bot now reads the dashboard's inverter data instead of polling the inverter itself; it detects a grid outage from `grid_online` (the inverter's grid relay and every phase's voltage), not from `grid_voltage` below 50 V; the low-battery alert re-arms at 35%; and there are more commands (`/battery`, `/outage`, `/grid`). See `telegram_bot.py`.
+
 ## Overview
 
 Telegram bot integrated into the Deye dashboard server that monitors battery SOC and grid status, sending notifications in 1800s literary Ukrainian style.

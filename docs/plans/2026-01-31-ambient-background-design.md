@@ -1,5 +1,7 @@
 # Ambient Weather Background Design
 
+> **Historical design note (January 2026), kept for background:** it no longer describes the dashboard. The weather-driven background is not part of the current page. Only its "battery override" idea remains: a red tint over the page while the grid is down and the battery is low (`#battery-overlay`, `updateBatteryOverlay()` in `static/js/dashboard.js`). Weather is shown in the fullscreen weather banner.
+
 ## Goal
 Make the dashboard background dynamically reflect real weather conditions, time of day, and system state (battery + grid). Designed for a wall-mounted iPad as an ambient display.
 

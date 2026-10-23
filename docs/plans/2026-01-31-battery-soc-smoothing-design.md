@@ -1,5 +1,7 @@
 # Battery SOC Smoothing Design
 
+> **Historical design note (January 2026), kept for background:** it no longer describes the code. There is no `BatterySampler` thread and no separate battery read any more. Each full inverter read (every 30 s) feeds `BatterySmoother` in `inverters/base.py` through `smooth_battery()`: battery voltage is the average and SOC the median of the last 6 plausible readings (3 minutes). SOC comes from the BMS (register 588), not from the voltage.
+
 ## Problem
 
 Single Modbus reads of battery voltage can return 0 due to communication glitches with the inverter logger. Since SOC is calculated from voltage, a single bad read causes SOC to show 0% momentarily. This triggers false low-battery alerts in the Telegram bot and incorrect dashboard display.

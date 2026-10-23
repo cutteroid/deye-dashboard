@@ -1,5 +1,7 @@
 # "Коли включать світло?" Button Design
 
+> **Historical design note (January 2026), kept for background:** it no longer describes the code. `outage_schedule.py` became the `outage_providers/` package (Lvivoblenergo, Yasno, DTEK) with `OutageSchedulePoller` in `outage_providers/base.py`. The Telegram button ("💡 Коли включать світло?", `/outage`) still exists and uses whichever provider is configured.
+
 ## Overview
 
 A Telegram bot button that answers "when will the power come back?" by combining Lvivoblenergo's outage schedule with real-time battery status to give smart, actionable responses in 1800s literary Ukrainian.
