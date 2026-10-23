@@ -13,7 +13,7 @@ body {
 }
 
 /* Lift all content above battery-overlay (z-index:0) for iOS fullscreen compatibility */
-.header, .status-banner-container, .fullscreen-banner-wrapper, .dashboard, .energy-flow-container, .notification-setup {
+.header, .status-banner-container, .fullscreen-banner-wrapper, .dashboard, .notification-setup {
     position: relative;
     z-index: 1;
 }
@@ -461,10 +461,6 @@ body.cards-dragging * {
     cursor: grabbing !important;
 }
 
-.card.full-width {
-    grid-column: 1 / -1;
-}
-
 .card-header {
     display: flex;
     align-items: center;
@@ -820,7 +816,7 @@ body.cards-dragging * {
     box-shadow: 0 0 30px rgba(251, 191, 36, 0.2);
 }
 
-/* Battery: charging green, discharging orange (as in the energy flow diagram) */
+/* Battery: charging green, discharging orange */
 .card.battery-charging {
     border-color: rgba(110, 200, 155, 0.5);
     box-shadow: 0 0 20px rgba(110, 200, 155, 0.15);
@@ -1292,13 +1288,6 @@ body.cards-dragging * {
         font-size: 1.8rem;
     }
 
-    .energy-flow-container {
-        padding: 16px;
-    }
-
-    .energy-flow-diagram {
-        height: 380px;
-    }
 }
 
 /* Responsive - iPad Air portrait and smaller tablets */
@@ -1357,9 +1346,6 @@ body.cards-dragging * {
         gap: 12px;
     }
 
-    .energy-flow-diagram {
-        height: 320px;
-    }
 }
 
 /* Responsive - Mobile phones */
@@ -1428,9 +1414,6 @@ body.cards-dragging * {
         font-size: 1.5rem;
     }
 
-    .energy-flow-diagram {
-        height: 280px;
-    }
 
     .phase-bar-item {
         gap: 8px;
@@ -1557,7 +1540,7 @@ body.fullscreen-mode .battery-banner-bar {
 }
 
 /* Battery banner (normal and fullscreen view): charge / discharge power stands
-   out (green in, orange out, like the battery card and the energy flow diagram) */
+   out (green in, orange out, like the battery card) */
 .battery-banner-status.battery-flow-charging,
 .battery-banner-status.battery-flow-discharging {
     font-weight: 600;
@@ -2331,16 +2314,6 @@ body.fullscreen-mode.page-scrolled .scroll-hint {
     background: rgba(255,255,255,0.2);
 }
 
-.settings-info {
-    font-size: 0.75rem;
-    color: #64748b;
-    font-family: monospace;
-    background: rgba(0,0,0,0.3);
-    padding: 8px;
-    border-radius: 4px;
-    word-break: break-all;
-}
-
 .donate-link {
     display: block;
     text-align: center;
@@ -2725,204 +2698,6 @@ button.onboarding-toggle {
 .onboarding-conditional { display: none; }
 .onboarding-conditional.visible { display: block; }
 
-/* Energy Flow Diagram Styles */
-.energy-flow-container {
-    max-width: 1400px;
-    margin: 30px auto 30px;
-    padding: 24px;
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 16px;
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.energy-flow-title {
-    text-align: center;
-    font-size: 1.1rem;
-    font-weight: 500;
-    color: #94a3b8;
-    margin-bottom: 20px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-}
-
-.energy-flow-diagram {
-    width: 100%;
-    height: 450px;
-}
-
-/* Component styles */
-.ef-component {
-    transition: all 0.3s ease;
-}
-
-.ef-component-box {
-    fill: rgba(255, 255, 255, 0.1);
-    stroke: rgba(255, 255, 255, 0.3);
-    stroke-width: 2;
-    rx: 12;
-}
-
-.ef-component-icon {
-    font-size: 36px;
-    text-anchor: middle;
-    dominant-baseline: middle;
-}
-
-.ef-component-label {
-    fill: #94a3b8;
-    font-size: 14px;
-    text-anchor: middle;
-    font-weight: 500;
-}
-
-.ef-component-value {
-    fill: #fff;
-    font-size: 16px;
-    font-weight: 600;
-    text-anchor: middle;
-}
-
-/* Component active states */
-.ef-component.active .ef-component-box {
-    stroke-width: 3;
-}
-
-.ef-component.solar-active .ef-component-box {
-    stroke: #fbbf24;
-    fill: rgba(251, 191, 36, 0.15);
-    filter: drop-shadow(0 0 10px rgba(251, 191, 36, 0.4));
-}
-
-.ef-component.battery-charging .ef-component-box {
-    stroke: #6ec89b;
-    fill: rgba(110, 200, 155, 0.15);
-    filter: drop-shadow(0 0 10px rgba(110, 200, 155, 0.4));
-}
-
-.ef-component.battery-discharging .ef-component-box {
-    stroke: #fb923c;
-    fill: rgba(251, 146, 60, 0.15);
-    filter: drop-shadow(0 0 10px rgba(251, 146, 60, 0.4));
-}
-
-.ef-component.grid-importing .ef-component-box {
-    stroke: #60a5fa;
-    fill: rgba(96, 165, 250, 0.15);
-    filter: drop-shadow(0 0 10px rgba(96, 165, 250, 0.4));
-}
-
-.ef-component.grid-exporting .ef-component-box {
-    stroke: #6ec89b;
-    fill: rgba(110, 200, 155, 0.15);
-    filter: drop-shadow(0 0 10px rgba(110, 200, 155, 0.4));
-}
-
-.ef-component.load-active .ef-component-box {
-    stroke: #f87171;
-    fill: rgba(248, 113, 113, 0.15);
-    filter: drop-shadow(0 0 10px rgba(248, 113, 113, 0.4));
-}
-
-/* Flow path styles */
-.ef-flow-path {
-    fill: none;
-    stroke: rgba(255, 255, 255, 0.2);
-    stroke-width: 3;
-    stroke-linecap: round;
-}
-
-.ef-flow-path.active {
-    stroke-dasharray: 8 4;
-    animation: energyFlow 0.8s linear infinite;
-}
-
-.ef-flow-path.solar-flow {
-    stroke: #fbbf24;
-    filter: drop-shadow(0 0 4px rgba(251, 191, 36, 0.6));
-}
-
-.ef-flow-path.battery-charge-flow {
-    stroke: #6ec89b;
-    filter: drop-shadow(0 0 4px rgba(110, 200, 155, 0.6));
-}
-
-.ef-flow-path.battery-discharge-flow {
-    stroke: #fb923c;
-    filter: drop-shadow(0 0 4px rgba(251, 146, 60, 0.6));
-}
-
-.ef-flow-path.grid-import-flow {
-    stroke: #60a5fa;
-    filter: drop-shadow(0 0 4px rgba(96, 165, 250, 0.6));
-}
-
-.ef-flow-path.grid-export-flow {
-    stroke: #6ec89b;
-    filter: drop-shadow(0 0 4px rgba(110, 200, 155, 0.6));
-}
-
-.ef-flow-path.load-flow {
-    stroke: #f87171;
-    filter: drop-shadow(0 0 4px rgba(248, 113, 113, 0.6));
-}
-
-.ef-flow-path.reverse {
-    animation: energyFlowReverse 0.8s linear infinite;
-}
-
-@keyframes energyFlow {
-    from { stroke-dashoffset: 24; }
-    to { stroke-dashoffset: 0; }
-}
-
-@keyframes energyFlowReverse {
-    from { stroke-dashoffset: 0; }
-    to { stroke-dashoffset: 24; }
-}
-
-/* Power labels on flows */
-.ef-power-label {
-    fill: #fff;
-    font-size: 14px;
-    font-weight: 600;
-    text-anchor: middle;
-    dominant-baseline: middle;
-}
-
-.ef-power-label-bg {
-    fill: rgba(0, 0, 0, 0.8);
-    rx: 6;
-}
-
-/* Hidden components */
-.ef-component.hidden,
-.ef-flow-path.hidden,
-.ef-power-label.hidden,
-.ef-power-label-bg.hidden {
-    opacity: 0;
-    pointer-events: none;
-}
-
-/* Inverter special styling */
-.ef-inverter-box {
-    fill: rgba(139, 92, 246, 0.2);
-    stroke: #8b5cf6;
-    stroke-width: 3;
-}
-
-/* Responsive */
-@media (max-width: 640px) {
-    .energy-flow-container {
-        padding: 16px;
-        margin-bottom: 20px;
-    }
-    .energy-flow-diagram {
-        max-height: 280px;
-    }
-}
 /* Red tint when the grid is down and the battery is low */
 #battery-overlay {
     position: fixed;

@@ -383,7 +383,6 @@ def inject_asset_url():
 
 # Configuration - can be overridden with environment variables
 PHASE_STATS_FILE = os.environ.get("PHASE_STATS_FILE") or data_path("phase_stats.json")
-PHASE_HISTORY_FILE = os.environ.get("PHASE_HISTORY_FILE") or data_path("phase_history.json")
 GRID_DAILY_LOG_FILE = os.environ.get("GRID_DAILY_LOG_FILE") or data_path("grid_daily_log.json")
 GENERATOR_LOG_FILE = os.environ.get("GENERATOR_LOG_FILE") or data_path("generator_log.json")
 GENERATOR_FUEL_RATE = env_float("GENERATOR_FUEL_RATE", 0.0)
@@ -418,20 +417,6 @@ def apply_env_overrides(base):
         family=base.family,
         supported=base.supported,
     )
-
-
-def build_inverter_config(inv):
-    """Build InverterConfig from env vars, auto-detecting any missing values (blocking)."""
-    if env_config_complete():
-        return apply_env_overrides(InverterConfig())
-
-    # Auto-detect missing values
-    try:
-        detected = inv.detect_config()
-    except Exception:
-        logger.warning("Auto-detect failed, using defaults")
-        detected = InverterConfig()
-    return apply_env_overrides(detected)
 
 
 def load_cached_inverter_config():
@@ -623,8 +608,6 @@ _data_lock = threading.RLock()
 
 # Phase data collection
 last_sample_time = None
-last_history_save = None
-phase_accumulator = {"l1": 0, "l2": 0, "l3": 0}
 
 
 def load_grid_daily_log():
@@ -760,16 +743,6 @@ def save_phase_stats(stats):
     atomic_write_json(PHASE_STATS_FILE, stats, indent=2)
 
 
-def load_phase_history():
-    """Load phase time-series history from file."""
-    return load_json(PHASE_HISTORY_FILE, {})
-
-
-def save_phase_history(history):
-    """Save phase time-series history to file."""
-    atomic_write_json(PHASE_HISTORY_FILE, history, indent=2)
-
-
 def record_phase_sample(load_l1, load_l2, load_l3):
     with _data_lock:
         return _record_phase_sample(load_l1, load_l2, load_l3)
@@ -777,7 +750,7 @@ def record_phase_sample(load_l1, load_l2, load_l3):
 
 def _record_phase_sample(load_l1, load_l2, load_l3):
     """Record a phase power sample and accumulate energy."""
-    global last_sample_time, last_history_save, phase_accumulator
+    global last_sample_time
 
     now = datetime.now()
     today = now.strftime("%Y-%m-%d")
@@ -822,41 +795,6 @@ def _record_phase_sample(load_l1, load_l2, load_l3):
             del stats[old_date]
 
     save_phase_stats(stats)
-
-    # Save to time-series history (every 30 seconds for smooth charts)
-    if last_history_save is None or (now - last_history_save).total_seconds() >= 30:
-        save_to_phase_history(now, load_l1, load_l2, load_l3)
-        last_history_save = now
-
-
-def save_to_phase_history(timestamp, l1, l2, l3):
-    with _data_lock:
-        return _save_to_phase_history(timestamp, l1, l2, l3)
-
-
-def _save_to_phase_history(timestamp, l1, l2, l3):
-    """Save a data point to the time-series history."""
-    history = load_phase_history()
-    today = timestamp.strftime("%Y-%m-%d")
-    time_str = timestamp.strftime("%H:%M:%S")
-
-    if today not in history:
-        history[today] = []
-
-    history[today].append({
-        "time": time_str,
-        "l1": l1,
-        "l2": l2,
-        "l3": l3
-    })
-
-    # Keep only last 7 days of history
-    sorted_dates = sorted(history.keys(), reverse=True)
-    if len(sorted_dates) > 7:
-        for old_date in sorted_dates[7:]:
-            del history[old_date]
-
-    save_phase_history(history)
 
 
 @app.after_request
@@ -934,33 +872,12 @@ def get_phase_stats():
     return jsonify(result)
 
 
-@app.route("/api/phase-history")
-def get_phase_history():
-    """Get phase time-series data for charting."""
-    history = load_phase_history()
-    date_param = request.args.get("date", datetime.now().strftime("%Y-%m-%d"))
-
-    if date_param in history:
-        return jsonify({
-            "date": date_param,
-            "data": history[date_param],
-            "available_dates": sorted(history.keys(), reverse=True)
-        })
-    else:
-        return jsonify({
-            "date": date_param,
-            "data": [],
-            "available_dates": sorted(history.keys(), reverse=True)
-        })
-
-
 @app.route("/api/phase-stats/clear", methods=["POST"])
 @require_settings_pin
 def clear_phase_stats():
     """Clear phase statistics."""
     with _data_lock:
         save_phase_stats({})
-        save_phase_history({})
     return jsonify({"status": "ok"})
 
 

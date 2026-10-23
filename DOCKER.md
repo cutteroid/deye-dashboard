@@ -88,7 +88,7 @@ Everything else is optional: weather location, outage provider, air raid alerts,
 Everything the dashboard stores lives in `data/`, so it survives rebuilds, updates and container re-creation:
 
 - `.env`: the configuration
-- `phase_stats.json`, `phase_history.json`: phase statistics
+- `phase_stats.json`: phase statistics
 - `grid_daily_log.json`, `generator_log.json`: grid import and generator logs
 - `inverter_cache.json`, `inverter_config.json`: last readings and the detected inverter model
 - `bot_state.json`, `battery_reports/`: Telegram bot state

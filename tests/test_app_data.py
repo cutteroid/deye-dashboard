@@ -129,15 +129,11 @@ class TestRecordPhaseSample:
     def _reset_globals(self):
         import app
         app.last_sample_time = None
-        app.last_history_save = None
-        app.phase_accumulator = {"l1": 0, "l2": 0, "l3": 0}
 
     def test_first_sample_no_energy(self, tmp_path):
         self._reset_globals()
         stats_file = str(tmp_path / "phase_stats.json")
-        history_file = str(tmp_path / "phase_history.json")
-        with patch("app.PHASE_STATS_FILE", stats_file), \
-             patch("app.PHASE_HISTORY_FILE", history_file):
+        with patch("app.PHASE_STATS_FILE", stats_file):
             import app
             app.record_phase_sample(100, 200, 300)
         with open(stats_file) as f:
@@ -150,9 +146,7 @@ class TestRecordPhaseSample:
     def test_energy_accumulation(self, tmp_path):
         self._reset_globals()
         stats_file = str(tmp_path / "phase_stats.json")
-        history_file = str(tmp_path / "phase_history.json")
-        with patch("app.PHASE_STATS_FILE", stats_file), \
-             patch("app.PHASE_HISTORY_FILE", history_file):
+        with patch("app.PHASE_STATS_FILE", stats_file):
             import app
             # First sample: sets last_sample_time
             app.record_phase_sample(1000, 2000, 3000)
@@ -170,9 +164,7 @@ class TestRecordPhaseSample:
     def test_large_interval_skipped(self, tmp_path):
         self._reset_globals()
         stats_file = str(tmp_path / "phase_stats.json")
-        history_file = str(tmp_path / "phase_history.json")
-        with patch("app.PHASE_STATS_FILE", stats_file), \
-             patch("app.PHASE_HISTORY_FILE", history_file):
+        with patch("app.PHASE_STATS_FILE", stats_file):
             import app
             app.record_phase_sample(1000, 2000, 3000)
             # Simulate 10 minutes elapsed (> 5 min threshold)
@@ -187,9 +179,7 @@ class TestRecordPhaseSample:
     def test_max_tracking(self, tmp_path):
         self._reset_globals()
         stats_file = str(tmp_path / "phase_stats.json")
-        history_file = str(tmp_path / "phase_history.json")
-        with patch("app.PHASE_STATS_FILE", stats_file), \
-             patch("app.PHASE_HISTORY_FILE", history_file):
+        with patch("app.PHASE_STATS_FILE", stats_file):
             import app
             app.record_phase_sample(100, 200, 300)
             app.last_sample_time = datetime.now() - timedelta(seconds=30)
@@ -200,36 +190,6 @@ class TestRecordPhaseSample:
         assert stats[today]["l1_max"] == 500
         assert stats[today]["l2_max"] == 600
         assert stats[today]["l3_max"] == 700
-
-
-class TestSaveToPhaseHistory:
-    def test_appends_data_point(self, tmp_path):
-        history_file = str(tmp_path / "phase_history.json")
-        with patch("app.PHASE_HISTORY_FILE", history_file):
-            from app import save_to_phase_history
-            now = datetime.now()
-            save_to_phase_history(now, 100, 200, 300)
-        with open(history_file) as f:
-            history = json.load(f)
-        today = now.strftime("%Y-%m-%d")
-        assert len(history[today]) == 1
-        assert history[today][0]["l1"] == 100
-
-    def test_7_day_rotation(self, tmp_path):
-        history_file = str(tmp_path / "phase_history.json")
-        base = datetime.now()
-        old_history = {}
-        for i in range(10):
-            day = (base - timedelta(days=i)).strftime("%Y-%m-%d")
-            old_history[day] = [{"time": "12:00:00", "l1": 0, "l2": 0, "l3": 0}]
-        with open(history_file, "w") as f:
-            json.dump(old_history, f)
-        with patch("app.PHASE_HISTORY_FILE", history_file):
-            from app import save_to_phase_history
-            save_to_phase_history(base, 100, 200, 300)
-        with open(history_file) as f:
-            history = json.load(f)
-        assert len(history) <= 7
 
 
 class TestGeneratorMidnightAndRestart:

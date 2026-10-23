@@ -1,15 +1,18 @@
-"""Tests for build_inverter_config() env var logic."""
+"""Inverter config at startup: INVERTER_* env values on top of auto-detection."""
 import pytest
 from unittest.mock import patch, MagicMock
 from inverters import InverterConfig, DeyeInverter
 
 
-class TestBuildInverterConfig:
+class TestEnvAndDetection:
     def _build(self, env_vars, detect_result=None, detect_raises=False):
-        """Helper that imports and calls build_inverter_config with env overrides."""
+        """The config the dashboard runs with after startup (as in init_services):
+        initial_inverter_config(), then full auto-detect, or only the device type
+        when every capability is set in env."""
         with patch("inverters.deye.PySolarmanV5"):
             inv = DeyeInverter(ip="192.168.1.1", serial=123456)
             inv.inverter = MagicMock()
+            inv.read_device_type = MagicMock(return_value=(None, "unknown"))
 
             if detect_raises:
                 inv.detect_config = MagicMock(side_effect=Exception("timeout"))
@@ -28,8 +31,11 @@ class TestBuildInverterConfig:
                         import os
                         os.environ.pop(key, None)
 
-                from app import build_inverter_config
-                return build_inverter_config(inv), inv
+                import app
+                config = app.initial_inverter_config()
+                detect = app.refresh_device_type if app.env_config_complete() else app.refresh_inverter_config
+                detect(inv, config)
+                return config, inv
 
     def test_all_env_vars_skips_detect(self):
         env = {

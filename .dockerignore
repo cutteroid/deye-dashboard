@@ -52,7 +52,6 @@ download_logs.sh
 *.md
 test_*.py
 check_inverter.py
-debug_connection.py
 scan_battery.py
 scan_phases.py
 scan_registers.py

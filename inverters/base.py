@@ -13,7 +13,7 @@ Readings returned by InverterDriver.read_all_data() (W, V, A, %, kWh):
     battery_capacity_ah, battery_shutdown_soc   (optional: battery time estimates)
     battery_nominal_voltage (optional: Ah -> Wh; without it the live voltage is used)
     battery_temperature (°C, optional; None when the inverter doesn't report it)
-    grid_voltage (L1), grid_power (> 0 importing), grid_status ("Importing"/"Exporting"/"Idle")
+    grid_voltage (L1), grid_power (> 0 importing)
     grid_online (house actually on grid power), grid_state (see grid_state())
     load_power
     daily_pv, daily_grid_import, daily_grid_export, daily_load

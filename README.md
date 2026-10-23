@@ -244,7 +244,7 @@ tools/export_images.sh amd64    # cross-build for an Intel/AMD machine
 
 The container mounts a `data` volume at `/app/data`. Everything the dashboard stores lives there, so it survives rebuilds and deploys:
 - Configuration (`.env`)
-- Phase statistics and history (`phase_stats.json`, `phase_history.json`)
+- Phase statistics (`phase_stats.json`)
 - Grid import log, generator log, last inverter readings, detected inverter model (`grid_daily_log.json`, `generator_log.json`, `inverter_cache.json`, `inverter_config.json`)
 - Telegram bot state and battery reports (`bot_state.json`, `battery_reports/`)
 - Smart meter daily counter (`smart_meter_daily.json`) and Mosquitto broker files (`mosquitto/`)
@@ -448,7 +448,6 @@ The bot also provides a keyboard with Ukrainian-labeled buttons for quick access
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `PHASE_STATS_FILE` | Path to phase statistics JSON file | `phase_stats.json` |
-| `PHASE_HISTORY_FILE` | Path to phase history JSON file | `phase_history.json` |
 
 ### Deployment (used by `deploy.sh`)
 
@@ -623,7 +622,6 @@ python scan_registers.py
 | `/api/weather` | GET | Current weather and forecast |
 | `/api/outage_schedule` | GET | Current outage status, plus today's and (if published) tomorrow's planned windows |
 | `/api/phase-stats` | GET | Daily phase statistics |
-| `/api/phase-history` | GET | Phase power history |
 | `/api/phase-stats/clear` | POST | Clear phase statistics |
 
 ## License

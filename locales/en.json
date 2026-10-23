@@ -12,7 +12,6 @@
     "close": "Close",
     "clear": "Clear",
     "loading": "Loading...",
-    "unknown": "unknown",
     "error": "Error: {message}"
   },
   "units": {

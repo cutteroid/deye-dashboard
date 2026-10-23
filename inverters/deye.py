@@ -255,15 +255,8 @@ class DeyeInverter(InverterDriver):
                 data["battery_temperature"] = battery_temperature(self.read_register(182))
                 time.sleep(0.05)
 
-                data["battery_capacity"] = self.read_register(107)
-                time.sleep(0.05)
                 data["battery_nominal_voltage"] = self.read_register(236) / 100
                 time.sleep(0.05)
-                data["battery_discharge_percent"] = self.read_register(237)
-                time.sleep(0.05)
-
-                available_capacity = (data["battery_capacity"] / 100) * data["battery_discharge_percent"]
-                data["battery_max_available_capacity_wh"] = available_capacity * data["battery_nominal_voltage"]
 
                 # For the runtime estimate: 204 = battery capacity (Ah), 217 = shutdown SOC
                 data["battery_capacity_ah"] = self.read_register(204)
@@ -322,13 +315,6 @@ class DeyeInverter(InverterDriver):
                     data["battery_status"] = "Idle"
             else:
                 data["battery_status"] = "N/A"
-
-            if data["grid_power"] > 0:
-                data["grid_status"] = "Importing"
-            elif data["grid_power"] < 0:
-                data["grid_status"] = "Exporting"
-            else:
-                data["grid_status"] = "Idle"
 
         except Exception as e:
             data["error"] = str(e)
@@ -466,13 +452,6 @@ class DeyeInverter(InverterDriver):
                     data["battery_status"] = "Idle"
             else:
                 data["battery_status"] = "N/A"
-
-            if data["grid_power"] > 0:
-                data["grid_status"] = "Importing"
-            elif data["grid_power"] < 0:
-                data["grid_status"] = "Exporting"
-            else:
-                data["grid_status"] = "Idle"
 
             self._read_health_3p(data)
 

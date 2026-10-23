@@ -248,13 +248,11 @@ class TestParseWeather:
 class TestClearEndpoints:
     def test_clear_phase_stats(self, client):
         c, _, app_module = client
-        with patch.object(app_module, "save_phase_stats") as mock_phase, \
-             patch.object(app_module, "save_phase_history") as mock_hist:
+        with patch.object(app_module, "save_phase_stats") as mock_phase:
             app_module._pin_failures, app_module._pin_locked_until = 0, 0.0
             resp = c.post("/api/phase-stats/clear", headers={"X-Settings-Pin": "0000"})
         assert resp.status_code == 200
         mock_phase.assert_called_once_with({})
-        mock_hist.assert_called_once_with({})
 
 
 class TestNoCacheHeaders:

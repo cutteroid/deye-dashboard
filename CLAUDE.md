@@ -161,7 +161,6 @@ Config saved from the UI is validated by `setup.validate_config()` (types, range
 | `/api/weather` | GET | Current weather and forecast |
 | `/api/outage_schedule` | GET | Outage status and today's/tomorrow's planned windows |
 | `/api/phase-stats` | GET | Daily phase statistics |
-| `/api/phase-history` | GET | Phase power history |
 | `/api/generator` | GET | Generator status and runtime |
 | `/api/phase-stats/clear` | POST | Clear phase statistics |
 | `/api/alerts` | GET | Air raid alert statuses by region/district |
